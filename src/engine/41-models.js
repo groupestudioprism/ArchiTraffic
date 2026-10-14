@@ -92,5 +92,3 @@ function palette(){ const g = new THREE.Group(); g.add(part(BOX(1.2, 0.14, 0.8),
 function groupeElec(){ const g = new THREE.Group(); g.add(part(RBOX(1.8, 1.2, 0.9, 0.06), C.yellow, 0, 0.75, 0), part(BOX(1.9, 0.1, 1.0), C.dark, 0, 0.12, 0)); for (const z of [-0.5, 0.5]) g.add(part(CYL(0.22, 0.22, 0.12, 14), C.rubber, -0.4, 0.22, z, Math.PI / 2)); return g; }
 function plaqueRoulage(){ const g = new THREE.Group(); g.add(part(BOX(3, 0.03, 2), matCol(0x5D6167, {metal:0.8, rough:0.55}), 0, 0.015, 0)); return g; }
 function tranchee(){ const g = new THREE.Group(); g.add(part(BOX(6, 0.02, 1.0), matCol(0x3D2E22, {rough:1}), 0, 0.01, 0)); g.add(part(BOX(6, 0.6, 0.6), C.earth, 0, 0.3, 1.0)); return g; }
-function person(vest = true){ const g = new THREE.Group(); g.add(part(CYL(0.13, 0.11, 0.85, 8), C.jeans, 0, 0.43, 0)); g.add(part(RBOX(0.26, 0.6, 0.42, 0.08), vest ? C.vest : matCol(0x55606E), 0, 1.15, 0));
-  g.add(part(new THREE.SphereGeometry(0.11, 12, 10), C.skin, 0, 1.6, 0)); if (vest) g.add(part(new THREE.SphereGeometry(0.13, 12, 8, 0, 6.3, 0, 1.4), C.white, 0, 1.64, 0)); return g; }

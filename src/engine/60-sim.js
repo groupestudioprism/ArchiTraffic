@@ -3,10 +3,10 @@
    sur le réseau réel (sens uniques, interdictions de tourner, routes barrées → il prend la déviation), puis roule en
    respectant les distances de sécurité (modèle IDM), les feux tricolores et la priorité aux carrefours. */
 const SIM_TYPES = {
-  citadine:{f:() => makeCar('citadine', 0xffffff), mix:'vl', w:0.32, len:3.95}, berline:{f:() => makeCar('berline', 0xffffff), mix:'vl', w:0.34, len:4.75},
-  suv:{f:() => makeCar('suv', 0xffffff), mix:'vl', w:0.2, len:4.55}, breakv:{f:() => makeCar('break', 0xffffff), mix:'vl', w:0.14, len:4.7},
-  van:{f:() => makeVan(0xffffff), mix:'vul', w:1, len:5.4}, truck:{f:() => makeTruck(0xffffff), mix:'pl', w:0.65, len:9.8, pl:true}, semi:{f:() => makeSemi(0xffffff), mix:'pl', w:0.35, len:16.5, pl:true},
-  bus:{f:() => makeBus(0xffffff), mix:'bus', w:1, len:12, pl:true}, moto:{f:() => makeMoto(0xffffff), mix:'r2', w:1, len:2.1},
+  citadine:{f:() => makeCar('citadine', 0xffffff, 1), mix:'vl', w:0.3, len:4.05}, berline:{f:() => makeCar('berline', 0xffffff, 1), mix:'vl', w:0.28, len:4.72},
+  suv:{f:() => makeCar('suv', 0xffffff, 1), mix:'vl', w:0.22, len:4.5}, breakv:{f:() => makeCar('break', 0xffffff, 1), mix:'vl', w:0.12, len:4.72}, mono:{f:() => makeCar('monospace', 0xffffff, 1), mix:'vl', w:0.08, len:4.55},
+  van:{f:() => makeVan(0xffffff, 1), mix:'vul', w:1, len:5.45}, truck:{f:() => makeTruck(0xffffff, 1), mix:'pl', w:0.55, len:9.8, pl:true}, semi:{f:() => makeSemi(0xffffff, 1), mix:'pl', w:0.3, len:16.5, pl:true},
+  tipper:{f:() => makeTipper(1), mix:'pl', w:0.15, len:9.3, pl:true}, bus:{f:() => makeBus(0xffffff, 1), mix:'bus', w:1, len:12, pl:true}, moto:{f:() => makeMoto(0xffffff, 1), mix:'r2', w:1, len:2.1},
 };
 const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
 /* instances : une InstancedMesh par type et par matériau */

@@ -128,15 +128,15 @@ function renderLib(){
   const q = libQ.trim().toLowerCase(), items = LIB.filter(e => q ? (e.name + ' ' + (e.ref || '') + ' ' + LIB_CATS[e.cat]).toLowerCase().includes(q) : e.cat === libCat);
   pb().innerHTML = `<div class="lsearch"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="libQ" placeholder="Rechercher : AK5, cône, pelle, déviation…" value="${esc(libQ)}"></div>
     <div class="lcats">${Object.entries(LIB_CATS).map(([k, n]) => `<button type="button" data-cat="${k}" aria-pressed="${!q && k === libCat}">${n}</button>`).join('')}</div>
-    <div class="lgrid">${items.map(e => `<button type="button" class="lcard${PLACE.k === e.k && tool === 'place' ? ' on' : ''}" data-k="${e.k}" title="${esc(e.name)}"><img data-th="${e.k}" src="${THUMBS[e.k] || (e.sign ? libThumb(e) : '')}" alt=""><b>${esc(e.name)}</b>${e.ref ? `<small>${esc(e.ref)}</small>` : ''}</button>`).join('') || '<p class="hint">Aucun élément ne correspond.</p>'}</div>
+    <div class="lgrid">${items.map(e => `<button type="button" class="lcard${PLACE.k === e.k && tool === 'place' ? ' on' : ''}" data-k="${e.k}" title="${esc(e.name)}"><img data-th="${e.k}" src="${THUMBS[e.k] || (e.sign ? libThumb(e) : BLANK)}" alt=""><b>${esc(e.name)}</b>${e.ref ? `<small>${esc(e.ref)}</small>` : ''}</button>`).join('') || '<p class="hint">Aucun élément ne correspond.</p>'}</div>
     <p class="src">Panneaux dessinés selon l'Instruction interministérielle sur la signalisation routière. Véhicules et engins génériques, sans marque.</p>`;
   const qi = $('#libQ'); qi.oninput = () => { libQ = qi.value; const pos = qi.selectionStart; renderLib(); const n = $('#libQ'); n.focus(); n.setSelectionRange(pos, pos); };
   pb().querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { libCat = b.dataset.cat; libQ = ''; renderLib(); });
   pb().querySelectorAll('[data-k]').forEach(b => b.onclick = () => { PLACE = {k:b.dataset.k, a:0, p:LIBK[b.dataset.k]?.p ? {...LIBK[b.dataset.k].p} : {}}; if (ghost){ previewGroup.remove(ghost); ghost = null; } tool = 'place'; $$('.tool').forEach(t => t.setAttribute('aria-pressed', t.dataset.tool === 'place')); syncHud(); setPrompt(); renderLib(); if (isNarrow.matches){ $('#panel').classList.remove('open'); $('#scrim').classList.remove('on'); } });
   // vignettes 3D générées au fil de l'eau
-  const todo = [...pb().querySelectorAll('img[data-th]')].filter(i => !i.getAttribute('src'));
+  const todo = [...pb().querySelectorAll('img[data-th]')].filter(i => !THUMBS[i.dataset.th]);
   const later = f => window.requestIdleCallback ? requestIdleCallback(f, {timeout:200}) : setTimeout(f, 20);
-  const next = () => { const img = todo.shift(); if (!img) return; const e = LIBK[img.dataset.th]; if (img.isConnected) img.src = libThumb(e); later(next); };
+  const next = () => { const img = todo.shift(); if (!img) return; const e = LIBK[img.dataset.th]; if (img.isConnected) img.src = libThumb(e); else { const n = pb().querySelector(`img[data-th="${img.dataset.th}"]`); if (n) n.src = libThumb(e); } later(next); };
   next();
 }
 /* ---------- onglet Trafic ---------- */

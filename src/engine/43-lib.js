@@ -18,10 +18,14 @@ libAdd('bal', 'GBAx', 'Glissière béton (2 m)', () => { const g = new THREE.Gro
 libAdd('bal', 'VAUx', 'Barrière Vauban (2 m)', () => vaubanModule().grp, {ref:'Vauban'});
 libAdd('bal', 'HERx', 'Clôture de chantier (3,5 m)', () => herasModule().grp, {ref:'Clôture'});
 const VEH_DEF = {citadine:['Citadine', () => makeCar('citadine', 0xC9C2B4)], berline:['Berline', () => makeCar('berline', 0x8D949B)], break:['Break', () => makeCar('break', 0x1F3F73)], suv:['SUV', () => makeCar('suv', 0x2E3238)],
-  utilitaire:['Fourgon utilitaire', () => makeVan()], porteur:['Camion porteur', () => makeTruck()], semi:['Semi-remorque', () => makeSemi()], bus:['Bus', () => makeBus()], moto:['Moto', () => makeMoto()], velo:['Vélo', () => makeBike()]};
+  monospace:['Monospace', () => makeCar('monospace', 0xA61E22)], utilitaire:['Fourgon utilitaire', () => makeVan()], camionnette:['Camionnette benne', () => makePickup()], porteur:['Camion porteur', () => makeTruck()], semi:['Semi-remorque', () => makeSemi()],
+  bus:['Bus', () => makeBus()], moto:['Moto', () => makeMoto()], velo:['Vélo', () => makeBike()]};
 for (const [k, [n, f]] of Object.entries(VEH_DEF)) libAdd('veh', k, n, p => { const g = f(); if (p?.color) recolor(g, p.color); return g; }, {p:{color:''}, color:true});
 const ENG_DEF = {pelle:['Pelle sur chenilles', () => makeExcavator(false)], minipelle:['Mini-pelle', () => makeExcavator(true)], chargeuse:['Chargeuse sur pneus', makeLoader], tractopelle:['Tractopelle', makeBackhoe],
-  compacteur:['Compacteur', makeRoller], finisseur:['Finisseur', makeFinisher], benne:['Camion benne', makeTipper], toupie:['Camion toupie', makeMixer], nacelle:['Véhicule nacelle', makeAerial], grue:['Grue mobile', makeCrane], balayeuse:['Balayeuse', makeSweeper]};
+  bouteur:['Bouteur (bulldozer)', makeDozer], niveleuse:['Niveleuse', makeGrader], tombereau:['Tombereau articulé', makeDumper], dumper:['Dumper de chantier', makeMiniDumper], telescopique:['Chariot télescopique', makeTelehandler],
+  compacteur:['Compacteur monocylindre', makeRoller], tandem:['Compacteur tandem', makeTandem], finisseur:['Finisseur', makeFinisher], fraiseuse:['Fraiseuse (rabotage)', makeColdPlaner],
+  benne:['Camion benne 8×4', () => makeTipper()], toupie:['Camion toupie', () => makeMixer()], grueAux:['Camion plateau grue', makeCraneTruck], porteEngins:['Porte-engins', makeLowLoader], hydrocureuse:['Hydrocureuse', makeVacTruck],
+  nacelle:['Véhicule nacelle', makeAerial], grue:['Grue mobile', makeCrane], balayeuse:['Balayeuse de voirie', makeSweeper], vehFLR:['Véhicule de signalisation (FLR)', makeFLRTruck], tma:['Camion atténuateur (TMA)', makeTMA]};
 for (const [k, [n, f]] of Object.entries(ENG_DEF)) libAdd('eng', k, n, () => f());
 libAdd('chan', 'bungalow', 'Bungalow de chantier', bungalow); libAdd('chan', 'wc', 'Sanitaire de chantier', wcChantier); libAdd('chan', 'benneDechets', 'Benne à gravats', benne);
 libAdd('chan', 'bigbag', 'Big bag', bigBag); libAdd('chan', 'sable', 'Tas de sable', () => tas(C.sand)); libAdd('chan', 'terre', 'Tas de terre', () => tas(C.earth, 2.2, 1.4)); libAdd('chan', 'palette', 'Palette de matériaux', palette);
@@ -38,21 +42,28 @@ const LINE_TYPES = {
 function recolor(g, color){ const c = new THREE.Color(color); g.traverse(o => { if (o.isMesh && o.material?.userData.body) o.material = bodyMat(c.getHex()); }); }
 /* vignettes 3D (rendues une fois, à la demande) */
 const THUMBS = {};
-let thumbRT = null, thumbScene = null, thumbCam = null;
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+let thumbScene = null, thumbCam = null; const thumbRTs = {};
+/* rendu d'un objet isolé sur fond transparent → data URL (vignettes, aperçus) */
+function renderPreview(obj, W = 160, Hh = W, opt = {}){
+  const key = W + 'x' + Hh; let rt = thumbRTs[key];
+  if (!rt){ rt = thumbRTs[key] = new THREE.WebGLRenderTarget(W, Hh, {samples:4}); rt.texture.colorSpace = THREE.SRGBColorSpace; }
+  thumbCam ??= new THREE.PerspectiveCamera(30, 1, 0.05, 400); thumbCam.aspect = W / Hh; thumbCam.updateProjectionMatrix();
+  if (!thumbScene){ thumbScene = new THREE.Scene(); thumbScene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.9)); const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(4, 7, 5); thumbScene.add(d); const d2 = new THREE.DirectionalLight(0xdfe8ff, 0.7); d2.position.set(-5, 3, -4); thumbScene.add(d2); }
+  thumbScene.environment = envTex || null; thumbScene.add(obj);
+  const b = new THREE.Box3().setFromObject(obj), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3()), r = Math.max(s.x, s.y * 1.1, s.z) * 0.62 + 0.08;
+  const az = opt.az ?? 0.72, el = opt.el ?? 0.42, dist = r / Math.tan(thumbCam.fov * Math.PI / 360) * (W < Hh ? Hh / W : 1) * 1.08;
+  thumbCam.position.set(c.x + Math.cos(az) * Math.cos(el) * dist, c.y + Math.sin(el) * dist, c.z + Math.sin(az) * Math.cos(el) * dist); thumbCam.lookAt(c);
+  const bgc = renderer.getClearColor(new THREE.Color()), ba = renderer.getClearAlpha(); renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(rt); renderer.clear(); renderer.render(thumbScene, thumbCam); const px = new Uint8Array(W * Hh * 4); renderer.readRenderTargetPixels(rt, 0, 0, W, Hh, px); renderer.setRenderTarget(null); renderer.setClearColor(bgc, ba);
+  thumbScene.remove(obj);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh; const g = cv.getContext('2d'), img = g.createImageData(W, Hh);
+  for (let y = 0; y < Hh; y++) img.data.set(px.subarray((Hh - 1 - y) * W * 4, (Hh - y) * W * 4), y * W * 4);
+  g.putImageData(img, 0, 0); dirty = true; return cv.toDataURL('image/png');
+}
 function libThumb(e){
   if (THUMBS[e.k]) return THUMBS[e.k];
   if (e.sign) return THUMBS[e.k] = signThumb(e.sign, e.p);
-  try {
-    if (!thumbRT){ thumbRT = new THREE.WebGLRenderTarget(160, 160, {samples:4}); thumbRT.texture.colorSpace = THREE.SRGBColorSpace; } thumbCam ??= new THREE.PerspectiveCamera(30, 1, 0.05, 200);
-    if (!thumbScene){ thumbScene = new THREE.Scene(); thumbScene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(3, 5, 4); thumbScene.add(d); }
-    const obj = e.build(e.p || {}); thumbScene.add(obj);
-    const b = new THREE.Box3().setFromObject(obj), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3()), r = Math.max(s.x, s.y, s.z) * 1.05 + 0.1;
-    thumbCam.position.set(c.x + r * 1.2, c.y + r * 0.85, c.z + r * 1.55); thumbCam.lookAt(c);
-    const bgc = renderer.getClearColor(new THREE.Color()), ba = renderer.getClearAlpha(), bgS = thumbScene.background; thumbScene.background = null; renderer.setClearColor(0x000000, 0);
-    renderer.setRenderTarget(thumbRT); renderer.clear(); renderer.render(thumbScene, thumbCam); const px = new Uint8Array(160 * 160 * 4); renderer.readRenderTargetPixels(thumbRT, 0, 0, 160, 160, px); renderer.setRenderTarget(null); renderer.setClearColor(bgc, ba); thumbScene.background = bgS;
-    thumbScene.remove(obj); obj.traverse(o => o.geometry?.dispose());
-    const cv = document.createElement('canvas'); cv.width = cv.height = 160; const g = cv.getContext('2d'), img = g.createImageData(160, 160);
-    for (let y = 0; y < 160; y++) img.data.set(px.subarray((159 - y) * 640, (160 - y) * 640), y * 640);
-    g.putImageData(img, 0, 0); return THUMBS[e.k] = cv.toDataURL('image/png');
-  } catch(err){ return THUMBS[e.k] = ''; }
+  try { const obj = e.build(e.p || {}); const u = renderPreview(obj, 160, 160); obj.traverse(o => o.geometry?.dispose()); return THUMBS[e.k] = u; }
+  catch(err){ console.warn('vignette', e.k, err); return THUMBS[e.k] = BLANK; }
 }
