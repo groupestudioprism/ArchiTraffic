@@ -21,12 +21,12 @@ function restore(js){ const o = JSON.parse(js); state.els = o.els; state.legend 
 function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !redoS.length; }
 
 /* ---------- chargement de la zone du chantier ---------- */
-const AREA_SIZES = [300, 500, 800, 1200];
+const AREA_SIZES = [500, 1000, 1600, 2400];
 function loadUI(on, title = '', step = '', pct = 0){ const b = $('#loadBox'); b.hidden = !on; if (!on) return; $('#loadTitle').textContent = title; $('#loadStep').textContent = step; $('#loadBar').style.width = Math.round(pct * 100) + '%'; }
 let loadToken = 0;
 async function loadSite(force = false){
   const s = state.site; if (!s?.lat){ WORLD = null; buildWorld(); rebuildProj(); return; }
-  const tok = ++loadToken, size = s.size || 500, P = makeProj(s.lat, s.lon), key = `site|${DATA_VER}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}|${size}`;
+  const tok = ++loadToken, size = s.size || 1000, P = makeProj(s.lat, s.lon), key = `site|${DATA_VER}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}|${size}`;
   simStop(true);
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour

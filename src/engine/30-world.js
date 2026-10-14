@@ -223,7 +223,14 @@ function buildBuildings(grp){
     const facKey = plan ? 'plan' : `fac|${st.kind}|${st.seed}`, shopKey = plan ? 'plan' : `shop|${st.kind}|${st.seed}`;
     const wall = (ring) => { let s = 0; for (let i = 0; i < ring.length; i++){ const a = ring[i], c = ring[(i + 1) % ring.length], L = V.dist(a, c); if (L < 0.05) continue;
       const z1 = shop ? zAvg + 3.4 : zMin; if (shop){ gb(shopKey).quad(P3(a[0], a[1], zMin), P3(c[0], c[1], zMin), P3(c[0], c[1], z1), P3(a[0], a[1], z1), [s / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, 1], [s / 3, 1]); }
-      gb(facKey).quad(P3(a[0], a[1], z1), P3(c[0], c[1], z1), P3(c[0], c[1], zTop), P3(a[0], a[1], zTop), [s / 3, (z1 - zAvg) / 3], [(s + L) / 3, (z1 - zAvg) / 3], [(s + L) / 3, eave / 3], [s / 3, eave / 3]); s += L; } };
+      gb(facKey).quad(P3(a[0], a[1], z1), P3(c[0], c[1], z1), P3(c[0], c[1], zTop), P3(a[0], a[1], zTop), [s / 3, (z1 - zAvg) / 3], [(s + L) / 3, (z1 - zAvg) / 3], [(s + L) / 3, eave / 3], [s / 3, eave / 3]);
+      if (!plan && L > 1.2){ const nx = (c[1] - a[1]) / L, ny = -(c[0] - a[0]) / L, o = (q, k) => [q[0] + nx * k, q[1] + ny * k];
+        if (!shop && b.h > 4){ const A2 = o(a, 0.04), C2 = o(c, 0.04), zp = zAvg + 0.7; gb('plinth|x|0').quad(P3(A2[0], A2[1], zMin), P3(C2[0], C2[1], zMin), P3(C2[0], C2[1], zp), P3(A2[0], A2[1], zp), [s, 0], [s + L, 0], [s + L, 0.7], [s, 0.7]); }
+        if (b.h > 7){ const CB = gb('cornice|x|0'), A3 = o(a, 0.22), C3 = o(c, 0.22), zc = zTop - (ridgeH > 0 ? 0.05 : 0.35); // bandeau de corniche
+          CB.quad(P3(A3[0], A3[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(C3[0], C3[1], zc), P3(A3[0], A3[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(a[0], a[1], zc - 0.22), P3(c[0], c[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(A3[0], A3[1], zc - 0.22), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(A3[0], A3[1], zc), P3(C3[0], C3[1], zc), P3(c[0], c[1], zc), P3(a[0], a[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); }
+        if (ridgeH <= 0 && b.h > 3.5){ const CB = gb('cornice|x|0'), I = o(a, -0.25), J = o(c, -0.25), zp = zTop + 0.7; // acrotère
+          CB.quad(P3(a[0], a[1], zTop), P3(c[0], c[1], zTop), P3(c[0], c[1], zp), P3(a[0], a[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(J[0], J[1], zTop), P3(I[0], I[1], zTop), P3(I[0], I[1], zp), P3(J[0], J[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(a[0], a[1], zp), P3(c[0], c[1], zp), P3(J[0], J[1], zp), P3(I[0], I[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); } }
+      s += L; } };
     wall(p); (b.holes || []).forEach(h => wall(ringArea(h) > 0 ? h.slice().reverse() : h));
     const roofKey = plan ? 'planTop' : (st.roofM || roofDefault) === 'ardoises' ? 'roofSlate' : st.roofM === 'zinc' ? 'roofZinc' : st.roofM === 'beton' || st.roofM === 'verre' ? 'roofFlat' : 'roofTiles';
     if (ridgeH > 0){
@@ -254,8 +261,8 @@ function buildBuildings(grp){
   const mats = {plan:matCol(PLAN_COL.bld, {rough:1, side:THREE.DoubleSide}), planTop:matCol(PLAN_COL.bldTop, {rough:1, side:THREE.DoubleSide}), roofTiles:matTex('roofTiles', {rough:0.85, side:THREE.DoubleSide}), roofSlate:matTex('roofSlate', {rough:0.7, side:THREE.DoubleSide}), roofZinc:matTex('roofZinc', {rough:0.5, side:THREE.DoubleSide}), roofFlat:matTex('roofFlat', {side:THREE.DoubleSide})};
   for (const [key, g] of groups){
     let m = mats[key];
-    if (!m){ const [k, kind, seed] = key.split('|'); m = MAT[key] ??= new THREE.MeshStandardMaterial({map:facadeTex(kind, +seed, k === 'shop'), roughness:0.9, side:THREE.DoubleSide}); }
-    const mesh = new THREE.Mesh(g.geo(), m); mesh.castShadow = !plan; mesh.receiveShadow = true; mesh.name = key.startsWith('fac') || key.startsWith('shop') ? 'Façades' : key.startsWith('roof') ? 'Toitures' : 'Bâtiments'; mesh.userData.bld = true; grp.add(mesh);
+    if (!m){ const [k, kind, seed] = key.split('|'); m = k === 'plinth' ? matTex('granite', {rough:0.8}) : k === 'cornice' ? matCol(0xE4DDD0, {rough:0.85}) : facadeMat(kind, +seed, k === 'shop'); }
+    const mesh = new THREE.Mesh(g.geo(), m); mesh.castShadow = !plan; mesh.receiveShadow = true; mesh.name = /^(fac|shop|plinth|cornice)/.test(key) ? 'Façades' : key.startsWith('roof') ? 'Toitures' : 'Bâtiments'; mesh.userData.bld = true; grp.add(mesh);
   }
 }
 

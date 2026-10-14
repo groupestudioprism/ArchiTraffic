@@ -45,35 +45,45 @@ const FACADE_PAL = {
   beton:['#C8C6C2', '#B9B7B3', '#D3D1CC'], brique:['#A0573D', '#B06446', '#8E4C36'], agglo:['#C9C3B8', '#BEB8AD'], bois:['#8E6A48', '#A37B54'],
 };
 const SHUTTER = ['#5E7C8A', '#7E9C83', '#E6E0D2', '#7A3B2E', '#3F5E8C', '#B4A88E', '#6D7F57'];
-function facadeTex(kind, seed, shop){
-  const key = `fac|${kind}|${seed}|${shop ? 1 : 0}`; if (TEX[key]) return TEX[key];
-  const R = rng(hashStr(key)), pal = FACADE_PAL[kind] || FACADE_PAL.enduit, base = pal[Math.floor(R() * pal.length)], sh = SHUTTER[Math.floor(R() * SHUTTER.length)], vol = R() < (kind === 'beton' ? 0.15 : 0.6), bal = R() < 0.25;
-  const t = canvasTex(256, 256, (g, w, h) => {
-    g.fillStyle = base; g.fillRect(0, 0, w, h);
-    if (kind === 'brique'){ for (let y = 0; y < h; y += 8){ for (let x = (y / 8 % 2) * 10 - 10; x < w; x += 20){ g.fillStyle = shadeHex(base, (R() - 0.5) * 0.12); g.fillRect(x + 1, y + 1, 18, 6); } } }
-    else if (kind === 'pierre' || kind === 'meuliere'){ for (let y = 0; y < h; y += 22){ let x = (y / 22 % 2) * 20 - 30; while (x < w){ const bw = 30 + R() * 24; g.fillStyle = shadeHex(base, (R() - 0.5) * 0.12); g.fillRect(x + 1, y + 1, bw - 2, 20); x += bw; } } }
-    else speckle(g, w, h, R, base, 0.08, 5000, 2, 0.5);
-    if (shop){ // rez-de-chaussée commercial : vitrine, imposte, porte
-      g.fillStyle = shadeHex(base, -0.35); g.fillRect(10, 40, w - 20, h - 40);
-      const gl = g.createLinearGradient(0, 50, 0, h); gl.addColorStop(0, '#2C3640'); gl.addColorStop(1, '#55636E'); g.fillStyle = gl; g.fillRect(18, 52, w - 36, h - 60);
-      g.fillStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.moveTo(30, 60); g.lineTo(90, 60); g.lineTo(50, h - 10); g.lineTo(30, h - 10); g.fill();
-      g.fillStyle = SHUTTER[Math.floor(R() * SHUTTER.length)]; g.fillRect(10, 18, w - 20, 22);
-      return;
-    }
-    // fenêtre
-    const ww = 92, wh = 150, x = (w - ww) / 2, y = 44;
-    g.fillStyle = shadeHex(base, -0.18); g.fillRect(x - 8, y - 8, ww + 16, wh + 18);   // encadrement
-    g.fillStyle = '#F4F2EE'; g.fillRect(x - 3, y - 3, ww + 6, wh + 6);
-    const gl = g.createLinearGradient(0, y, 0, y + wh); gl.addColorStop(0, '#3A4652'); gl.addColorStop(1, '#6E7F8C'); g.fillStyle = gl; g.fillRect(x, y, ww, wh);
-    g.fillStyle = '#F4F2EE'; g.fillRect(x + ww / 2 - 2, y, 4, wh); g.fillRect(x, y + wh * 0.33, ww, 3); g.fillRect(x, y + wh * 0.66, ww, 3);
-    g.fillStyle = 'rgba(255,255,255,.18)'; g.beginPath(); g.moveTo(x + 6, y + 6); g.lineTo(x + 30, y + 6); g.lineTo(x + 6, y + 60); g.fill();
-    g.fillStyle = shadeHex(base, -0.25); g.fillRect(x - 10, y + wh + 6, ww + 20, 7);   // appui
-    if (vol){ g.fillStyle = sh; g.fillRect(x - 48, y - 2, 42, wh + 4); g.fillRect(x + ww + 6, y - 2, 42, wh + 4); g.fillStyle = 'rgba(0,0,0,.18)'; for (let k = 0; k < wh; k += 12){ g.fillRect(x - 48, y + k, 42, 2); g.fillRect(x + ww + 6, y + k, 42, 2); } }
-    if (bal){ g.strokeStyle = '#22262B'; g.lineWidth = 3; g.strokeRect(x - 10, y + wh * 0.62, ww + 20, wh * 0.38); for (let k = x - 6; k < x + ww + 10; k += 8){ g.beginPath(); g.moveTo(k, y + wh * 0.62); g.lineTo(k, y + wh); g.stroke(); } }
-    g.fillStyle = 'rgba(0,0,0,.06)'; g.fillRect(0, h - 4, w, 4);
-  });
-  return TEX[key] = t;
+/* façade : 3 cartes dessinées ensemble — couleur, relief (hauteur → normales) et matière (vitres lisses et réfléchissantes) */
+function facadeSet(kind, seed, shop){
+  const key = `facset|${kind}|${seed}|${shop ? 1 : 0}`; if (TEX[key]) return TEX[key];
+  const S = 256, cC = document.createElement('canvas'), cH = document.createElement('canvas'), cM = document.createElement('canvas'); for (const c of [cC, cH, cM]){ c.width = c.height = S; }
+  const gC = cC.getContext('2d'), gH = cH.getContext('2d'), gM = cM.getContext('2d');
+  const R = rng(hashStr(key)), pal = FACADE_PAL[kind] || FACADE_PAL.enduit, base = pal[Math.floor(R() * pal.length)], sh = SHUTTER[Math.floor(R() * SHUTTER.length)], vol = R() < (kind === 'beton' ? 0.15 : 0.6), bal = R() < 0.25, deep = kind === 'pierre' || kind === 'meuliere' ? 1 : 0.7;
+  // r(x, y, w, h, couleur, hauteur 0..255, matière : 0 mur, 1 vitre, 2 métal)
+  const r = (x, y, w, h, col, ht, mt = 0) => { gC.fillStyle = col; gC.fillRect(x, y, w, h); if (ht != null){ gH.fillStyle = `rgb(${ht},${ht},${ht})`; gH.fillRect(x, y, w, h); } gM.fillStyle = mt === 1 ? 'rgb(255,20,200)' : mt === 2 ? 'rgb(255,90,160)' : 'rgb(255,235,0)'; gM.fillRect(x, y, w, h); };
+  r(0, 0, S, S, base, 140);
+  if (kind === 'brique'){ for (let y = 0; y < S; y += 8) for (let x = (y / 8 % 2) * 10 - 10; x < S; x += 20){ gC.fillStyle = shadeHex(base, (R() - 0.5) * 0.14); gC.fillRect(x + 1, y + 1, 18, 6); gH.fillStyle = 'rgb(146,146,146)'; gH.fillRect(x + 1, y + 1, 18, 6); } }
+  else if (kind === 'pierre' || kind === 'meuliere'){ for (let y = 0; y < S; y += 22){ let x = (y / 22 % 2) * 20 - 30; while (x < S){ const bw = 30 + R() * 24; gC.fillStyle = shadeHex(base, (R() - 0.5) * 0.12); gC.fillRect(x + 1, y + 1, bw - 2, 20); gH.fillStyle = 'rgb(152,152,152)'; gH.fillRect(x + 1, y + 1, bw - 2, 20); x += bw; } } }
+  else { for (let i = 0; i < 5000; i++){ gC.globalAlpha = 0.5 * R(); gC.fillStyle = shadeHex(base, (R() - 0.5) * 0.08); const s2 = 2 * (0.5 + R()); const x = R() * S, y = R() * S; gC.fillRect(x, y, s2, s2); } gC.globalAlpha = 1; }
+  if (shop){ // rez-de-chaussée commercial : vitrine en retrait, enseigne, porte
+    r(10, 40, S - 20, S - 40, shadeHex(base, -0.35), 120);
+    const gl = gC.createLinearGradient(0, 50, 0, S); gl.addColorStop(0, '#2C3640'); gl.addColorStop(1, '#55636E'); gC.fillStyle = gl; gC.fillRect(18, 52, S - 36, S - 60); gH.fillStyle = 'rgb(70,70,70)'; gH.fillRect(18, 52, S - 36, S - 60); gM.fillStyle = 'rgb(255,20,200)'; gM.fillRect(18, 52, S - 36, S - 60);
+    r(126, 52, 4, S - 60, '#2A2E33', 110, 2); r(10, 18, S - 20, 22, SHUTTER[Math.floor(R() * SHUTTER.length)], 175);
+  } else {
+    const ww = 92, wh = 150, x = (S - ww) / 2, y = 44;
+    r(x - 8, y - 8, ww + 16, wh + 18, shadeHex(base, -0.18), 150);               // encadrement en saillie
+    r(x - 3, y - 3, ww + 6, wh + 6, '#F4F2EE', Math.round(110 * deep));          // dormant
+    const gl = gC.createLinearGradient(0, y, 0, y + wh); gl.addColorStop(0, '#3A4652'); gl.addColorStop(1, '#6E7F8C'); gC.fillStyle = gl; gC.fillRect(x, y, ww, wh); gH.fillStyle = `rgb(${Math.round(70 * deep)},${Math.round(70 * deep)},${Math.round(70 * deep)})`; gH.fillRect(x, y, ww, wh); gM.fillStyle = 'rgb(255,20,200)'; gM.fillRect(x, y, ww, wh);
+    r(x + ww / 2 - 2, y, 4, wh, '#F4F2EE', 95); r(x, y + wh * 0.33, ww, 3, '#F4F2EE', 95); r(x, y + wh * 0.66, ww, 3, '#F4F2EE', 95);
+    r(x - 10, y + wh + 6, ww + 20, 7, shadeHex(base, -0.25), 200);             // appui de fenêtre
+    if (vol){ for (const sx of [x - 48, x + ww + 6]){ r(sx, y - 2, 42, wh + 4, sh, 165); for (let k = 0; k < wh; k += 12){ gC.fillStyle = 'rgba(0,0,0,.18)'; gC.fillRect(sx, y + k, 42, 2); gH.fillStyle = 'rgb(150,150,150)'; gH.fillRect(sx, y + k, 42, 2); } } }
+    if (bal){ gC.strokeStyle = '#22262B'; gC.lineWidth = 3; gC.strokeRect(x - 10, y + wh * 0.62, ww + 20, wh * 0.38); gH.strokeStyle = 'rgb(200,200,200)'; gH.lineWidth = 3; gH.strokeRect(x - 10, y + wh * 0.62, ww + 20, wh * 0.38);
+      for (let k = x - 6; k < x + ww + 10; k += 8){ gC.beginPath(); gC.moveTo(k, y + wh * 0.62); gC.lineTo(k, y + wh); gC.stroke(); gH.beginPath(); gH.moveTo(k, y + wh * 0.62); gH.lineTo(k, y + wh); gH.stroke(); } }
+    r(0, S - 5, S, 5, shadeHex(base, -0.06), 150);                               // cordon d'étage
+  }
+  // relief → carte de normales (Sobel)
+  const hd = gH.getImageData(0, 0, S, S).data, nC = document.createElement('canvas'); nC.width = nC.height = S; const gN = nC.getContext('2d'), nd = gN.createImageData(S, S), hv = (x, y) => hd[(((y + S) % S) * S + ((x + S) % S)) * 4] / 255;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++){ const dx = (hv(x + 1, y) - hv(x - 1, y)) * 3.2, dy = (hv(x, y + 1) - hv(x, y - 1)) * 3.2, l = Math.hypot(dx, dy, 1), k = (y * S + x) * 4;
+    nd.data[k] = (-dx / l * 0.5 + 0.5) * 255; nd.data[k + 1] = (dy / l * 0.5 + 0.5) * 255; nd.data[k + 2] = (1 / l * 0.5 + 0.5) * 255; nd.data[k + 3] = 255; }
+  gN.putImageData(nd, 0, 0);
+  const mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return TEX[key] = {map:mk(cC, true), normal:mk(nC, false), orm:mk(cM, false)};   // orm : g = rugosité, b = métal (canaux three.js)
 }
+function facadeTex(kind, seed, shop){ return facadeSet(kind, seed, shop).map; }
+function facadeMat(kind, seed, shop){ const key = `facmat|${kind}|${seed}|${shop ? 1 : 0}`; if (MAT[key]) return MAT[key]; const F = facadeSet(kind, seed, shop);
+  return MAT[key] = new THREE.MeshStandardMaterial({map:F.map, normalMap:F.normal, normalScale:new THREE.Vector2(1.1, 1.1), roughnessMap:F.orm, metalnessMap:F.orm, roughness:1, metalness:1, side:THREE.DoubleSide}); }
 function tex(name){ // texture courante (procédurale, puis photo dès qu'elle est chargée)
   if (TEX[name]) return TEX[name];
   const t = PROC[name] ? PROC[name]() : PROC.concrete(); TEX[name] = t; const r = texRep(name); t.repeat.set(1 / r[0], 1 / r[1]);

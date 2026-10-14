@@ -36,7 +36,7 @@ function loop(now){
 }
 
 /* ---------- exemple : rue barrée en centre-ville, déviation et balisage ---------- */
-function sample(){ const s = blankState('Exemple · rue barrée'); s.site = {label:'Rue de Saint-Malo, 35000 Rennes', lat:48.11535, lon:-1.68255, size:500}; s.sampleSetup = true; s.meta = {...s.meta, moa:'Ville de Rennes (exemple)', entreprise:'Entreprise de travaux publics', arrete:'2026-XXX'}; return s; }
+function sample(){ const s = blankState('Exemple · rue barrée'); s.site = {label:'Rue de Saint-Malo, 35000 Rennes', lat:48.11535, lon:-1.68255, size:1000}; s.sampleSetup = true; s.meta = {...s.meta, moa:'Ville de Rennes (exemple)', entreprise:'Entreprise de travaux publics', arrete:'2026-XXX'}; return s; }
 function runSampleSetup(){
   if (!state.sampleSetup || !WORLD) return; delete state.sampleSetup;
   let best = null; for (const [ri, r] of NET.roads.entries()){ if (!r.drive || r.cls < 4 || r.cls > 5) continue; for (let k = 0; k + 1 < r.pts.length; k++){ const c = segClosest([0, 0], r.pts[k], r.pts[k + 1]), d = V.len(c.pt); if (!best || d < best.d) best = {ri, k, t:c.t, pt:c.pt, d, r, dir:V.norm(V.sub(r.pts[k + 1], r.pts[k]))}; } }

@@ -5,7 +5,7 @@ function openSiteDialog(){
     <div class="ed-body" style="display:block">
       <div class="lsearch"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="sdQ" placeholder="Adresse, rue, place, commune…" value="${esc(s?.label || '')}" autocomplete="off"></div>
       <div id="sdRes" class="elist" style="margin-top:8px"></div>
-      <div class="fields" style="margin-top:12px"><label class="f wide"><span>Taille de la zone chargée autour de l'adresse</span><span class="in"><select id="sdSize">${AREA_SIZES.map(v => `<option value="${v}"${(s?.size || 500) === v ? ' selected' : ''}>${v} × ${v} m${v === 500 ? ' (conseillé en ville)' : v === 1200 ? ' (grands itinéraires, plus long à charger)' : ''}</option>`).join('')}</select></span></label></div>
+      <div class="fields" style="margin-top:12px"><label class="f wide"><span>Taille de la zone chargée autour de l'adresse</span><span class="in"><select id="sdSize">${AREA_SIZES.map(v => `<option value="${v}"${(s?.size || 1000) === v ? ' selected' : ''}>${v} × ${v} m${v === 1000 ? ' (conseillé)' : v >= 1600 ? ' (grands itinéraires, plus long à charger)' : ''}</option>`).join('')}</select></span></label></div>
       <p class="hint">Données chargées : rues et sens de circulation (OpenStreetMap), bâtiments et hauteurs (IGN BD TOPO®), relief en altitudes NGF (IGN RGE ALTI®). Mises en cache sur cet appareil pendant 30 jours.</p>
       <div class="btns"><button class="btn primary" id="sdOk" ${s ? '' : 'disabled'}>Charger la zone</button><button class="btn" id="sdNo">Annuler</button></div></div>`, 'mid');
   let pick = s ? {...s} : null, t = 0;

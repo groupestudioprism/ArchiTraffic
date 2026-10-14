@@ -8,7 +8,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 3;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 4;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -79,27 +79,30 @@ async function overpass(q){
   }
   throw err || new Error('overpass');
 }
-async function loadOSM(B){
+/* deux requêtes en parallèle (sur deux serveurs) : la voirie arrive vite, le reste (bâtiments OSM, occupation du sol) ensuite */
+async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ...OVERPASS.slice(0, first)]; let err;
+  for (const url of order){ const c = new AbortController(), t = setTimeout(() => c.abort(), 70000);
+    try { const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal}); if (!r.ok) throw new Error('overpass ' + r.status); return await r.json(); }
+    catch(e){ err = e; } finally { clearTimeout(t); } }
+  throw err || new Error('overpass'); }
+async function loadOSM(B, withBuildings = true){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const q = `[out:json][timeout:60];(
-way["highway"]${bb};
-way["building"]${bb};way["building:part"]${bb};
+  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
-way["waterway"~"^(river|canal|stream)$"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};
-node["natural"="tree"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};
-relation["type"="restriction"]${bb};relation["type"="multipolygon"]["building"]${bb};
-);out body geom qt;`;
-  return await overpass(q);
+way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
+  const [a, b] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]}))]);
+  return {elements:[...(a.elements || []), ...(b.elements || [])]};
 }
 
 /* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
-async function loadBDTopo(B){
-  const out = [];
-  for (let start = 0; start < 20000; start += 5000){
-    const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`});
-    const j = await fetchJSON(`${WFS_URL}?${p}`, 40000); const f = j.features || []; out.push(...f); if (f.length < 5000) break;
-  }
-  return out;
+const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
+async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
+  const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
+  const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });
+  if (first.length < 5000) return first;
+  const rest = await Promise.all([5000, 10000, 15000, 20000, 25000].map(s => page(s).catch(() => [])));
+  return [...first, ...rest.flat()];
 }
 
 /* ---------- analyse : du brut au « monde » du projet ---------- */
