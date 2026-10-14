@@ -1,11 +1,9 @@
 /* ============ Bibliothèque ARCHITRAFIC : catalogue des éléments à placer ============ */
-const LIB_CATS = {temp:'Signalisation temporaire', reg:'Police et priorité', bal:'Balisage', veh:'Véhicules', eng:'Engins', chan:'Chantier et piétons'};
+const LIB_CATS = {temp:'Signalisation temporaire', dang:'Danger et intersections', reg:'Prescription', ind:'Indication et direction', bal:'Balisage', veh:'Véhicules', eng:'Engins', chan:'Chantier et piétons'};
 const LIB = [];
 const libAdd = (cat, k, name, build, x = {}) => LIB.push({cat, k, name, build, ...x});
-for (const code of ['AK5', 'AK3', 'AK3a', 'AK3b', 'AK14', 'AK17', 'AK2', 'AK4', 'AK22', 'AK30', 'AK31', 'KC1', 'KR_ROUTE', 'KD8', 'KD22a', 'KD22b', 'KD22c', 'KM9'])
-  libAdd('temp', code, SIGNS[code].n, p => signOnStand(code, p), {sign:code, ref:code.replace('_ROUTE', '1').replace('KR', 'KC'), p:SIGNS[code].p ? {...SIGNS[code].p} : undefined, h:1.6});
-for (const code of ['B1', 'B0', 'B2a', 'B2b', 'B3', 'B8', 'B9g', 'B14', 'B33', 'B15', 'C18', 'B21_1', 'B21_2', 'B21c1', 'B21c2', 'B21d1', 'B6a1', 'B6d', 'AB3a', 'AB4', 'C12', 'C13a', 'A13b'])
-  libAdd('reg', code, SIGNS[code].n, p => p?.pole === 'mât' ? signOnPole(code, p) : signOnStand(code, p), {sign:code, ref:code.replace('_', '-'), p:{...(SIGNS[code].p || {}), pole:'chevalet'}, h:1.6});
+for (const [cat, codes] of Object.entries(SIGN_LIB)) for (const code of codes){ const S = SIGNS[code]; if (!S) continue; const perm = cat !== 'temp';
+  libAdd(cat, code, S.n, p => perm && p?.pole === 'mât' ? signOnPole(code, p) : signOnStand(code, p), {sign:code, ref:code.replace(/_.*/, '').replace('KR', 'KC'), p:{...(S.p || {}), ...(perm ? {pole:'mât'} : {})}, h:1.6}); }
 libAdd('bal', 'K5a', 'Cône de chantier', p => coneK5a(+(p?.h || 0.75)), {ref:'K5a', p:{h:'0.75'}});
 libAdd('bal', 'K5b', 'Balise d\'alignement', () => baliseK5b(), {ref:'K5b'});
 libAdd('bal', 'K5c', 'Balise de guidage', () => baliseK5c(), {ref:'K5c'});

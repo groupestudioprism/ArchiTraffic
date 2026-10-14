@@ -77,7 +77,7 @@ function renderElProps(e){
     h += fld('eDz', 'Hauteur ajoutée (m)', e.dz || 0, 'number', 'step="0.05"');
     if (L?.sign && SIGNS[L.sign]?.p?.v != null) h += fld('eV', 'Valeur', e.p?.v ?? '30');
     if (L?.sign && (SIGNS[L.sign]?.p?.t != null || SIGNS[L.sign]?.base === 'KC1')) h += `<label class="f wide"><span>Texte (une ligne par « | »)</span><span class="in"><input id="eT" value="${esc(e.p?.t ?? SIGNS[L.sign]?.p?.t ?? '')}" style="font-family:var(--f-body)"></span></label>`;
-    if (L?.cat === 'reg') h += selF('ePole', 'Support', [['chevalet', 'Chevalet de chantier'], ['mât', 'Mât']], e.p?.pole || 'chevalet');
+    if (['reg', 'dang', 'ind'].includes(L?.cat)) h += selF('ePole', 'Support', [['chevalet', 'Chevalet de chantier'], ['mât', 'Mât']], e.p?.pole || 'mât');
     if (e.k === 'K5a') h += selF('eH', 'Hauteur du cône', [['0.5', '50 cm'], ['0.75', '75 cm'], ['1', '1 m']], e.p?.h || '0.75');
     if (e.k === 'KR11') h += selF('eOn', 'Feu allumé', [['red', 'Rouge'], ['orange', 'Orange'], ['green', 'Vert']], e.p?.on || 'red');
     if (L?.color) h += `<label class="f"><span>Couleur</span><span class="in"><input id="eCol" type="color" value="${esc(e.p?.color || '#8D949B')}" style="height:30px;padding:0"></span></label>`;

@@ -78,7 +78,7 @@ const SIGNS = {
   KD22b:{n:'Déviation (vers la droite)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.6, h / 2, w * 0.92, h / 2, h * 0.2, h * 0.36, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.34, h / 2, w * 0.56, Math.round(h * 0.3)); }},
   KD22c:{n:'Déviation (tout droit)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.14, h * 0.86, w * 0.14, h * 0.14, h * 0.2, h * 0.32, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.6, h / 2, w * 0.7, Math.round(h * 0.3)); }},
   KD8:{n:'Présignalisation de déviation', s:'rect', ak:1, ar:1.3, p:{t:'DÉVIATION|à 150 m'}, draw:(g, p, w, h) => { const L = String(p?.t || 'DÉVIATION|à 150 m').split(/\n|\|/).slice(0, 3); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; L.forEach((t, i) => textFit(g, i ? t : t.toUpperCase(), w / 2, h * 0.36 + i * h * 0.3, w - 40, Math.round(h * (i ? 0.17 : 0.2)))); arrow(g, w / 2, h * 0.92, w / 2, h * 0.72, h * 0.07, h * 0.12, SC.blk); }},
-  KM9:{n:'Piétons, passez en face', s:'rect', ak:1, ar:1.3, draw:(g, p, w, h) => { walker(g, w * 0.22, h * 0.56, 1.0, SC.blk); arrow(g, w * 0.4, h * 0.56, w * 0.9, h * 0.56, h * 0.08, h * 0.16, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; textFit(g, 'PIÉTONS', w / 2, h * 0.2, w - 40, Math.round(h * 0.14)); textFit(g, 'PASSEZ EN FACE', w / 2, h * 0.88, w - 40, Math.round(h * 0.12)); }},
+  KM9:{n:'Piétons, passez en face', s:'rect', ak:1, ar:1.3, draw:(g, p, w, h) => { walker(g, w * 0.22, h * 0.62, h / 256 * 1.1, SC.blk); arrow(g, w * 0.4, h * 0.56, w * 0.9, h * 0.56, h * 0.08, h * 0.16, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; textFit(g, 'PIÉTONS', w / 2, h * 0.2, w - 40, Math.round(h * 0.14)); textFit(g, 'PASSEZ EN FACE', w / 2, h * 0.88, w - 40, Math.round(h * 0.12)); }},
   KR_ROUTE:{n:'Route barrée sauf riverains', s:'rect', ak:1, ar:1.6, p:{t:'RUE BARRÉE|SAUF RIVERAINS'}, base:'KC1'},
 };
 /* dessin d'une face (canvas, fond transparent hors du panneau) */
@@ -86,8 +86,9 @@ function signCanvas(code, p = {}, px = 256){
   const S = SIGNS[code] || SIGNS.AK14, base = S.base ? SIGNS[S.base] : S, shape = base.s, ar = base.ar || 1, w = shape === 'rect' ? Math.round(px * ar) : px, h = px, cv = sCanvas(w, h), g = cv.getContext('2d');
   const pp = {...(S.p || {}), ...p}; g.save(); if (shape !== 'rect') g.scale(px / 256, px / 256);
   const bg = base.ak ? SC.yel : SC.wht;
-  switch (shape){
+  if (base.bg) base.bg(g, w, h, pp); else switch (shape){
     case 'tri': triPath(g, 244); g.fillStyle = SC.wht; g.fill(); triPath(g, 238); g.fillStyle = SC.red; g.fill(); triPath(g, 176); g.fillStyle = bg; g.fill(); break;
+    case 'sq0': break;
     case 'inv': triPath(g, 244, true); g.fillStyle = SC.wht; g.fill(); triPath(g, 238, true); g.fillStyle = SC.red; g.fill(); triPath(g, 176, true); g.fillStyle = SC.wht; g.fill(); break;
     case 'circ': case 'park': case 'end': g.fillStyle = SC.wht; g.beginPath(); g.arc(128, 128, 124, 0, 7); g.fill(); g.fillStyle = shape === 'end' ? SC.wht : SC.red; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.fill(); g.fillStyle = shape === 'park' ? SC.blue : SC.wht; g.beginPath(); g.arc(128, 128, shape === 'end' ? 116 : 96, 0, 7); g.fill(); if (shape === 'end'){ g.strokeStyle = SC.blk; g.lineWidth = 3; g.stroke(); } break;
     case 'disc': g.fillStyle = SC.wht; g.beginPath(); g.arc(128, 128, 124, 0, 7); g.fill(); g.fillStyle = SC.red; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.fill(); break;
