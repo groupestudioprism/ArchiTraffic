@@ -18,28 +18,56 @@ function stripeTex(c1 = '#C8102E', c2 = '#F4F4F2', diag = true, n = 4){
   return TEX[key] = canvasTex(256, 64, (g, w, h) => { g.fillStyle = c2; g.fillRect(0, 0, w, h); g.fillStyle = c1; const s = w / n; for (let i = -1; i <= n; i++){ g.beginPath(); if (diag){ g.moveTo(i * s, h); g.lineTo(i * s + s / 2, h); g.lineTo(i * s + s / 2 + h, 0); g.lineTo(i * s + h, 0); } else { g.rect(i * s, 0, s / 2, h); } g.fill(); } });
 }
 const stripeMat = (c1, c2, diag, n) => { const key = `ms|${c1}|${c2}|${diag}|${n}`; return MAT[key] ??= new THREE.MeshStandardMaterial({map:stripeTex(c1, c2, diag, n), roughness:0.45}); };
-/* panneau de signalisation : face texturée (+x), dos gris ; sur chevalet de chantier ou sur mât */
+/* contour d'un panneau (pour la tôle d'aluminium épaisse et le dos) */
+function signOutline(shape, w, h){
+  const s = new THREE.Shape(), r = Math.min(w, h) * 0.06;
+  if (shape === 'tri' || shape === 'inv'){ const k = shape === 'inv' ? -1 : 1; s.moveTo(-w / 2, -k * h / 2); s.lineTo(w / 2, -k * h / 2); s.lineTo(0, k * h / 2); s.closePath(); }
+  else if (shape === 'oct'){ for (let i = 0; i < 8; i++){ const a = Math.PI / 8 + i * Math.PI / 4; const x = Math.cos(a) * w / 2 / Math.cos(Math.PI / 8), y = Math.sin(a) * h / 2 / Math.cos(Math.PI / 8); i ? s.lineTo(x, y) : s.moveTo(x, y); } s.closePath(); }
+  else if (['circ', 'disc', 'blue', 'park', 'end'].includes(shape)) s.absarc(0, 0, w / 2, 0, Math.PI * 2, false);
+  else { const x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); }
+  return s;
+}
+/* panneau : face rétroréfléchissante texturée (+x), tôle aluminium de 2 cm avec dos et rails */
 const SIGN_SIZE = {tri:[0.7, 0.62], inv:[0.7, 0.62], circ:[0.65, 0.65], disc:[0.65, 0.65], blue:[0.65, 0.65], park:[0.65, 0.65], end:[0.65, 0.65], oct:[0.65, 0.65], sq:[0.6, 0.6]};
+const SIGN_MAT = {alu:matCol(0xA7AEB5, {rough:0.38, metal:0.75}), rail:matCol(0x7E858C, {rough:0.4, metal:0.8})};
 function signPlate(code, p = {}, scale = 1){
   const S = signShape(code), ar = S.ar || 1, sz = S.s === 'rect' ? [0.9 * ar * (ar > 2 ? 0.6 : 0.8), 0.9 * (ar > 2 ? 0.6 : 0.8)] : SIGN_SIZE[S.s] || [0.7, 0.7];
-  const w = sz[0] * scale, h = sz[1] * scale, t = signFaceTex(code, p), grp = new THREE.Group();
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), MAT['face|' + t.uuid] ??= new THREE.MeshStandardMaterial({map:t, transparent:false, alphaTest:0.5, roughness:0.35, metalness:0}));
-  face.rotation.y = Math.PI / 2; face.position.x = 0.012; face.castShadow = true; grp.add(face);
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(w, h), MAT['back|' + t.uuid] ??= new THREE.MeshStandardMaterial({color:0x9AA1A8, alphaMap:t, alphaTest:0.5, roughness:0.4, metalness:0.6}));
-  back.rotation.y = -Math.PI / 2; back.position.x = -0.002; back.castShadow = true; grp.add(back);
+  const w = sz[0] * scale, h = sz[1] * scale, t = signFaceTex(code, p), grp = new THREE.Group(), shape = S.s === 'rect' || S.s === 'sq' ? 'rect' : S.s;
+  const key = `slab|${shape}|${w.toFixed(3)}|${h.toFixed(3)}`, slab = (MAT.__g ??= {})[key] ??= (() => { const g = new THREE.ExtrudeGeometry(signOutline(shape, w * (shape === 'tri' || shape === 'inv' ? 0.95 : shape === 'oct' ? 0.98 : 0.965), h * (shape === 'tri' || shape === 'inv' ? 0.82 : shape === 'oct' ? 0.98 : 0.965)), {depth:0.018, bevelEnabled:true, bevelSize:0.004, bevelThickness:0.004, bevelSegments:1, curveSegments:24}); g.rotateY(-Math.PI / 2); return g; })();
+  grp.add(part(slab, SIGN_MAT.alu, 0.002, 0, 0));
+  const fm = MAT['face|' + t.uuid] ??= new THREE.MeshPhysicalMaterial({map:t, alphaTest:0.5, roughness:0.28, metalness:0, clearcoat:0.5, clearcoatRoughness:0.25, emissive:0xffffff, emissiveMap:t, emissiveIntensity:0.08});
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fm); face.rotation.y = Math.PI / 2; face.position.x = 0.0075; face.castShadow = true; grp.add(face);
+  for (const y of shape === 'rect' ? [-h * 0.22, h * 0.22] : [-h * 0.12]) grp.add(part(BOX(0.025, 0.04, w * (shape === 'rect' ? 0.7 : 0.32)), SIGN_MAT.rail, -0.03, y, 0));   // rails de fixation au dos
   grp.userData.size = [w, h]; return grp;
 }
-function signOnStand(code, p = {}){ // chevalet de chantier lesté (signalisation temporaire)
+function signOnStand(code, p = {}){ // chevalet de chantier lesté
   const g = new THREE.Group(), pl = signPlate(code, p), [w, h] = pl.userData.size, y0 = 0.9;
   pl.position.y = y0 + h / 2; g.add(pl);
-  g.add(part(BOX(0.035, y0 + h * 0.6, 0.035), C.galva, -0.03, (y0 + h * 0.6) / 2, -w * 0.3), part(BOX(0.035, y0 + h * 0.6, 0.035), C.galva, -0.03, (y0 + h * 0.6) / 2, w * 0.3));
-  const leg = part(BOX(0.03, 1.15, 0.03), C.galva, -0.38, 0.55, 0, 0, 0, -0.62); g.add(leg); g.add(part(BOX(0.6, 0.03, w * 0.65), C.galva, -0.2, 0.06, 0));
+  g.add(part(BOX(0.035, y0 + h * 0.6, 0.035), C.galva, -0.05, (y0 + h * 0.6) / 2, -w * 0.3), part(BOX(0.035, y0 + h * 0.6, 0.035), C.galva, -0.05, (y0 + h * 0.6) / 2, w * 0.3));
+  const leg = part(BOX(0.03, 1.15, 0.03), C.galva, -0.4, 0.55, 0, 0, 0, -0.62); g.add(leg); g.add(part(BOX(0.6, 0.03, w * 0.65), C.galva, -0.22, 0.06, 0));
   g.add(part(RBOX(0.45, 0.12, 0.3, 0.05), C.bag, -0.42, 0.08, 0)); return g;
 }
-function signOnPole(code, p = {}, H0 = 2.3){ // mât (signalisation permanente)
+function signOnPole(code, p = {}, H0 = 2.3){ // mât scellé (signalisation permanente)
   const g = new THREE.Group(), pl = signPlate(code, p, 1.1), [w, h] = pl.userData.size; pl.position.y = H0 + h / 2; g.add(pl);
-  g.add(part(CYL(0.035, 0.035, H0 + h * 0.9, 10), C.galva, -0.05, (H0 + h * 0.9) / 2, 0)); return g;
+  g.add(part(CYL(0.038, 0.038, H0 + h * 0.95, 12), C.galva, -0.07, (H0 + h * 0.95) / 2, 0)); g.add(part(CYL(0.042, 0.042, 0.02, 12), C.dark, -0.07, H0 + h * 0.95, 0));
+  for (const y of [H0 + h * 0.28, H0 + h * 0.72]) g.add(part(BOX(0.05, 0.05, 0.1), C.galva, -0.045, y, 0)); return g;
 }
+function signOnBase(code, p = {}){ // poteau sur socle lesté en caoutchouc recyclé (support temporaire courant)
+  const g = new THREE.Group(), pl = signPlate(code, p), [w, h] = pl.userData.size, y0 = 1.0; pl.position.y = y0 + h / 2; g.add(pl);
+  g.add(part(CYL(0.025, 0.025, y0 + h * 0.9, 10), C.galva, -0.06, (y0 + h * 0.9) / 2, 0));
+  const base = new THREE.CylinderGeometry(0.34, 0.38, 0.09, 8); g.add(part(base, matCol(0x1E1F21, {rough:0.95}), -0.06, 0.045, 0)); g.add(part(CYL(0.06, 0.07, 0.12, 10), matCol(0x1E1F21, {rough:0.95}), -0.06, 0.13, 0));
+  return g;
+}
+function signOnBarrier(code, p = {}){ // panneau fixé sur une barrière de chantier (K2)
+  const g = barrierK2(+(p?.len || 2)), pl = signPlate(code, p), [w, h] = pl.userData.size; pl.position.set(0.04, 1.1 + h / 2, 0); g.add(pl);
+  for (const z of [-w * 0.3, w * 0.3]) g.add(part(BOX(0.03, h * 0.5 + 0.1, 0.03), C.galva, -0.01, 1.05 + h * 0.25, z)); return g;
+}
+function signOnFence(code, p = {}){ // panneau sur clôture de chantier
+  const g = herasModule().grp, pl = signPlate(code, p), [w, h] = pl.userData.size; pl.position.set(0.04, 1.15, 0); g.add(pl); return g;
+}
+const SIGN_SUPPORTS = [['barrière', 'Sur barrière de chantier'], ['socle', 'Poteau sur socle lesté'], ['clôture', 'Sur clôture de chantier'], ['mât', 'Mât scellé'], ['chevalet', 'Chevalet']];
+function defaultSupport(code, cat){ if (cat && cat !== 'temp') return 'mât'; return /^K(C|R|8|10)/.test(code) ? 'barrière' : 'socle'; }
+function signOn(code, p = {}, cat){ const s = p?.pole || defaultSupport(code, cat); return s === 'mât' ? signOnPole(code, p) : s === 'chevalet' ? signOnStand(code, p) : s === 'barrière' ? signOnBarrier(code, p) : s === 'clôture' ? signOnFence(code, p) : signOnBase(code, p); }
 /* balisage ponctuel */
 function coneK5a(h = 0.75){
   const g = new THREE.Group(), r = h * 0.22;

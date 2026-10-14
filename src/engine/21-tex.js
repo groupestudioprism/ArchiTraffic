@@ -5,7 +5,7 @@
 const PH_BASE = 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
 const PH = {   // id Poly Haven → texture de l'app
   asphalt:{id:'asphalt_02', rep:6}, asphaltNew:{id:'asphalt_floor', rep:5}, sidewalk:{id:'concrete_pavement', rep:3}, pavers:{id:'interlocking_concrete_pavers', rep:2.5},
-  cobble:{id:'cobblestone_floor_001', rep:2.5}, grass:{id:'grass_medium_01', rep:4}, gravel:{id:'gravel_road', rep:4},
+  cobble:{id:'cobblestone_floor_001', rep:2.5}, grass:{id:'grass_ground', rep:4}, gravel:{id:'gravel_road', rep:4},
   roofTiles:{id:'clay_roof_tiles', rep:3}, roofSlate:{id:'roof_slates_02', rep:3}, roofZinc:{id:'grey_roof_01', rep:3}, concrete:{id:'concrete_floor_worn_001', rep:4},
 };
 const TEX = {}, TEX_LISTENERS = new Set();

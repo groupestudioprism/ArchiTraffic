@@ -3,7 +3,7 @@ const LIB_CATS = {temp:'Signalisation temporaire', dang:'Danger et intersections
 const LIB = [];
 const libAdd = (cat, k, name, build, x = {}) => LIB.push({cat, k, name, build, ...x});
 for (const [cat, codes] of Object.entries(SIGN_LIB)) for (const code of codes){ const S = SIGNS[code]; if (!S) continue; const perm = cat !== 'temp';
-  libAdd(cat, code, S.n, p => perm && p?.pole === 'mât' ? signOnPole(code, p) : signOnStand(code, p), {sign:code, ref:code.replace(/_.*/, '').replace('KR', 'KC'), p:{...(S.p || {}), ...(perm ? {pole:'mât'} : {})}, h:1.6}); }
+  libAdd(cat, code, S.n, p => signOn(code, p, cat), {sign:code, ref:code.replace(/_.*/, '').replace('KR', 'KC'), p:{...(S.p || {}), pole:defaultSupport(code, cat)}, h:1.6}); }
 libAdd('bal', 'K5a', 'Cône de chantier', p => coneK5a(+(p?.h || 0.75)), {ref:'K5a', p:{h:'0.75'}});
 libAdd('bal', 'K5b', 'Balise d\'alignement', () => baliseK5b(), {ref:'K5b'});
 libAdd('bal', 'K5c', 'Balise de guidage', () => baliseK5c(), {ref:'K5c'});

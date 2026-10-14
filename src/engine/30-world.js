@@ -129,15 +129,15 @@ function junctionRadius(nid){
 }
 function buildRoads(grp){
   const W = WORLD.W, plan = planLook(), urb = urbanIndex(W), dark = isDarkUI();
-  const gRoad = new GB(), gFoot = new GB(), gPath = new GB(), gCyc = new GB(), gMark = new GB(), gGut = new GB(), gCurb = new GB(), gSide = new GB(), gEdgePlan = new GB(), gRail = new GB(), gBallast = new GB();
+  const gSett = new GB(), gPaveRoad = new GB(), gConcRoad = new GB(), gRoad = new GB(), gFoot = new GB(), gPath = new GB(), gCyc = new GB(), gMark = new GB(), gGut = new GB(), gCurb = new GB(), gSide = new GB(), gEdgePlan = new GB(), gRail = new GB(), gBallast = new GB();
   const trimAt = (r, end) => { const nid = end ? r.nodes[r.nodes.length - 1] : r.nodes[0], n = NET.nodes.get(nid); return n && nodeDeg(n) >= 3 ? junctionRadius(nid) : 0; };
   for (const r of W.roads){
     if (r.tunnel) continue;
     if (r.foot){
-      const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : gFoot;
+      const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
-    bandGB(gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);
+    bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
     if (!plan && DISPLAY.lay.marks !== false && r.drive && !r.round && r.cls <= 6 && r.w >= 5){
@@ -176,7 +176,7 @@ function buildRoads(grp){
   const M = plan ? {road:matCol(PLAN_COL.road, {po:-2, basic:true}), foot:matCol(PLAN_COL.foot, {po:-1, basic:true}), side:matCol(PLAN_COL.side, {po:-1, basic:true}), edge:matCol(PLAN_COL.roadEdge, {po:-1, basic:true}), mark:matCol(PLAN_COL.mark, {po:-3, basic:true})}
     : {road:matTex('asphalt', {po:-2}), foot:matTex('pavers', {po:-1}), side:matTex('sidewalk', {po:-1}), mark:matCol(0xF2F2EE, {po:-4, rough:0.6})};
   const add = (gb, mat, name, shadow = false) => { if (gb.empty) return; const m = new THREE.Mesh(gb.geo(), mat); m.name = name; m.receiveShadow = true; m.castShadow = shadow; grp.add(m); return m; };
-  add(gRoad, M.road, 'Chaussées'); add(gFoot, M.foot, 'Voies piétonnes'); add(gPath, plan ? M.foot : matTex('gravel', {po:-1}), 'Chemins'); add(gCyc, plan ? matCol(0xF3D9D2, {po:-1}) : matCol(0x8C4A3F, {po:-1, rough:0.9}), 'Pistes cyclables');
+  add(gRoad, M.road, 'Chaussées (enrobé)'); add(gSett, plan ? M.road : matTex('cobble', {po:-2}), 'Chaussées pavées'); add(gPaveRoad, plan ? M.road : matTex('pavers', {po:-2}), 'Chaussées en dalles'); add(gConcRoad, plan ? M.road : matTex('concrete', {po:-2}), 'Chaussées béton'); add(gFoot, M.foot, 'Voies piétonnes'); add(gPath, plan ? M.foot : matTex('gravel', {po:-1}), 'Chemins'); add(gCyc, plan ? matCol(0xF3D9D2, {po:-1}) : matCol(0x8C4A3F, {po:-1, rough:0.9}), 'Pistes cyclables');
   if (plan){ // bords de chaussée : traits fins (1 pixel à toutes les échelles)
     const seg = [];
     for (const r of W.roads){ if (r.tunnel || r.foot) continue; const L = plLen(r.pts), t0 = trimAt(r, false), t1 = L - trimAt(r, true); if (t1 - t0 < 0.5) continue; const p = densify(plSlice(r.pts, t0, t1), 3);
