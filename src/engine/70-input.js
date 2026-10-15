@@ -142,12 +142,31 @@ const DETOUR_COLS = ['#F28A1A', '#7B1FA2', '#0E8FB0', '#2E7D32', '#C2185B'];
 function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
+  // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
+  const adj = state.els.find(e => e.t === 'closure' && e.mode === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  if (adj){ beginEdit();
+    let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
+    if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
+    else if (a0 === s1){ ids = [...sec.ids, ...ids.slice(1)]; pts = [...sec.pts, ...pts.slice(1)]; } else { ids = [...rs, ...ids.slice(1)]; pts = [...rp, ...pts.slice(1)]; }
+    Object.assign(adj, {ids, pts, len:Math.round(plLen(pts) * 10) / 10});
+    let msg = `${cap(adj.name)} barrée sur ${fmtM(adj.len)} (fermeture prolongée)`;
+    if (TOOLOPT.autoDetour && adj.mode !== 'alternat'){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
+    if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
+    endEdit(); sel = adj.id; rebuildProj(); refreshPanel(); toast(msg, 5200); return; }
   const ow = sectionOneway(sec.ids), mode = TOOLOPT.closeMode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:ow === -1 ? -1 : 1, riv:true, len:Math.round(sec.len * 10) / 10};
   beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
   if (TOOLOPT.autoDetour && mode !== 'alternat'){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
+  refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
+}
+/* les déviations automatiques des autres fermetures qui empruntent désormais un tronçon fermé sont recalculées */
+function refreshOtherDetours(exceptId){
+  const C = closedSets(state.els);
+  for (const c of state.els.filter(e => e.t === 'closure' && e.id !== exceptId && e.mode !== 'alternat')){
+    const hit = state.els.some(d => d.t === 'detour' && d.cl === c.id && d.auto && d.ids?.some((id, k) => k && (C.both.has(segKey(d.ids[k - 1], id)) || C.dir.has(`${d.ids[k - 1]}>${id}`))));
+    if (hit){ addDetoursFor(c); if (TOOLOPT.autoSigns) autoSigns(c); } }
 }
 const cap = s => String(s || '').replace(/^./, c => c.toUpperCase());
 function addDetoursFor(cl){
