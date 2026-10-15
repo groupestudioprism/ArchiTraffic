@@ -200,6 +200,7 @@ function buildRoads(grp){
       for (const o of [r.w / 2, -r.w / 2]){ const q = plOffset(p, o); for (let i = 0; i + 1 < q.length; i++) seg.push(q[i][0], H(q[i][0], q[i][1]) + 0.08, -q[i][1], q[i + 1][0], H(q[i + 1][0], q[i + 1][1]) + 0.08, -q[i + 1][1]); } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3)); const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x7E8690})); ls.name = 'Bords de chaussée'; grp.add(ls); }
   add(gMark, M.mark, 'Marquages au sol');
+  buildOneways(grp, plan);
   if (!plan && deco.length && DISPLAY.lay.marks !== false){ // regards, avaloirs, chambres télécom, bandes podotactiles
     const D = {regard:[0.66, 0.66, 'round'], avaloir:[0.75, 0.32, 'grid'], telecom:[1.0, 0.5, 'plate'], podo:[1.2, 0.42, 'podo']};
     for (const [k, [lx, lz, kind]] of Object.entries(D)){ const list = deco.filter(d => d.k === k); if (!list.length) continue;
@@ -212,6 +213,23 @@ function buildRoads(grp){
   add(gBallast, plan ? matCol(0xD8D4CC) : matTex('gravel', {po:-1}), 'Ballast'); add(gRail, matCol(0x8A8F96, {metal:0.8, rough:0.35}), 'Rails');
 }
 
+/* sens de circulation : flèches de sens unique le long des voies, disque « sens interdit » à la sortie de chaque sens unique */
+let ARROW_GEO = null, NOENTRY_GEO = null;
+function buildOneways(grp, plan){
+  if (DISPLAY.lay.marks === false && !plan) return;
+  if (!ARROW_GEO){ const sh = new THREE.Shape([[-1.6, -0.22], [0.4, -0.22], [0.4, -0.55], [1.6, 0], [0.4, 0.55], [0.4, 0.22], [-1.6, 0.22]].map(q => new THREE.Vector2(q[0], q[1]))); ARROW_GEO = new THREE.ShapeGeometry(sh); ARROW_GEO.rotateX(-Math.PI / 2); }
+  if (!NOENTRY_GEO){ NOENTRY_GEO = new THREE.CircleGeometry(0.9, 24); NOENTRY_GEO.rotateX(-Math.PI / 2); }
+  const arrows = [], ends = [];
+  for (const r of WORLD.W.roads){ if (!r.drive || !r.oneway || r.tunnel || r.pts.length < 2) continue;
+    const L = plLen(r.pts), pts = r.oneway < 0 ? r.pts.slice().reverse() : r.pts, step = plan ? 34 : 22, sc = clamp(r.w / 6, 0.7, 1.4) * (plan ? 2.4 : 1);
+    for (let x = Math.min(10, L / 2); x < L - 4; x += step){ const q = plAt(pts, x); arrows.push({x:q.pt[0], y:q.pt[1], a:Math.atan2(q.dir[1], q.dir[0]), s:sc}); }
+    const n1 = NET.nodes.get(r.oneway < 0 ? r.nodes[0] : r.nodes[r.nodes.length - 1]); if (n1 && nodeDeg(n1) >= 2 && L > 12){ const q = plAt(pts, L - Math.min(8, L * 0.25)); ends.push({x:q.pt[0], y:q.pt[1], a:Math.atan2(q.dir[1], q.dir[0]), s:sc}); } }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  const inst = (geo, mat, list, name, z) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((d, i) => { m4.compose(new THREE.Vector3(d.x, H(d.x, d.y) + z, -d.y), q.setFromAxisAngle(up, d.a), new THREE.Vector3(d.s, 1, d.s)); im.setMatrixAt(i, m4); }); im.name = name; im.renderOrder = 3; grp.add(im); return im; };
+  inst(ARROW_GEO, plan ? matCol(0x1565C0, {basic:true, po:-6}) : matCol(0xF4F4F0, {rough:0.6, po:-6}), arrows, 'Sens uniques', plan ? 0.1 : 0.072);
+  if (plan || DISPLAY.lay.marks !== false){ const im = inst(NOENTRY_GEO, matCol(0xC1121F, {basic:plan, po:-7}), ends, 'Sens interdits', plan ? 0.11 : 0.074);
+    if (im){ const bar = new THREE.PlaneGeometry(1.2, 0.3); bar.rotateX(-Math.PI / 2); inst(bar, matCol(0xFFFFFF, {basic:plan, po:-8}), ends, 'Sens interdits (barre)', plan ? 0.12 : 0.076); } }
+}
 /* matériaux des équipements au sol (fonte, grilles, plaques, dalles podotactiles) */
 function streetDecalMat(kind){ return MAT['deco|' + kind] ??= new THREE.MeshStandardMaterial({roughness:kind === 'podo' ? 0.8 : 0.45, metalness:kind === 'podo' ? 0 : 0.7, map:canvasTex(128, kind === 'round' ? 128 : 64, (g, w, h) => {
   if (kind === 'round'){ g.fillStyle = '#2B2D30'; g.fillRect(0, 0, w, h); g.strokeStyle = '#4A4D51'; g.lineWidth = 5; g.beginPath(); g.arc(64, 64, 58, 0, 7); g.stroke(); g.lineWidth = 3; for (let rr = 14; rr < 54; rr += 10){ g.beginPath(); g.arc(64, 64, rr, 0, 7); g.stroke(); } for (let a = 0; a < 6.28; a += 0.524){ g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.cos(a) * 54, 64 + Math.sin(a) * 54); g.stroke(); } }
