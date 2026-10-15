@@ -1,5 +1,5 @@
 /* ============ Exports : plan PNG avec cartouche et légende, maquette GLB, matériel CSV, itinéraires GeoJSON, projet ============ */
-function canExport(){ const a = window.SPAccess; if (a && a.level !== 'pending' && !a.canExport){ window.SPLicense?.prompt('export'); return false; } return true; }
+function canExport(){ const a = window.SPAccess; if (a && a.level !== 'pending' && !a.canExport){ window.SPLicense?.prompt('export'); return false; } window.SPLicense?.usage?.(); return true; }   // rappel d'usage (non commercial) une fois par session
 async function exportPNG(k = 2){
   const w = vpEl.clientWidth, h = vpEl.clientHeight, pr = renderer.getPixelRatio(), s = Math.min(k, 4096 / Math.max(w, h));
   markGroup.visible = previewGroup.visible = false; renderer.setPixelRatio(s); renderer.setSize(w, h, false); renderer.render(scene, cam());
