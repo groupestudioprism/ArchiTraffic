@@ -12,6 +12,7 @@ function legendEntries(){
     else if (e.t === 'swept') add('swept|' + e.veh, `<i class="lg-zone" style="border-color:#7B1FA2;background:#7B1FA233"></i>`, `Giration · ${SWEPT_VEH[e.veh]?.n || ''}`);
     else if (e.t === 'arrow' && e.label) add('arrow|' + e.col + e.label, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, e.label);
   }
+  if (DISPLAY.lay.nets) for (const [t, src] of NETBUILT.types){ const T = NET_TYPES[t]; add('net|' + t, `<i class="lg-line${src === 'présumé' ? ' dash' : ''}" style="border-color:#${T.col.toString(16).padStart(6, '0')}"></i>`, `${T.n} (${src})`); }
   for (const c of state.legend.custom || []) add('custom|' + c.t + c.c, `<i class="lg-line" style="border-color:${esc(c.c)}"></i>`, c.t);
   return out.filter(e => !hide.has(e.key));
 }

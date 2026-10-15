@@ -1034,7 +1034,7 @@ a.ap-link{text-decoration:none}
   <button data-act="home"><b>Accueil</b><span>Mes chantiers et dossiers dans le cloud</span></button>
   <button data-act="new"><b>Nouveau chantier</b><span>Enregistré automatiquement dans le cloud</span></button>
   <button data-act="open"><b>Importer un projet…</b><span>Fichier ARCHITRAFIC .json</span></button>
-  <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button>
+  <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button><button data-act="netin"><b>Importer un plan de réseaux…</b><span>GeoJSON (WGS84 ou Lambert-93) : réponses DT/DICT, SIG</span></button>
   <button data-act="sample"><b>Charger l'exemple</b><span>Rue barrée avec déviation, en centre-ville</span></button>
 </div>
 <div class="menu" id="exportMenu" hidden><div class="lbl">Exporter <span class="lock" hidden>· licence requise</span></div>
@@ -1091,7 +1091,7 @@ a.ap-link{text-decoration:none}
 <div id="engDlg" hidden role="dialog" aria-modal="true"><div class="edlg-card"></div></div>
 <div id="toast" hidden></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
-<input type="file" id="glbIn" accept=".glb,model/gltf-binary" hidden>
+<input type="file" id="glbIn" accept=".glb,model/gltf-binary" hidden><input type="file" id="netIn" accept=".geojson,.json,application/geo+json" hidden>
 <script>
 (() => {
 'use strict';
@@ -2663,7 +2663,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 4;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 5;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -2742,7 +2742,7 @@ async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ..
   throw err || new Error('overpass'); }
 async function loadOSM(B, withBuildings = true){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
@@ -2777,7 +2777,7 @@ const BDT_WALL = {'00':'enduit', '01':'pierre', '02':'meuliere', '03':'beton', '
 const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'beton', '05':'verre', '06':'bois', '09':'', '10':'tuiles', '12':'tuiles', '13':'tuiles', '20':'ardoises', '30':'zinc', '40':'beton'};
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
-  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
+  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
   const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
@@ -2785,6 +2785,9 @@ function parseWorld(raw, P, size){
     if (e.type === 'node'){
       const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
       if (T.natural === 'tree') W.trees.push({x:xy[0], y:xy[1], h:parseFloat(T.height) > 0 ? parseFloat(T.height) : 0, k:/needle|conif/i.test(T.leaf_type || '') ? 'c' : 'f'});
+      else if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
+      else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T['street_cabinet'] || ''), tags:T});
+      else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T});
       else if (T.highway || T.amenity) W.points.push({id:e.id, x:xy[0], y:xy[1], k:T.highway || T.amenity, tags:T});
       continue;
     }
@@ -3041,7 +3044,7 @@ const previewGroup = new THREE.Group(), markGroup = new THREE.Group();
 scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 
 /* Réglages d'affichage, par appareil */
-const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, ngf:false}};
+const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';
@@ -3408,7 +3411,9 @@ function junctionRadius(nid){
 }
 function buildRoads(grp){
   const W = WORLD.W, plan = planLook(), urb = urbanIndex(W), dark = isDarkUI();
-  const deco = [], crossAt = new Map();
+  const deco = [], crossAt = new Map(), realMH = (W.utils || []).filter(u => u.k === 'manhole'), nearReal = (x, y, d = 18) => realMH.some(u => Math.abs(u.x - x) < d && Math.abs(u.y - y) < d);
+  for (const u of realMH){ const nr = nearestRoad([u.x, u.y], 15, false), a = nr ? Math.atan2(nr.dir[1], nr.dir[0]) : 0, onRoad = nr && nr.d < 0.3 && nr.r.drive, sub = u.sub;   // regards réels (OpenStreetMap)
+    deco.push({k:/drain|storm/.test(sub) ? 'avaloir' : /telecom|telephone/.test(sub) ? 'telecom' : 'regard', x:u.x, y:u.y, a, z:onRoad ? 0.058 : 0.152}); }
   if (!plan) for (const pt of W.points) if (pt.k === 'crossing'){ const nr = nearestRoad([pt.x, pt.y], 6); if (nr && !nr.r.foot){ const c = plClosest(nr.r.pts, [pt.x, pt.y]); (crossAt.get(nr.ri) || crossAt.set(nr.ri, []).get(nr.ri)).push(c.s); } }
   const gSett = new GB(), gPaveRoad = new GB(), gConcRoad = new GB(), gRoad = new GB(), gFoot = new GB(), gPath = new GB(), gCyc = new GB(), gMark = new GB(), gGut = new GB(), gCurb = new GB(), gSide = new GB(), gEdgePlan = new GB(), gRail = new GB(), gBallast = new GB();
   const trimAt = (r, end) => { const nid = end ? r.nodes[r.nodes.length - 1] : r.nodes[0], n = NET.nodes.get(nid); return n && nodeDeg(n) >= 3 ? junctionRadius(nid) : 0; };
@@ -3418,7 +3423,7 @@ function buildRoads(grp){
       const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
-    if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = (Math.floor(x / 45) % 2 ? 1 : -1) * (r.oneway ? 0.6 : 1.5); deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
+    if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = r.oneway ? 0.6 : 1.2; if (nearReal(q.pt[0], q.pt[1])) continue; deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
@@ -3454,7 +3459,7 @@ function buildRoads(grp){
         const mid = plAt(q, plLen(q) / 2), nn = V.perp(mid.dir); deco.push({k:'podo', x:mid.pt[0] + nn[0] * o(e + 0.85), y:mid.pt[1] + nn[1] * o(e + 0.85), a:Math.atan2(mid.dir[1], mid.dir[0]), z:0.075}); }
       // avaloirs (grilles au fil d'eau), chambres télécom sur trottoir
       const off = (hashStr(r.id + '|' + side) % 1000) / 1000 * 20;
-      for (let x = 8 + off; x < Lp - 4; x += 26){ if (gaps.some(g => Math.abs(g - x) < 3)) continue; const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'avaloir', x:q.pt[0] + nn[0] * o(e + 0.17), y:q.pt[1] + nn[1] * o(e + 0.17), a:Math.atan2(q.dir[1], q.dir[0]), z:0.062}); }
+      for (let x = 8 + off; x < Lp - 4; x += 26){ if (gaps.some(g => Math.abs(g - x) < 3)) continue; const q = plAt(p, x), nn = V.perp(q.dir); if (nearReal(q.pt[0], q.pt[1], 10)) continue; deco.push({k:'avaloir', x:q.pt[0] + nn[0] * o(e + 0.17), y:q.pt[1] + nn[1] * o(e + 0.17), a:Math.atan2(q.dir[1], q.dir[0]), z:0.062}); }
       for (let x = 20 + off * 2; x < Lp - 6; x += 64){ const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'telecom', x:q.pt[0] + nn[0] * o(e + 0.45 + swW * 0.55), y:q.pt[1] + nn[1] * o(e + 0.45 + swW * 0.55), a:Math.atan2(q.dir[1], q.dir[0]), z:0.152}); }
     }
   }
@@ -3674,12 +3679,103 @@ function buildWorld(){
   if (DISPLAY.lay.bld !== false && !(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
   if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
   if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
-  if (!planLook()) buildFurniture(worldGroup);
+  if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
+  if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
   worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
 }
 TEX_LISTENERS.add(() => { dirty = true; });
+
+/* ==== 32-networks.js ==== */
+/* ============ Réseaux souterrains ============
+   Trois sources, par ordre de fiabilité :
+   1. plans des exploitants importés (GeoJSON, en WGS84 ou en Lambert-93) : réponses aux DT/DICT, exports SIG des collectivités ;
+   2. équipements cartographiés dans OpenStreetMap (regards, bouches à clé, armoires, poteaux incendie) : positions réelles ;
+   3. réseau PRÉSUMÉ, généré d'après les règles de pose usuelles (assainissement sous chaussée, eau et gaz sous trottoir…).
+      Toujours signalé comme présumé : il ne remplace jamais un relevé ni une réponse DT/DICT.
+   Couleurs des grillages avertisseurs (NF EN 12613) ; profondeurs de génératrice usuelles. */
+const NET_TYPES = {
+  eu:{n:'Eaux usées', col:0x7B4A26, d:2.4, r:0.15}, ep:{n:'Eaux pluviales', col:0xA0784B, d:1.8, r:0.2}, aep:{n:'Eau potable', col:0x1E63C6, d:1.0, r:0.05},
+  gaz:{n:'Gaz', col:0xF2C400, d:0.9, r:0.045}, elec:{n:'Électricité', col:0xD32F2F, d:0.8, r:0.055}, tel:{n:'Télécommunications', col:0x2E9D4A, d:0.6, r:0.05},
+  ecl:{n:'Éclairage public et signalisation', col:0xF0F0F0, d:0.5, r:0.03}, chauf:{n:'Chauffage urbain', col:0x7E3FA0, d:1.2, r:0.12}, autre:{n:'Autre réseau', col:0xE07A10, d:1.0, r:0.05},
+};
+const NETBUILT = {types:new Map()};   // type → 'présumé' | 'plan importé' (pour la légende)
+function netTypeOf(props = {}){
+  const s = ' ' + Object.values(props).filter(v => typeof v === 'string' || typeof v === 'number').join(' ').toLowerCase().replace(/r[ée]seau/g, ' ') + ' ';
+  if (/eaux? us[ée]|\beu\b|unitaire|assainissement|sewer|waste/.test(s)) return 'eu';
+  if (/pluvia|\bep\b|storm|drain/.test(s)) return 'ep';
+  if (/potable|\baep\b|adduction|water|[^a-z]eau[^a-z]/.test(s)) return 'aep';
+  if (/gaz|gas|grdf/.test(s)) return 'gaz';
+  if (/[ée]clairage|signalisation lumineuse|feux/.test(s)) return 'ecl';
+  if (/t[ée]l[ée]com|fibre|orange|\bft\b|telecom|cuivre|optique/.test(s)) return 'tel';
+  if (/[ée]lec|enedis|\bhta\b|\bbt\b|power|rte/.test(s)) return 'elec';
+  if (/chauffage|chaleur|heat|vapeur|froid urbain/.test(s)) return 'chauf';
+  return 'autre';
+}
+/* Lambert-93 (RGF93, EPSG:2154) → longitude / latitude (degrés) */
+function l93ToLL(X, Y){
+  const n = 0.725607765053267, C = 11754255.426096, Xs = 700000, Ys = 12655612.049876, e = 0.0818191910428158, lon0 = 3 * Math.PI / 180;
+  const dx = X - Xs, dy = Y - Ys, R = Math.hypot(dx, dy), g = Math.atan2(dx, -dy), L = -Math.log(Math.abs(R / C)) / n;
+  let phi = 2 * Math.atan(Math.exp(L)) - Math.PI / 2; for (let i = 0; i < 8; i++){ const es = e * Math.sin(phi); phi = 2 * Math.atan(Math.pow((1 + es) / (1 - es), e / 2) * Math.exp(L)) - Math.PI / 2; }
+  return [(lon0 + g / n) * 180 / Math.PI, phi * 180 / Math.PI];
+}
+/* import d'un plan de réseaux (GeoJSON) : lignes → canalisations ; profondeur lue si renseignée */
+function importNetworks(text, fname){
+  let gj; try { gj = JSON.parse(text); } catch(e){ toast('Fichier non reconnu : choisissez un plan de réseaux au format GeoJSON.'); return; }
+  const feats = gj.type === 'FeatureCollection' ? gj.features : gj.type === 'Feature' ? [gj] : [];
+  const conv = c => Math.abs(c[0]) > 1000 || Math.abs(c[1]) > 1000 ? l93ToLL(c[0], c[1]) : [c[0], c[1]];
+  const lines = [];
+  for (const f of feats){ const g = f?.geometry, P = f?.properties || {}; if (!g) continue;
+    const parts = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+    const type = netTypeOf(P), dep = parseFloat(String(P.profondeur ?? P.prof ?? P.depth ?? P.PROFONDEUR ?? '').replace(',', '.')), dia = parseFloat(String(P.diametre ?? P.DN ?? P.dn ?? P.diameter ?? '').replace(',', '.'));
+    for (const c of parts) if (c?.length >= 2) lines.push({type, ll:c.map(conv), depth:dep > 0 && dep < 15 ? dep : null, r:dia > 0 ? (dia > 5 ? dia / 2000 : dia / 2) : null, name:String(P.nom || P.name || P.exploitant || '')}); }
+  if (!lines.length){ toast('Aucune canalisation (ligne) trouvée dans ce fichier.'); return; }
+  edit(() => { state.nets = [...(state.nets || []), ...lines]; });
+  DISPLAY.lay.nets = true; saveDisplay(); buildWorld(); renderLegend();
+  const types = [...new Set(lines.map(l => NET_TYPES[l.type].n))].join(', ');
+  toast(`${lines.length} canalisations importées (${types}). Le réseau présumé de ces types est remplacé par le plan.`, 6500);
+}
+/* réseau présumé, d'après la voirie : une ligne par réseau, décalée de l'axe selon les usages de pose */
+function presumedNetworks(){
+  const W = WORLD.W, out = [], urb = urbanIndex(W);
+  for (const r of W.roads){ if (!r.drive || r.cls > 6 || r.tunnel || r.pts.length < 2) continue; const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (urb(mid[0], mid[1]) < 2 && r.cls > 3) continue;
+    const e = r.w / 2, swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6;
+    const lay = [['eu', r.oneway ? 0.6 : 1.2], ['ep', r.oneway ? -0.8 : -1.2], ['aep', e + 0.45 + swW * 0.35], ['tel', e + 0.45 + swW * 0.62], ['gaz', -(e + 0.45 + swW * 0.4)], ['elec', -(e + 0.45 + swW * 0.7)], ['ecl', -(e + 0.6)]];
+    for (const [type, off] of lay) out.push({type, pts:plOffset(densify(r.pts, 4), off), presumed:true}); }
+  return out;
+}
+let hydrantGeo = null;
+function buildNetworks(grp){
+  NETBUILT.types.clear(); if (!WORLD) return;
+  const P = WORLD.P, imported = (state.nets || []).map(l => ({...l, pts:l.ll.map(c => P.toXY(c[0], c[1]))})), have = new Set(imported.map(l => l.type));
+  const lines = [...imported, ...presumedNetworks().filter(l => !have.has(l.type))];
+  const unit = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false), up = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), S = WORLD.size / 2 + 40;
+  for (const [type, T] of Object.entries(NET_TYPES)) for (const presumed of [false, true]){
+    const L = lines.filter(l => l.type === type && !!l.presumed === presumed); if (!L.length) continue;
+    const segs = []; for (const l of L){ const d = l.depth ?? T.d, rr = l.r ?? T.r; const p = densify(l.pts, 4); for (let i = 0; i + 1 < p.length; i++){ const a = p[i], b = p[i + 1]; if (Math.abs(a[0]) > S || Math.abs(a[1]) > S) continue; segs.push([a, b, d, rr]); } }
+    if (!segs.length) continue;
+    const mat = new THREE.MeshStandardMaterial({color:T.col, roughness:0.55, metalness:0.1, transparent:presumed, opacity:presumed ? 0.9 : 1, emissive:T.col, emissiveIntensity:0.45});
+    const im = new THREE.InstancedMesh(unit, mat, segs.length);
+    segs.forEach(([a, b, d, rr], i) => { const A = new THREE.Vector3(a[0], H(a[0], a[1]) - d - rr, -a[1]), B = new THREE.Vector3(b[0], H(b[0], b[1]) - d - rr, -b[1]), dir = B.clone().sub(A), len = dir.length() || 0.01;
+      m4.compose(A.clone().addScaledVector(dir, 0.5), q.setFromUnitVectors(up, dir.normalize()), new THREE.Vector3(rr, len, rr)); im.setMatrixAt(i, m4); });
+    im.name = `Réseau ${T.n}${presumed ? ' (présumé)' : ''}`; im.userData.net = type; im.frustumCulled = false; grp.add(im);
+    NETBUILT.types.set(type, presumed && !NETBUILT.types.has(type) ? 'présumé' : NETBUILT.types.get(type) === 'présumé' && !presumed ? 'plan importé' : (NETBUILT.types.get(type) || (presumed ? 'présumé' : 'plan importé')));
+  }
+}
+/* coupe : sol, chaussées et trottoirs transparents pour voir les réseaux */
+function applyCutaway(grp){
+  grp.traverse(o => { if (!o.isMesh || o.userData.net) return; if (!/Terrain|Chaussées|Trottoirs|Caniveaux|Bordures|Voies piétonnes|Chemins|Pistes|Coupe du sol|Ballast|Occupation|Espaces|Marquages|Regards|Avaloirs|télécom|podotactiles/.test(o.name)) return;
+    const mk = m => { const c = m.clone(); c.transparent = true; c.opacity = /Terrain|Coupe/.test(o.name) ? 0.14 : 0.22; c.depthWrite = false; return c; }; o.material = Array.isArray(o.material) ? o.material.map(mk) : mk(o.material); o.renderOrder = 2; });
+}
+/* poteaux incendie et équipements réels d'OpenStreetMap */
+function buildUtilities(grp){
+  const U = WORLD.W.utils || []; const hyd = U.filter(u => u.k === 'hydrant'); if (!hyd.length) return;
+  if (!hydrantGeo){ const a = new THREE.CylinderGeometry(0.1, 0.11, 0.85, 12); a.translate(0, 0.425, 0); const c = new THREE.SphereGeometry(0.11, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2); c.translate(0, 0.85, 0); const s = new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8); s.rotateZ(Math.PI / 2); s.translate(0, 0.62, 0); hydrantGeo = mergeGeometries([a.toNonIndexed(), c.toNonIndexed(), s.toNonIndexed()]); }
+  const im = new THREE.InstancedMesh(hydrantGeo, matCol(0xC62828, {rough:0.45, metal:0.3}), hyd.length), m4 = new THREE.Matrix4();
+  hyd.forEach((u, i) => { m4.makeTranslation(u.x, H(u.x, u.y) + 0.15, -u.y); im.setMatrixAt(i, m4); }); im.castShadow = true; im.name = 'Poteaux incendie'; grp.add(im);
+}
+$('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier.'); return; } const r = new FileReader(); r.onload = () => importNetworks(r.result, f.name); r.readAsText(f); });
 
 /* ==== 40-signs.js ==== */
 /* ============ Signalisation française (temporaire et permanente) ============
@@ -5365,6 +5461,7 @@ function legendEntries(){
     else if (e.t === 'swept') add('swept|' + e.veh, `<i class="lg-zone" style="border-color:#7B1FA2;background:#7B1FA233"></i>`, `Giration · ${SWEPT_VEH[e.veh]?.n || ''}`);
     else if (e.t === 'arrow' && e.label) add('arrow|' + e.col + e.label, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, e.label);
   }
+  if (DISPLAY.lay.nets) for (const [t, src] of NETBUILT.types){ const T = NET_TYPES[t]; add('net|' + t, `<i class="lg-line${src === 'présumé' ? ' dash' : ''}" style="border-color:#${T.col.toString(16).padStart(6, '0')}"></i>`, `${T.n} (${src})`); }
   for (const c of state.legend.custom || []) add('custom|' + c.t + c.c, `<i class="lg-line" style="border-color:${esc(c.c)}"></i>`, c.t);
   return out.filter(e => !hide.has(e.key));
 }
@@ -5555,17 +5652,17 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.t
 $('#fileBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#fileMenu'), e.currentTarget); });
 $('#exportBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#exportMenu'), e.currentTarget); });
 $('#fileMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#fileMenu').hidden = true;
-  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
+  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), netin:() => $('#netIn').click(), sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
 $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#exportMenu').hidden = true; if (!canExport()) return;
   ({png:() => exportPNG(2), png4:() => exportPNG(4), glb:exportGLB, csv:exportCSV, geojson:exportGeoJSON, json:exportJSON})[b.dataset.act]?.(); });
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
 function renderViewMenu(){
   const L = DISPLAY.lay, m = $('#viewMenu');
-  m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}
+  m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}<label class="mi"><input type="checkbox" data-lay="nets"${L.nets ? ' checked' : ''}> Réseaux souterrains (vue en coupe)</label>
     <hr><div class="lbl">Éléments du chantier</div><label class="mi"><input type="checkbox" data-proj${projGroup.visible ? ' checked' : ''}> Afficher le chantier</label><label class="mi"><input type="checkbox" data-legend${state.legend.show ? ' checked' : ''}> Légende sur la vue</label>
     <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
     <hr><div class="lbl">Thème de l'interface</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px">${[['light', 'Clair'], ['dark', 'Sombre']].map(([k, n]) => `<button type="button" class="btn" data-thm="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'light') === k}">${n}</button>`).join('')}</div>`;
-  m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); buildWorld(); annoKey = ''; });
+  m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); buildWorld(); annoKey = ''; renderLegend(); if (c.dataset.lay === 'nets' && c.checked) toast((state.nets || []).length ? 'Réseaux : plans importés, et réseau présumé pour les autres types.' : 'Réseaux PRÉSUMÉS (règles de pose usuelles) : à confirmer par les réponses DT/DICT. Fichier → Importer un plan de réseaux.', 6500); });
   m.querySelector('[data-proj]').onchange = e => { projGroup.visible = e.target.checked; dirty = true; };
   m.querySelector('[data-legend]').onchange = e => { state.legend.show = e.target.checked; save(); renderLegend(); };
   m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; saveDisplay(); applyThemeToScene(); };

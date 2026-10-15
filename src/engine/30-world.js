@@ -129,7 +129,9 @@ function junctionRadius(nid){
 }
 function buildRoads(grp){
   const W = WORLD.W, plan = planLook(), urb = urbanIndex(W), dark = isDarkUI();
-  const deco = [], crossAt = new Map();
+  const deco = [], crossAt = new Map(), realMH = (W.utils || []).filter(u => u.k === 'manhole'), nearReal = (x, y, d = 18) => realMH.some(u => Math.abs(u.x - x) < d && Math.abs(u.y - y) < d);
+  for (const u of realMH){ const nr = nearestRoad([u.x, u.y], 15, false), a = nr ? Math.atan2(nr.dir[1], nr.dir[0]) : 0, onRoad = nr && nr.d < 0.3 && nr.r.drive, sub = u.sub;   // regards réels (OpenStreetMap)
+    deco.push({k:/drain|storm/.test(sub) ? 'avaloir' : /telecom|telephone/.test(sub) ? 'telecom' : 'regard', x:u.x, y:u.y, a, z:onRoad ? 0.058 : 0.152}); }
   if (!plan) for (const pt of W.points) if (pt.k === 'crossing'){ const nr = nearestRoad([pt.x, pt.y], 6); if (nr && !nr.r.foot){ const c = plClosest(nr.r.pts, [pt.x, pt.y]); (crossAt.get(nr.ri) || crossAt.set(nr.ri, []).get(nr.ri)).push(c.s); } }
   const gSett = new GB(), gPaveRoad = new GB(), gConcRoad = new GB(), gRoad = new GB(), gFoot = new GB(), gPath = new GB(), gCyc = new GB(), gMark = new GB(), gGut = new GB(), gCurb = new GB(), gSide = new GB(), gEdgePlan = new GB(), gRail = new GB(), gBallast = new GB();
   const trimAt = (r, end) => { const nid = end ? r.nodes[r.nodes.length - 1] : r.nodes[0], n = NET.nodes.get(nid); return n && nodeDeg(n) >= 3 ? junctionRadius(nid) : 0; };
@@ -139,7 +141,7 @@ function buildRoads(grp){
       const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
-    if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = (Math.floor(x / 45) % 2 ? 1 : -1) * (r.oneway ? 0.6 : 1.5); deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
+    if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = r.oneway ? 0.6 : 1.2; if (nearReal(q.pt[0], q.pt[1])) continue; deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
@@ -175,7 +177,7 @@ function buildRoads(grp){
         const mid = plAt(q, plLen(q) / 2), nn = V.perp(mid.dir); deco.push({k:'podo', x:mid.pt[0] + nn[0] * o(e + 0.85), y:mid.pt[1] + nn[1] * o(e + 0.85), a:Math.atan2(mid.dir[1], mid.dir[0]), z:0.075}); }
       // avaloirs (grilles au fil d'eau), chambres télécom sur trottoir
       const off = (hashStr(r.id + '|' + side) % 1000) / 1000 * 20;
-      for (let x = 8 + off; x < Lp - 4; x += 26){ if (gaps.some(g => Math.abs(g - x) < 3)) continue; const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'avaloir', x:q.pt[0] + nn[0] * o(e + 0.17), y:q.pt[1] + nn[1] * o(e + 0.17), a:Math.atan2(q.dir[1], q.dir[0]), z:0.062}); }
+      for (let x = 8 + off; x < Lp - 4; x += 26){ if (gaps.some(g => Math.abs(g - x) < 3)) continue; const q = plAt(p, x), nn = V.perp(q.dir); if (nearReal(q.pt[0], q.pt[1], 10)) continue; deco.push({k:'avaloir', x:q.pt[0] + nn[0] * o(e + 0.17), y:q.pt[1] + nn[1] * o(e + 0.17), a:Math.atan2(q.dir[1], q.dir[0]), z:0.062}); }
       for (let x = 20 + off * 2; x < Lp - 6; x += 64){ const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'telecom', x:q.pt[0] + nn[0] * o(e + 0.45 + swW * 0.55), y:q.pt[1] + nn[1] * o(e + 0.45 + swW * 0.55), a:Math.atan2(q.dir[1], q.dir[0]), z:0.152}); }
     }
   }
@@ -395,7 +397,8 @@ function buildWorld(){
   if (DISPLAY.lay.bld !== false && !(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
   if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
   if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
-  if (!planLook()) buildFurniture(worldGroup);
+  if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
+  if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
   worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;

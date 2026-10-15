@@ -8,7 +8,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 4;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 5;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -87,7 +87,7 @@ async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ..
   throw err || new Error('overpass'); }
 async function loadOSM(B, withBuildings = true){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
@@ -122,7 +122,7 @@ const BDT_WALL = {'00':'enduit', '01':'pierre', '02':'meuliere', '03':'beton', '
 const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'beton', '05':'verre', '06':'bois', '09':'', '10':'tuiles', '12':'tuiles', '13':'tuiles', '20':'ardoises', '30':'zinc', '40':'beton'};
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
-  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
+  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
   const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
@@ -130,6 +130,9 @@ function parseWorld(raw, P, size){
     if (e.type === 'node'){
       const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
       if (T.natural === 'tree') W.trees.push({x:xy[0], y:xy[1], h:parseFloat(T.height) > 0 ? parseFloat(T.height) : 0, k:/needle|conif/i.test(T.leaf_type || '') ? 'c' : 'f'});
+      else if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
+      else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T['street_cabinet'] || ''), tags:T});
+      else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T});
       else if (T.highway || T.amenity) W.points.push({id:e.id, x:xy[0], y:xy[1], k:T.highway || T.amenity, tags:T});
       continue;
     }
