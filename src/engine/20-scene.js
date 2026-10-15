@@ -15,6 +15,8 @@ c3.touches = {ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN}; c3.mouseButton
 const c2 = new OrbitControls(ortho, canvas); c2.enableRotate = false; c2.screenSpacePanning = true; c2.zoomToCursor = true; c2.minZoom = 0.05; c2.maxZoom = 60; c2.enabled = false;
 c2.mouseButtons = {LEFT:THREE.MOUSE.PAN, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c2.touches = {ONE:THREE.TOUCH.PAN, TWO:THREE.TOUCH.DOLLY_PAN};
 let dirty = true;
+// zoom à la molette plus doux (1 cran ≈ 2 % au lieu de 5 %) : navigation plus fine, surtout au pavé tactile
+[c2, c3].forEach(c => { c.zoomSpeed = 0.4; });
 [c2, c3].forEach(c => c.addEventListener('change', () => { dirty = true; }));
 let view = '3d';   // '2d' plan | '3d' | 'render'
 const cam = () => view === '2d' ? ortho : persp;
