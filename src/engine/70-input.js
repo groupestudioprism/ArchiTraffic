@@ -153,9 +153,24 @@ const cap = s => String(s || '').replace(/^./, c => c.toUpperCase());
 function addDetoursFor(cl){
   const res = proposeDetours(cl, state.els); let ok = 0, fail = 0; const list = [];
   state.els = state.els.filter(e => !(e.t === 'detour' && e.cl === cl.id && e.auto));
-  res.forEach((r, i) => { if (r.fail){ fail++; return; } ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
-    const fromN = NET.nodes.get(r.from), names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
-    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, name:`Déviation ${res.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
+  // la déviation commence et finit au carrefour où l'on quitte / rejoint l'itinéraire normal (pas sur le tronçon fermé ni ses abords en impasse)
+  const trim = r => { const n = r.ids.length; let s = 0, e = n - 1; while (s < n - 2 && nodeDeg(NET.nodes.get(r.ids[s])) < 3) s++; while (e > s + 1 && nodeDeg(NET.nodes.get(r.ids[e])) < 3) e--;
+    const inDir0 = s > 0 ? V.norm(V.sub(NET.nodes.get(r.ids[s - 1]).xy, NET.nodes.get(r.ids[s]).xy)) : null;
+    const inDirEnd = e < n - 1 ? V.norm(V.sub(NET.nodes.get(r.ids[e + 1]).xy, NET.nodes.get(r.ids[e]).xy)) : null;
+    return {...r, ids:r.ids.slice(s, e + 1), pts:r.pts.slice(s, e + 1), edges:r.edges.slice(s, e), inDir0, inDirEnd}; };
+  let routes = res.filter(r => !r.fail).map(trim); fail = res.length - routes.length;
+  // un seul itinéraire si les deux sens empruntent les mêmes rues (double sens) : « Déviation (deux sens) »
+  let both = false;
+  if (routes.length === 2){
+    const a = new Set(routes[0].ids), common = routes[1].ids.filter(id => a.has(id)).length;
+    // l'itinéraire du sens 1 est-il praticable en sens inverse (sens uniques, fermetures) et pas plus long de 30 % que le meilleur sens 2 ?
+    const C = closedSets(state.els), rev = routes[0].ids.slice().reverse(); let ok2 = true, len2 = 0;
+    for (let k = 0; k + 1 < rev.length && ok2; k++){ const n = NET.nodes.get(rev[k]), e = n.out.map(i => NET.edges[i]).find(e => e.to === rev[k + 1]); if (!e || C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)) ok2 = false; else len2 += e.len; }
+    if (common / Math.max(routes[0].ids.length, routes[1].ids.length) > 0.6 || ok2 && len2 <= plLen(routes[1].pts) * 1.3 + 30){ routes = [routes[0]]; both = true; }
+  }
+  routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
+    const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
+    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
@@ -171,9 +186,9 @@ function autoSigns(cl){
     add('KR_ROUTE', V.add(V.add(base, V.mul(d, -1.5)), V.mul(n, -w / 2 + 0.6)), Math.atan2(-d[1], -d[0]), cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'});
   });
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
-  for (const dt of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)){
+  for (const dt0 of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)) for (const dt of dt0.both ? [dt0, {...dt0, ids:dt0.ids.slice().reverse(), inDir0:dt0.inDirEnd}] : [dt0]){
     // sens de marche voulu au départ de la déviation : celui du tronçon barré, depuis l'extrémité où elle commence
-    const i0 = cl.ids.indexOf(dt.ids[0]), nxt = i0 === 0 ? cl.pts[1] : i0 === cl.ids.length - 1 ? cl.pts[cl.pts.length - 2] : null, startDir = nxt ? V.norm(V.sub(nxt, NET.nodes.get(dt.ids[0]).xy)) : null;
+    const i0 = cl.ids.indexOf(dt.ids[0]), nxt = i0 === 0 ? cl.pts[1] : i0 === cl.ids.length - 1 ? cl.pts[cl.pts.length - 2] : null, startDir = dt.inDir0 || (nxt ? V.norm(V.sub(nxt, NET.nodes.get(dt.ids[0]).xy)) : null);
     const turns = routeTurns(dt.ids, startDir); let straight = 0;
     for (const t of turns){
       if (t.turn === 'tout droit' && ++straight % 2) continue;
