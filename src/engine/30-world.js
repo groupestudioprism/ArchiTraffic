@@ -200,27 +200,48 @@ function obb(p){ // rectangle orienté minimal (angles des arêtes)
   const B = best; if (B.u1 - B.u0 < B.v1 - B.v0){ const d = B.n, n = V.mul(B.d, -1); return {A:B.A, d, n, u0:B.v0, u1:B.v1, v0:-B.u1, v1:-B.u0}; }
   return B;
 }
-function bldStyle(b, i){
-  const kind = b.mat || (/brick/.test(b.wallC) ? 'brique' : 'enduit'), R = rng(hashStr(`${i}|${b.p[0]}`));
-  const roofM = b.roofM || (b.roofC && /grey|gray|#[45]/.test(b.roofC) ? 'ardoises' : '');
-  return {kind, seed:Math.floor(R() * 4), R, roofM};
+/* typologie française d'un bâtiment, d'après la BD TOPO (usage, nature, matériaux, hauteur, étages), la surface, la densité et la région */
+function bldStyle(b, i, A, urb, reg){
+  const R = rng(hashStr(`${i}|${b.p[0]}`)), k = String(b.kind || ''), m = b.mat || (/brick/.test(b.wallC) ? 'brique' : ''), h = b.h || 6, dense = urb >= 10;
+  let type;
+  if (/Église|Eglise|Chapelle|Religieux|church|chapel|cathedral|basilica/i.test(k + ' ' + b.name)) type = 'eglise';
+  else if (A < 28 || /garage|shed|hut|Annexe|carport/i.test(k)) type = 'annexe';
+  else if (/Industriel|industrial|warehouse|Agricole|barn|hangar|Commercial et services|retail|commercial|supermarket|Sportif/i.test(k) && (A > 450 || h <= 9 && A > 250)) type = 'ind';
+  else if (h >= 14){
+    if ((m === 'pierre' || m === 'meuliere' || (!m && (reg === 'idf' || dense))) && h <= 30 && dense && R() < (reg === 'idf' ? 0.85 : 0.5)) type = 'haus';
+    else if (m === 'beton' || m === 'agglo' || h > 24) type = R() < 0.65 ? 'mod' : 'recent';
+    else type = m === 'brique' || reg === 'nord' && R() < 0.5 ? 'brique' : 'immeuble';
+  }
+  else if (h >= 7.5 && dense) type = reg === 'nord' && R() < 0.7 || m === 'brique' ? 'brique' : m === 'beton' ? (R() < 0.5 ? 'recent' : 'mod') : 'immeuble';
+  else if (m === 'brique' || reg === 'nord' && R() < 0.6) type = 'brique';
+  else if (m === 'pierre' || m === 'meuliere' || (reg === 'bzh' && !dense && R() < 0.45)) type = urb < 4 || reg === 'bzh' ? 'pierre' : 'pav';
+  else if (m === 'beton' && h > 6) type = 'recent';
+  else type = 'pav';
+  let roofM = b.roofM || (b.roofC && /grey|gray|#[45]/.test(b.roofC) ? 'ardoises' : '');
+  if (!roofM) roofM = type === 'haus' ? 'zinc' : type === 'ind' ? 'bac' : type === 'mod' || type === 'recent' ? 'beton'
+    : reg === 'bzh' ? 'ardoises' : reg === 'idf' ? (type === 'pav' ? 'tuiles' : R() < 0.5 ? 'ardoises' : 'zinc') : reg === 'nord' ? (R() < 0.6 ? 'tuiles' : 'ardoises') : type === 'eglise' ? 'ardoises' : 'tuiles';
+  return {kind:type, type, seed:Math.floor(R() * 4), R, roofM, reg};
 }
+/* contour rentré de d mètres (bissectrices), pour les combles à la Mansart */
+function insetRing(p, d){ const n = p.length, out = [];
+  for (let i = 0; i < n; i++){ const a = p[(i - 1 + n) % n], b = p[i], c = p[(i + 1) % n], e1 = V.norm(V.sub(b, a)), e2 = V.norm(V.sub(c, b)), n1 = [-e1[1], e1[0]], n2 = [-e2[1], e2[0]], bis = V.norm(V.add(n1, n2)), k = Math.max(0.35, V.dot(bis, n1)); out.push(V.add(b, V.mul(bis, d / k))); }
+  return out; }
 function buildBuildings(grp){
   const W = WORLD.W, plan = planLook(), groups = new Map(), gb = key => groups.get(key) || groups.set(key, new GB()).get(key);
-  const roofDefault = (() => { const lat = WORLD.P.lat0; return lat > 47.2 && WORLD.P.lon0 < -0.5 ? 'ardoises' : 'tuiles'; })();   // ouest : ardoise ; ailleurs : tuile
+  const reg = frRegion(WORLD.P.lat0, WORLD.P.lon0), urbI = urbanIndex(W), roofDefault = reg === 'bzh' ? 'ardoises' : 'tuiles';
   W.bld.forEach((b, bi) => {
-    const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, n = p.length, st = bldStyle(b, bi);
+    const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, n = p.length, c0 = centroid(p), st = bldStyle(b, bi, Math.abs(ringArea(p)), urbI(c0[0], c0[1]), reg);
     const zs = p.map(q => H(q[0], q[1])), zMin = Math.min(...zs) - 0.4, zAvg = zs.reduce((a, v) => a + v, 0) / n;
     const A = Math.abs(ringArea(p)), O = obb(p), fill = A / ((O.u1 - O.u0) * (O.v1 - O.v0)), minorW = O.v1 - O.v0;
     const tag = b.roof, pitchedTag = /gabled|hipped|pyramidal|half-hipped|gambrel|saltbox|mansard|round/.test(tag), flatTag = tag === 'flat';
-    let ridgeH = 0;
-    if (!flatTag && fill > 0.78 && n <= 12 && minorW > 3){
+    let ridgeH = 0; const mans = st.type === 'haus' && b.h > 12, mansH = mans ? 2.8 : 0;
+    if (!flatTag && !['haus', 'mod', 'recent', 'ind'].includes(st.type) && fill > 0.78 && n <= 12 && minorW > 3){
       if (b.ridge > 1.2) ridgeH = Math.min(b.ridge, minorW * 0.75);
-      else if (pitchedTag || (/house|detached|semi|terrace|Résidentiel|Indifférenciée|farm|barn|church|chapel/i.test(b.kind) || A < 260) && b.h <= 14 && b.mat !== 'beton') ridgeH = clamp(minorW * 0.38, 1.4, 6);
+      else if (pitchedTag || ['pav', 'brique', 'pierre', 'immeuble', 'eglise', 'annexe'].includes(st.type) && b.h <= 18) ridgeH = clamp(minorW * (st.type === 'eglise' ? 0.75 : st.reg === 'sud' ? 0.28 : st.reg === 'bzh' || st.reg === 'nord' ? 0.5 : 0.4), 1.2, st.type === 'eglise' ? 12 : 6);
     }
-    const eave = Math.max(2.6, b.h - (b.ridge > 1.2 ? ridgeH : 0)), zTop = zAvg + eave;
-    const shop = b.lv >= 3 && !/house|detached|garage|Annexe/i.test(b.kind) && st.kind !== 'beton' && st.R() < 0.75;
-    const facKey = plan ? 'plan' : `fac|${st.kind}|${st.seed}`, shopKey = plan ? 'plan' : `shop|${st.kind}|${st.seed}`;
+    const eave = Math.max(2.6, b.h - (b.ridge > 1.2 ? ridgeH : 0) - mansH), zTop = zAvg + eave;
+    const shop = ['haus', 'immeuble', 'brique', 'mod', 'recent'].includes(st.type) && b.lv >= 3 && st.R() < (st.type === 'haus' ? 0.9 : 0.6);
+    const facKey = plan ? 'plan' : `fac|${st.kind}|${st.seed}|${reg}`, shopKey = plan ? 'plan' : `shop|${st.kind}|${st.seed}|${reg}`;
     const wall = (ring) => { let s = 0; for (let i = 0; i < ring.length; i++){ const a = ring[i], c = ring[(i + 1) % ring.length], L = V.dist(a, c); if (L < 0.05) continue;
       const z1 = shop ? zAvg + 3.4 : zMin; if (shop){ gb(shopKey).quad(P3(a[0], a[1], zMin), P3(c[0], c[1], zMin), P3(c[0], c[1], z1), P3(a[0], a[1], z1), [s / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, 1], [s / 3, 1]); }
       gb(facKey).quad(P3(a[0], a[1], z1), P3(c[0], c[1], z1), P3(c[0], c[1], zTop), P3(a[0], a[1], zTop), [s / 3, (z1 - zAvg) / 3], [(s + L) / 3, (z1 - zAvg) / 3], [(s + L) / 3, eave / 3], [s / 3, eave / 3]);
@@ -228,11 +249,18 @@ function buildBuildings(grp){
         if (!shop && b.h > 4){ const A2 = o(a, 0.04), C2 = o(c, 0.04), zp = zAvg + 0.7; gb('plinth|x|0').quad(P3(A2[0], A2[1], zMin), P3(C2[0], C2[1], zMin), P3(C2[0], C2[1], zp), P3(A2[0], A2[1], zp), [s, 0], [s + L, 0], [s + L, 0.7], [s, 0.7]); }
         if (b.h > 7){ const CB = gb('cornice|x|0'), A3 = o(a, 0.22), C3 = o(c, 0.22), zc = zTop - (ridgeH > 0 ? 0.05 : 0.35); // bandeau de corniche
           CB.quad(P3(A3[0], A3[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(C3[0], C3[1], zc), P3(A3[0], A3[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(a[0], a[1], zc - 0.22), P3(c[0], c[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(A3[0], A3[1], zc - 0.22), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(A3[0], A3[1], zc), P3(C3[0], C3[1], zc), P3(c[0], c[1], zc), P3(a[0], a[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); }
-        if (ridgeH <= 0 && b.h > 3.5){ const CB = gb('cornice|x|0'), I = o(a, -0.25), J = o(c, -0.25), zp = zTop + 0.7; // acrotère
+        if (ridgeH <= 0 && !mans && b.h > 3.5){ const CB = gb('cornice|x|0'), I = o(a, -0.25), J = o(c, -0.25), zp = zTop + 0.7; // acrotère
           CB.quad(P3(a[0], a[1], zTop), P3(c[0], c[1], zTop), P3(c[0], c[1], zp), P3(a[0], a[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(J[0], J[1], zTop), P3(I[0], I[1], zTop), P3(I[0], I[1], zp), P3(J[0], J[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(a[0], a[1], zp), P3(c[0], c[1], zp), P3(J[0], J[1], zp), P3(I[0], I[1], zp), [0, 0], [1, 0], [1, 1], [0, 1]); } }
       s += L; } };
     wall(p); (b.holes || []).forEach(h => wall(ringArea(h) > 0 ? h.slice().reverse() : h));
-    const roofKey = plan ? 'planTop' : (st.roofM || roofDefault) === 'ardoises' ? 'roofSlate' : st.roofM === 'zinc' ? 'roofZinc' : st.roofM === 'beton' || st.roofM === 'verre' ? 'roofFlat' : 'roofTiles';
+    const roofKey = plan ? 'planTop' : (st.roofM || roofDefault) === 'ardoises' ? 'roofSlate' : st.roofM === 'zinc' || st.roofM === 'bac' ? 'roofZinc' : st.roofM === 'beton' || st.roofM === 'verre' ? 'roofFlat' : 'roofTiles';
+    if (mans){ // comble à la Mansart : brisis en zinc à 70°, terrasson, lucarnes
+      const inn = insetRing(p, 1.0), zM = zTop + mansH, Z = gb(plan ? 'planTop' : 'roofZinc'), L2 = gb(plan ? 'planTop' : 'cornice|x|0');
+      for (let i = 0; i < n; i++){ const a = p[i], c = p[(i + 1) % n], ai = inn[i], ci = inn[(i + 1) % n], Lw = V.dist(a, c); Z.quad(P3(a[0], a[1], zTop), P3(c[0], c[1], zTop), P3(ci[0], ci[1], zM), P3(ai[0], ai[1], zM), [0, 0], [Lw, 0], [Lw, 3], [0, 3]);
+        if (!plan && Lw > 4) for (let t = 2.2; t < Lw - 1.6; t += 3){ const q = V.lerp(a, c, t / Lw), qi = V.lerp(ai, ci, t / Lw), dir = V.norm(V.sub(c, a)), m0 = V.lerp(q, qi, 0.35), w0 = V.add(m0, V.mul(dir, -0.55)), w1 = V.add(m0, V.mul(dir, 0.55)), zb = zTop + mansH * 0.35, zt = zTop + mansH * 0.9;
+          L2.quad(P3(w0[0], w0[1], zb), P3(w1[0], w1[1], zb), P3(w1[0], w1[1], zt), P3(w0[0], w0[1], zt), [0, 0], [1, 0], [1, 1], [0, 1]); const gq = gb('glassD|x|0'), g0 = V.add(V.lerp(w0, w1, 0.18), V.mul(V.sub(q, qi), 0.02)), g1 = V.add(V.lerp(w0, w1, 0.82), V.mul(V.sub(q, qi), 0.02)); gq.quad(P3(g0[0], g0[1], zb + 0.12), P3(g1[0], g1[1], zb + 0.12), P3(g1[0], g1[1], zt - 0.12), P3(g0[0], g0[1], zt - 0.12), [0, 0], [1, 0], [1, 1], [0, 1]); } }
+      const tris = THREE.ShapeUtils.triangulateShape(inn.map(q => new THREE.Vector2(q[0], q[1])), []), T = gb(plan ? 'planTop' : 'roofFlat'); for (const [i, j, k] of tris){ const a = inn[i], bb = inn[j], c = inn[k]; T.tri(P3(a[0], a[1], zM), P3(bb[0], bb[1], zM), P3(c[0], c[1], zM), a, bb, c); }
+    } else
     if (ridgeH > 0){
       // toit à 2 ou 4 pans sur le rectangle orienté (débord 0,3 m)
       const ov = 0.3, d = O.d, nn = O.n, u0 = O.u0 - ov, u1 = O.u1 + ov, v0 = O.v0 - ov, v1 = O.v1 + ov, vm = (O.v0 + O.v1) / 2, hip = /hipped|pyramidal/.test(tag) || (!tag && (O.u1 - O.u0) < minorW * 1.6 && st.R() < 0.6);
@@ -261,7 +289,7 @@ function buildBuildings(grp){
   const mats = {plan:matCol(PLAN_COL.bld, {rough:1, side:THREE.DoubleSide}), planTop:matCol(PLAN_COL.bldTop, {rough:1, side:THREE.DoubleSide}), roofTiles:matTex('roofTiles', {rough:0.85, side:THREE.DoubleSide}), roofSlate:matTex('roofSlate', {rough:0.7, side:THREE.DoubleSide}), roofZinc:matTex('roofZinc', {rough:0.5, side:THREE.DoubleSide}), roofFlat:matTex('roofFlat', {side:THREE.DoubleSide})};
   for (const [key, g] of groups){
     let m = mats[key];
-    if (!m){ const [k, kind, seed] = key.split('|'); m = k === 'plinth' ? matTex('granite', {rough:0.8}) : k === 'cornice' ? matCol(0xE4DDD0, {rough:0.85}) : facadeMat(kind, +seed, k === 'shop'); }
+    if (!m){ const [k, kind, seed] = key.split('|'); const rg = key.split('|')[3]; m = k === 'plinth' ? matTex('granite', {rough:0.8}) : k === 'cornice' ? matCol(0xE4DDD0, {rough:0.85}) : k === 'glassD' ? VM.glass : facadeMat(kind, +seed, k === 'shop', rg); }
     const mesh = new THREE.Mesh(g.geo(), m); mesh.castShadow = !plan; mesh.receiveShadow = true; mesh.name = /^(fac|shop|plinth|cornice)/.test(key) ? 'Façades' : key.startsWith('roof') ? 'Toitures' : 'Bâtiments'; mesh.userData.bld = true; grp.add(mesh);
   }
 }
