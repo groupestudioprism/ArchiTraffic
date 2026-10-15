@@ -129,6 +129,8 @@ function junctionRadius(nid){
 }
 function buildRoads(grp){
   const W = WORLD.W, plan = planLook(), urb = urbanIndex(W), dark = isDarkUI();
+  const deco = [], crossAt = new Map();
+  if (!plan) for (const pt of W.points) if (pt.k === 'crossing'){ const nr = nearestRoad([pt.x, pt.y], 6); if (nr && !nr.r.foot){ const c = plClosest(nr.r.pts, [pt.x, pt.y]); (crossAt.get(nr.ri) || crossAt.set(nr.ri, []).get(nr.ri)).push(c.s); } }
   const gSett = new GB(), gPaveRoad = new GB(), gConcRoad = new GB(), gRoad = new GB(), gFoot = new GB(), gPath = new GB(), gCyc = new GB(), gMark = new GB(), gGut = new GB(), gCurb = new GB(), gSide = new GB(), gEdgePlan = new GB(), gRail = new GB(), gBallast = new GB();
   const trimAt = (r, end) => { const nid = end ? r.nodes[r.nodes.length - 1] : r.nodes[0], n = NET.nodes.get(nid); return n && nodeDeg(n) >= 3 ? junctionRadius(nid) : 0; };
   for (const r of W.roads){
@@ -137,6 +139,7 @@ function buildRoads(grp){
       const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
+    if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = (Math.floor(x / 45) % 2 ? 1 : -1) * (r.oneway ? 0.6 : 1.5); deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
@@ -152,16 +155,28 @@ function buildRoads(grp){
     const sw = String(r.sidewalk || ''); if (DISPLAY.lay.sidewalks === false || sw === 'no' || sw === 'none' || sw === 'separate' || r.cls > 6 || r.round || r.hw === 'living_street') continue;
     const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (!sw && urb(mid[0], mid[1]) < 3) continue;
     const L = plLen(r.pts), t0 = trimAt(r, false) + 1.2, t1 = L - trimAt(r, true) - 1.2; if (t1 - t0 < 3) continue;
-    const p = plSlice(r.pts, t0, t1), swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6, e = r.w / 2;
+    const p = plSlice(r.pts, t0, t1), swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6, e = r.w / 2, Lp = plLen(p);
+    // bateaux : bordure abaissée et trottoir en pente au droit des passages piétons
+    const gaps = (crossAt.get(W.roads.indexOf(r)) || []).map(x => x - t0).filter(x => x > 1 && x < Lp - 1).sort((a, b) => a - b), segs = [], ramps = []; let s0 = 0;
+    for (const x of gaps){ if (x - 1.8 > s0 + 0.3) segs.push([s0, x - 1.8]); ramps.push([Math.max(s0, x - 1.8), Math.min(Lp, x + 1.8)]); s0 = x + 1.8; } if (Lp - s0 > 0.3) segs.push([s0, Lp]);
     for (const side of [1, -1]){
       if (sw === 'left' && side < 0 || sw === 'right' && side > 0) continue;
       const o = x => side * x;
       if (plan){ bandGB(gSide, p, o(e + 0.3), o(e + 0.3 + swW), 0.04); continue; }
       bandGB(gGut, p, side > 0 ? e : -e - 0.3, side > 0 ? e + 0.3 : -e, 0.055, 0.055, side < 0);
-      wallGB(gCurb, p, o(e + 0.3), 0.04, 0.15, side > 0 ? -1 : 1);
-      bandGB(gCurb, p, side > 0 ? e + 0.3 : -e - 0.45, side > 0 ? e + 0.45 : -e - 0.3, 0.15);
-      bandGB(gSide, p, side > 0 ? e + 0.45 : -e - 0.45 - swW, side > 0 ? e + 0.45 + swW : -e - 0.45, 0.15);
-      wallGB(gCurb, p, o(e + 0.45 + swW), -0.3, 0.15, side > 0 ? 1 : -1);
+      for (const [a, b] of segs){ const q = plSlice(p, a, b);
+        wallGB(gCurb, q, o(e + 0.3), 0.04, 0.15, side > 0 ? -1 : 1);
+        bandGB(gCurb, q, side > 0 ? e + 0.3 : -e - 0.45, side > 0 ? e + 0.45 : -e - 0.3, 0.15);
+        bandGB(gSide, q, side > 0 ? e + 0.45 : -e - 0.45 - swW, side > 0 ? e + 0.45 + swW : -e - 0.45, 0.15);
+        wallGB(gCurb, q, o(e + 0.45 + swW), -0.3, 0.15, side > 0 ? 1 : -1); }
+      for (const [a, b] of ramps){ const q = plSlice(p, a, b);
+        bandGB(gCurb, q, side > 0 ? e + 0.3 : -e - 0.45, side > 0 ? e + 0.45 : -e - 0.3, 0.07);
+        if (side > 0) bandGB(gSide, q, e + 0.45, e + 0.45 + swW, 0.07, 0.15); else bandGB(gSide, q, -e - 0.45 - swW, -e - 0.45, 0.15, 0.07);
+        const mid = plAt(q, plLen(q) / 2), nn = V.perp(mid.dir); deco.push({k:'podo', x:mid.pt[0] + nn[0] * o(e + 0.85), y:mid.pt[1] + nn[1] * o(e + 0.85), a:Math.atan2(mid.dir[1], mid.dir[0]), z:0.075}); }
+      // avaloirs (grilles au fil d'eau), chambres télécom sur trottoir
+      const off = (hashStr(r.id + '|' + side) % 1000) / 1000 * 20;
+      for (let x = 8 + off; x < Lp - 4; x += 26){ if (gaps.some(g => Math.abs(g - x) < 3)) continue; const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'avaloir', x:q.pt[0] + nn[0] * o(e + 0.17), y:q.pt[1] + nn[1] * o(e + 0.17), a:Math.atan2(q.dir[1], q.dir[0]), z:0.062}); }
+      for (let x = 20 + off * 2; x < Lp - 6; x += 64){ const q = plAt(p, x), nn = V.perp(q.dir); deco.push({k:'telecom', x:q.pt[0] + nn[0] * o(e + 0.45 + swW * 0.55), y:q.pt[1] + nn[1] * o(e + 0.45 + swW * 0.55), a:Math.atan2(q.dir[1], q.dir[0]), z:0.152}); }
     }
   }
   // carrefours : disques de chaussée (comblent les jonctions)
@@ -183,12 +198,24 @@ function buildRoads(grp){
       for (const o of [r.w / 2, -r.w / 2]){ const q = plOffset(p, o); for (let i = 0; i + 1 < q.length; i++) seg.push(q[i][0], H(q[i][0], q[i][1]) + 0.08, -q[i][1], q[i + 1][0], H(q[i + 1][0], q[i + 1][1]) + 0.08, -q[i + 1][1]); } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3)); const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x7E8690})); ls.name = 'Bords de chaussée'; grp.add(ls); }
   add(gMark, M.mark, 'Marquages au sol');
+  if (!plan && deco.length && DISPLAY.lay.marks !== false){ // regards, avaloirs, chambres télécom, bandes podotactiles
+    const D = {regard:[0.66, 0.66, 'round'], avaloir:[0.75, 0.32, 'grid'], telecom:[1.0, 0.5, 'plate'], podo:[1.2, 0.42, 'podo']};
+    for (const [k, [lx, lz, kind]] of Object.entries(D)){ const list = deco.filter(d => d.k === k); if (!list.length) continue;
+      const geo = kind === 'round' ? new THREE.CylinderGeometry(lx / 2, lx / 2, 0.02, 24) : new THREE.BoxGeometry(lx, 0.02, lz), im = new THREE.InstancedMesh(geo, streetDecalMat(kind), list.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+      list.forEach((d, i) => { m4.compose(new THREE.Vector3(d.x, H(d.x, d.y) + d.z, -d.y), q.setFromAxisAngle(up, d.a), new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); });
+      im.receiveShadow = true; im.name = {regard:'Regards de visite', avaloir:'Avaloirs', telecom:'Chambres télécom', podo:'Bandes podotactiles'}[k]; grp.add(im); } }
   add(gGut, plan ? M.side : matTex('gutter', {po:-2}), 'Caniveaux (2 rangs granit)');
   add(gCurb, plan ? M.edge : matTex('granite', {side:THREE.DoubleSide}), 'Bordures granit', true);
   add(gSide, M.side, 'Trottoirs');
   add(gBallast, plan ? matCol(0xD8D4CC) : matTex('gravel', {po:-1}), 'Ballast'); add(gRail, matCol(0x8A8F96, {metal:0.8, rough:0.35}), 'Rails');
 }
 
+/* matériaux des équipements au sol (fonte, grilles, plaques, dalles podotactiles) */
+function streetDecalMat(kind){ return MAT['deco|' + kind] ??= new THREE.MeshStandardMaterial({roughness:kind === 'podo' ? 0.8 : 0.45, metalness:kind === 'podo' ? 0 : 0.7, map:canvasTex(128, kind === 'round' ? 128 : 64, (g, w, h) => {
+  if (kind === 'round'){ g.fillStyle = '#2B2D30'; g.fillRect(0, 0, w, h); g.strokeStyle = '#4A4D51'; g.lineWidth = 5; g.beginPath(); g.arc(64, 64, 58, 0, 7); g.stroke(); g.lineWidth = 3; for (let rr = 14; rr < 54; rr += 10){ g.beginPath(); g.arc(64, 64, rr, 0, 7); g.stroke(); } for (let a = 0; a < 6.28; a += 0.524){ g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.cos(a) * 54, 64 + Math.sin(a) * 54); g.stroke(); } }
+  else if (kind === 'grid'){ g.fillStyle = '#1A1B1D'; g.fillRect(0, 0, w, h); g.fillStyle = '#4C4F53'; g.fillRect(0, 0, w, 6); g.fillRect(0, h - 6, w, 6); for (let x = 0; x < w; x += 10) g.fillRect(x, 0, 4, h); }
+  else if (kind === 'plate'){ g.fillStyle = '#6E7176'; g.fillRect(0, 0, w, h); g.fillStyle = '#5A5D61'; for (let y = 4; y < h; y += 8) for (let x = (y / 8 % 2) * 6; x < w; x += 12) g.fillRect(x, y, 6, 2); g.strokeStyle = '#3F4246'; g.lineWidth = 3; g.strokeRect(2, 2, w - 4, h - 4); g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke(); }
+  else { g.fillStyle = '#D8D3C6'; g.fillRect(0, 0, w, h); g.fillStyle = '#B9B3A5'; for (let y = 6; y < h; y += 10) for (let x = 6; x < w; x += 10){ g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); } } })}); }
 /* ---------- bâtiments ---------- */
 function obb(p){ // rectangle orienté minimal (angles des arêtes)
   let best = null;
