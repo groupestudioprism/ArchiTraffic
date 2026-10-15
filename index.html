@@ -5373,7 +5373,7 @@ function renderElProps(e){
     h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', [['total', 'Totale (2 sens)'], ['sens', 'Un seul sens'], ['alternat', 'Alternat (circulation maintenue)']], e.mode)}
       ${e.mode === 'sens' ? selF('eDir', 'Sens fermé', [['1', 'Sens du tracé'], ['-1', 'Sens inverse']], e.dir) : ''}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
-      <div class="btns"><button class="btn primary" id="eDet">Recalculer les déviations</button><button class="btn" id="eSig">Reposer les panneaux</button></div>`;
+      <div class="btns"><button class="btn primary" id="eDet">Recalculer les déviations</button><button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
   } else if (e.t === 'detour'){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
@@ -5405,10 +5405,25 @@ function bindElProps(){
   ch('eText', el => { e.text = el.value; }); ch('eCol3', el => { e.col = el.value; }); ch('eSize', el => { e.size = el.value; });
   ch('eCol4', el => { e.col = el.value; }); ch('eW', el => { e.w = +el.value || 1.2; }); ch('eLab', el => { e.label = el.value; });
   const b = (id, f) => { const el = v(id); if (el) el.onclick = f; };
+  pb().querySelectorAll('[data-variant]').forEach(btn => btn.onclick = () => { const [m, d] = btn.dataset.variant.split('|'); let r; edit(() => { e.mode = m; e.dir = +d || 1; r = addDetoursFor(e); autoSigns(e); }); refreshPanel(); renderLegend();
+    toast(m === 'sens' ? `Sens unique temporaire appliqué : ${r.ok} déviation${r.ok > 1 ? 's' : ''} pour le sens fermé.` : 'Fermeture totale rétablie.', 4500); });
   b('eDet', () => { const r = (() => { let out; edit(() => { out = addDetoursFor(e); }); return out; })(); toast(r.ok ? `${r.ok} déviation${r.ok > 1 ? 's' : ''} recalculée${r.ok > 1 ? 's' : ''}` : 'Aucune déviation possible depuis ce tronçon.'); });
   b('eSig', () => { edit(() => autoSigns(e)); toast('Panneaux de route barrée et de déviation reposés'); });
   b('eZoom', () => { const c = elCenter(e); frameAt(c[0], c[1], e.pts ? Math.max(30, plLen(e.pts) / 2) : 20); });
   b('eHide', () => edit(() => { e.hidden = !e.hidden; })); b('eDel', deleteSel); b('eBack', () => { sel = null; applySel(); renderProps(); });
+}
+/* variantes d'exploitation d'une fermeture : fermeture totale ou sens unique temporaire (un seul sens dévié) */
+function closureVariants(cl){
+  if (cl.mode === 'alternat' || !WORLD || !cl.ids?.length) return '';
+  const ow = sectionOneway(cl.ids), w = closureWidth(cl), cur = state.els.filter(x => x.t === 'detour' && x.cl === cl.id);
+  const score = mode => { const res = proposeDetours({...cl, ...mode}, state.els); if (res.some(r => r.fail)) return null; return {n:res.length, extra:Math.max(0, ...res.map(r => r.extra || 0)), t:Math.max(0, ...res.map(r => r.extraT || 0))}; };
+  const rows = [];
+  const tot = score({mode:'total'}); if (tot) rows.push({k:'total|1', n:'Fermeture totale', d:`${tot.n} itinéraire${tot.n > 1 ? 's' : ''} dévié${tot.n > 1 ? 's' : ''} · +${fmtM(tot.extra)}`, on:cl.mode === 'total', sc:tot.extra * tot.n});
+  if (ow === 0) for (const dir of [1, -1]){ const v = score({mode:'sens', dir}); if (v) rows.push({k:`sens|${dir}`, n:`Sens unique temporaire (${dir === 1 ? 'sens du tracé fermé' : 'sens inverse fermé'})`, d:`1 sens maintenu sur ${fmtM(cl.len || plLen(cl.pts))} · l'autre dévié : +${fmtM(v.extra)}${w < 5.5 ? ' · chaussée étroite : vérifier 3 m libres + emprise' : ''}`, on:cl.mode === 'sens' && cl.dir === dir, sc:v.extra * (w < 5.5 ? 3 : 1)}); }
+  if (rows.length < 2) return '';
+  const best = rows.reduce((a, b) => b.sc < a.sc ? b : a);
+  return `<div class="grp" style="margin-top:14px"><h3>Variantes d'exploitation</h3><p class="hint" style="margin-top:0">Comparaison calculée sur le réseau réel. Le sens unique temporaire garde une voie de circulation dans l'emprise et ne dévie qu'un sens.</p>
+    ${rows.map(r => `<div class="erow" style="margin-bottom:4px"><span><b>${esc(r.n)}${r === best ? ' · conseillé' : ''}</b><small>${esc(r.d)}</small></span>${r.on ? '<span class="tag">appliqué</span>' : `<button class="btn" data-variant="${r.k}">Appliquer</button>`}</div>`).join('')}</div>`;
 }
 /* ---------- onglet Bibliothèque ---------- */
 function renderLib(){
