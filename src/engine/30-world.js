@@ -71,7 +71,7 @@ const GROUND_COL = {
 };
 let groundCanvas = null, groundTex = null, orthoTex = null, orthoState = '';
 function paintGround(){
-  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
+  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, LOWPOW ? 2048 : 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
   groundCanvas ??= document.createElement('canvas'); groundCanvas.width = groundCanvas.height = PX; const g = groundCanvas.getContext('2d');
   const X = x => (x + S / 2) * k, Y = y => (S / 2 - y) * k, R = rng(7);
   g.fillStyle = C.base; g.fillRect(0, 0, PX, PX);

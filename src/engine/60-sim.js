@@ -8,7 +8,7 @@ const SIM_TYPES = {
   van:{f:() => makeVan(0xffffff, 1), mix:'vul', w:1, len:5.45}, truck:{f:() => makeTruck(0xffffff, 1), mix:'pl', w:0.55, len:9.8, pl:true}, semi:{f:() => makeSemi(0xffffff, 1), mix:'pl', w:0.3, len:16.5, pl:true},
   tipper:{f:() => makeTipper(1), mix:'pl', w:0.15, len:9.3, pl:true}, bus:{f:() => makeBus(0xffffff, 1), mix:'bus', w:1, len:12, pl:true}, moto:{f:() => makeMoto(0xffffff, 1), mix:'r2', w:1, len:2.1},
 };
-const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
+const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:LOWPOW ? 200 : 360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
 /* instances : une InstancedMesh par type et par matériau */
 function simBuildInstances(){
   if (SIM.inst) return SIM.inst;

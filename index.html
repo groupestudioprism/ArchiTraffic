@@ -3339,9 +3339,12 @@ function routeTurns(ids, startDir = null){
 /* ============ Scène 3D, caméras, lumière, styles d'affichage ============ */
 const canvas = $('#c'), vpEl = $('#vp');
 const isNarrow = matchMedia('(max-width: 860px)');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+/* tablettes et téléphones : écrans à 2-3 px par point mais GPU modestes → profil « basse consommation » :
+   résolution plafonnée, pas d'anticrénelage matériel, ombres simples et désactivées par défaut, moins de véhicules simulés */
+const LOWPOW = (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || /iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const renderer = new THREE.WebGLRenderer({canvas, antialias:!LOWPOW, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOWPOW ? 1.25 : 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = LOWPOW ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -3362,7 +3365,7 @@ const ctl = () => view === '2d' ? c2 : c3;
 
 const hemi = new THREE.HemisphereLight(0xEAF2FF, 0x5B5446, 1.1); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xFFF4E2, 2.4); sun.castShadow = true;
-sun.shadow.mapSize.set(isNarrow.matches ? 1024 : 2048, isNarrow.matches ? 1024 : 2048);
+sun.shadow.mapSize.set(isNarrow.matches || LOWPOW ? 1024 : 2048, isNarrow.matches || LOWPOW ? 1024 : 2048);
 Object.assign(sun.shadow.camera, {left:-120, right:120, top:120, bottom:-120, near:5, far:900}); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 let pmrem = null, envTex = null;
@@ -3376,6 +3379,7 @@ scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 /* Réglages d'affichage, par appareil */
 const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
+if (LOWPOW && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';
 function saveDisplay(){ try { localStorage.setItem('at.display', JSON.stringify(DISPLAY)); } catch(e){} }
@@ -3684,7 +3688,7 @@ const GROUND_COL = {
 };
 let groundCanvas = null, groundTex = null, orthoTex = null, orthoState = '';
 function paintGround(){
-  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
+  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, LOWPOW ? 2048 : 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
   groundCanvas ??= document.createElement('canvas'); groundCanvas.width = groundCanvas.height = PX; const g = groundCanvas.getContext('2d');
   const X = x => (x + S / 2) * k, Y = y => (S / 2 - y) * k, R = rng(7);
   g.fillStyle = C.base; g.fillRect(0, 0, PX, PX);
@@ -5464,7 +5468,7 @@ const SIM_TYPES = {
   van:{f:() => makeVan(0xffffff, 1), mix:'vul', w:1, len:5.45}, truck:{f:() => makeTruck(0xffffff, 1), mix:'pl', w:0.55, len:9.8, pl:true}, semi:{f:() => makeSemi(0xffffff, 1), mix:'pl', w:0.3, len:16.5, pl:true},
   tipper:{f:() => makeTipper(1), mix:'pl', w:0.15, len:9.3, pl:true}, bus:{f:() => makeBus(0xffffff, 1), mix:'bus', w:1, len:12, pl:true}, moto:{f:() => makeMoto(0xffffff, 1), mix:'r2', w:1, len:2.1},
 };
-const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
+const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:LOWPOW ? 200 : 360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
 /* instances : une InstancedMesh par type et par matériau */
 function simBuildInstances(){
   if (SIM.inst) return SIM.inst;
@@ -6453,7 +6457,7 @@ function renderViewMenu(){
   m.querySelector('[data-proj]').onchange = e => { projGroup.visible = e.target.checked; dirty = true; };
   m.querySelector('[data-legend]').onchange = e => { state.legend.show = e.target.checked; save(); renderLegend(); };
   m.querySelector('[data-night]').onchange = e => { DISPLAY.night = e.target.checked; saveDisplay(); applyThemeToScene(); };
-  m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; saveDisplay(); applyThemeToScene(); };
+  m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; DISPLAY.shadowsUser = true; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });
 }
@@ -6853,7 +6857,7 @@ $('#simReset').addEventListener('click', () => { const was = SIM.on; simStop(tru
 /* boucle de rendu */
 /* résolution adaptative : pendant un mouvement de caméra, rendu à résolution réduite (fluide même avec beaucoup d'éléments) ;
    dès que la vue s'arrête (200 ms), une image pleine résolution est redessinée. La réduction s'ajuste au temps réel d'une image. */
-const PR_FULL = Math.min(devicePixelRatio, 2); let prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, 1.25), frameMs = 16;
+const PR_FULL = Math.min(devicePixelRatio, LOWPOW ? 1.25 : 2); let prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, LOWPOW ? 0.85 : 1.25), frameMs = 16;
 function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
 function loop(now){
   requestAnimationFrame(loop);
@@ -6862,7 +6866,7 @@ function loop(now){
   if (moved){ lastMove = now; setPR(prLow); }
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (moved || dirty){ const t = performance.now(); renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
-    if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, 1.25)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
+    if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, LOWPOW ? 0.85 : 1.25)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
 }
 
 /* ---------- exemple : rue barrée en centre-ville, déviation et balisage ---------- */

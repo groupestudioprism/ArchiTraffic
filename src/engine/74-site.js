@@ -66,7 +66,7 @@ function renderViewMenu(){
   m.querySelector('[data-proj]').onchange = e => { projGroup.visible = e.target.checked; dirty = true; };
   m.querySelector('[data-legend]').onchange = e => { state.legend.show = e.target.checked; save(); renderLegend(); };
   m.querySelector('[data-night]').onchange = e => { DISPLAY.night = e.target.checked; saveDisplay(); applyThemeToScene(); };
-  m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; saveDisplay(); applyThemeToScene(); };
+  m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; DISPLAY.shadowsUser = true; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });
 }
