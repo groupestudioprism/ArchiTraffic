@@ -12,7 +12,7 @@ function renderPanel(){ if (!state) return; ({props:renderProps, lib:renderLib, 
 const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
 function elLabel(e){
   if (e.t === 'obj') return LIBK[e.k]?.name || e.k; if (e.t === 'line') return LINE_TYPES[e.k]?.n || 'Balisage';
-  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'sens' ? (e.dir === -1 ? 'voie de gauche' : 'voie de droite') : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
+  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'voie' ? (e.side === -1 ? 'file de gauche' : 'file de droite') : e.mode === 'sens' ? (e.dir === -1 ? 'voie de gauche' : 'voie de droite') : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
   if (e.t === 'detour') return e.name || 'Déviation'; if (e.t === 'zone') return e.name || 'Emprise'; if (e.t === 'note') return (e.text || '').split('\n')[0].slice(0, 40) || 'Annotation';
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
@@ -68,7 +68,7 @@ function bindProps(){
   bindElProps();
 }
 function renderElProps(e){
-  let h = `<div class="ph"><h2>${esc(elLabel(e))}</h2><span class="tag">${esc(EL_NAME[e.t] || '')}</span></div>`;
+  let h = `<div class="ph"><h2>${esc(elLabel(e))}</h2><span class="tag">${esc(e.t === 'closure' ? ({alternat:'Alternat', voie:'File neutralisée', sens:'Voie neutralisée'}[e.mode] || 'Route barrée') : EL_NAME[e.t] || '')}</span></div>`;
   const fld = (id, label, val, type = 'text', extra = '') => `<label class="f${type === 'text' ? ' wide' : ''}"><span>${label}</span><span class="in"><input id="${id}" type="${type}" value="${esc(val ?? '')}" ${extra}${type === 'text' ? ' style="font-family:var(--f-body)"' : ''}></span></label>`;
   const selF = (id, label, opts, val, wide = true) => `<label class="f${wide ? ' wide' : ''}"><span>${label}</span><span class="in"><select id="${id}">${opts.map(([v, n]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></span></label>`;
   if (e.t === 'obj'){
@@ -83,9 +83,9 @@ function renderElProps(e){
     if (L?.color) h += `<label class="f"><span>Couleur</span><span class="in"><input id="eCol" type="color" value="${esc(e.p?.color || '#8D949B')}" style="height:30px;padding:0"></span></label>`;
     h += `</div>`;
   } else if (e.t === 'closure'){
-    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
+    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}${e.mode !== 'total' ? '' : `<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label>`}${e.mode === 'voie' ? '<p class="hint wide" style="margin:4px 0 0">Sens unique à deux files : la circulation est maintenue sur l\'autre file.</p>' : ''}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
-      <div class="btns"><button class="btn primary" id="eDet">Recalculer les déviations</button><button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
+      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
   } else if (e.t === 'detour'){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
@@ -111,7 +111,10 @@ function bindElProps(){
   ch('eA', el => { e.a = (+el.value || 0) * Math.PI / 180; e.manualA = true; }); ch('eDz', el => { e.dz = +el.value || 0; });
   ch('eV', el => { e.p = {...(e.p || {}), v:el.value}; }); ch('eT', el => { e.p = {...(e.p || {}), t:el.value}; }); ch('ePole', el => { e.p = {...(e.p || {}), pole:el.value}; });
   ch('eH', el => { e.p = {...(e.p || {}), h:el.value}; }); ch('eOn', el => { e.p = {...(e.p || {}), on:el.value}; }); ch('eCol', el => { e.p = {...(e.p || {}), color:el.value}; });
-  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value); e.mode = m.mode; if (m.dir) e.dir = m.dir; }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
+  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value), ow = sectionOneway(e.ids); e.mode = m.mode; delete e.side; if (m.dir) e.dir = m.dir; if (m.mode === 'sens' && ow !== 0){ e.side = m.dir; e.dir = ow; if (closureWidth(e) >= 5.5) e.mode = 'voie'; }
+    // le mode change la déviation et la signalisation : tout est recalculé
+    if (['alternat', 'voie'].includes(e.mode)) state.els = state.els.filter(x => !(x.t === 'detour' && x.cl === e.id && x.auto)); else addDetoursFor(e);
+    autoSigns(e); refreshOtherDetours?.(e.id); }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
   ch('eCol2', el => { e.col = el.value; }); ch('eCls', el => { e.cls = el.value; }); ch('eFence', el => { e.fence = el.checked; });
   ch('eLine', el => { e.k = el.value; e.sp = undefined; }); ch('eSp', el => { e.sp = +el.value || undefined; });
   ch('eText', el => { e.text = el.value; }); ch('eCol3', el => { e.col = el.value; }); ch('eSize', el => { e.size = el.value; });
@@ -126,7 +129,7 @@ function bindElProps(){
 }
 /* variantes d'exploitation d'une fermeture : fermeture totale ou sens unique temporaire (un seul sens dévié) */
 function closureVariants(cl){
-  if (cl.mode === 'alternat' || !WORLD || !cl.ids?.length) return '';
+  if (['alternat', 'voie'].includes(cl.mode) || !WORLD || !cl.ids?.length) return '';
   const ow = sectionOneway(cl.ids), w = closureWidth(cl), cur = state.els.filter(x => x.t === 'detour' && x.cl === cl.id);
   const score = mode => { const res = proposeDetours({...cl, ...mode}, state.els); if (res.some(r => r.fail)) return null; return {n:res.length, extra:Math.max(0, ...res.map(r => r.extra || 0)), t:Math.max(0, ...res.map(r => r.extraT || 0))}; };
   const rows = [];
@@ -162,7 +165,7 @@ function renderTraffic(){
   if (!cls.length) h += `<p class="hint">Aucune rue barrée. Outil <b>Route barrée</b> (<kbd>B</kbd>) : cliquez sur une rue, la déviation est calculée en respectant les sens uniques, les impasses et les interdictions de tourner.</p>`;
   for (const c of cls){ const ds = dts.filter(d => d.cl === c.id);
     h += `<div class="erow" data-el="${c.id}" style="margin-bottom:4px"><span class="ei"><i style="background:#D32F2F"></i></span><span><b>${esc(elLabel(c))}</b><small>${esc(elSub(c))}</small></span><button class="x" data-del="${c.id}" aria-label="Supprimer">×</button></div>`;
-    h += ds.map(d => `<div class="erow" data-el="${d.id}" style="margin:0 0 4px 18px"><span class="ei"><i style="background:${esc(d.col)}"></i></span><span><b>${esc(d.name)}</b><small>${esc(elSub(d))}${d.via ? ' · par ' + esc(d.via) : ''}</small></span><button class="x" data-del="${d.id}" aria-label="Supprimer">×</button></div>`).join('') || (c.mode === 'alternat' ? '<p class="hint" style="margin:0 0 8px 18px">Alternat : circulation maintenue, vitesse réduite.</p>' : `<p class="hint" style="margin:0 0 8px 18px">Pas de déviation. <button class="btn" data-redet="${c.id}">Proposer</button></p>`);
+    h += ds.map(d => `<div class="erow" data-el="${d.id}" style="margin:0 0 4px 18px"><span class="ei"><i style="background:${esc(d.col)}"></i></span><span><b>${esc(d.name)}</b><small>${esc(elSub(d))}${d.via ? ' · par ' + esc(d.via) : ''}</small></span><button class="x" data-del="${d.id}" aria-label="Supprimer">×</button></div>`).join('') || (['alternat', 'voie'].includes(c.mode) ? '<p class="hint" style="margin:0 0 8px 18px">Circulation maintenue, vitesse réduite.</p>' : `<p class="hint" style="margin:0 0 8px 18px">Pas de déviation. <button class="btn" data-redet="${c.id}">Proposer</button></p>`);
   }
   const free = dts.filter(d => !d.cl); if (free.length) h += `<p class="lsec">Itinéraires tracés</p>` + free.map(d => `<div class="erow" data-el="${d.id}"><span class="ei"><i style="background:${esc(d.col)}"></i></span><span><b>${esc(d.name)}</b><small>${esc(elSub(d))}</small></span><button class="x" data-del="${d.id}">×</button></div>`).join('');
   h += `</div><div class="grp"><h3>Simulation du trafic</h3><p class="hint" style="margin-top:0">Les véhicules entrent par les rues en bordure de zone, choisissent une destination et suivent les déviations. Lancez la simulation avec ▶ en bas de la vue ou la touche <kbd>Espace</kbd>.</p>

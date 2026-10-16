@@ -68,6 +68,7 @@ function closedSets(els){
     for (let i = 0; i + 1 < c.ids.length; i++){
       const a = c.ids[i], b = c.ids[i + 1];
       if (c.mode === 'alternat') slow.set(segKey(a, b), 0.45);
+      else if (c.mode === 'voie') slow.set(segKey(a, b), 0.7);
       else if (c.mode === 'sens') dir.add(c.dir === -1 ? `${b}>${a}` : `${a}>${b}`);
       else both.add(segKey(a, b));
     }

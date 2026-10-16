@@ -1,7 +1,7 @@
 /* ============ Outils et saisie (souris, doigt, clavier) ============ */
 const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
 const modeOf = m => m === 'droite' ? {mode:'sens', dir:1} : m === 'gauche' ? {mode:'sens', dir:-1} : m === 'sens' ? {mode:'sens', dir:1} : {mode:m};
-const modeKey = e => e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
+const modeKey = e => e.mode === 'voie' ? (e.side === -1 ? 'gauche' : 'droite') : e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
 let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi'};
 try { Object.assign(TOOLOPT, JSON.parse(localStorage.getItem('at.toolopt') || '{}')); } catch(e){}
 const saveToolOpt = () => { try { localStorage.setItem('at.toolopt', JSON.stringify(TOOLOPT)); } catch(e){} };
@@ -153,14 +153,15 @@ function makeClosure(nr){
     else if (a0 === s1){ ids = [...sec.ids, ...ids.slice(1)]; pts = [...sec.pts, ...pts.slice(1)]; } else { ids = [...rs, ...ids.slice(1)]; pts = [...rp, ...pts.slice(1)]; }
     Object.assign(adj, {ids, pts, len:Math.round(plLen(pts) * 10) / 10});
     let msg = `${cap(adj.name)} barrée sur ${fmtM(adj.len)} (fermeture prolongée)`;
-    if (TOOLOPT.autoDetour && adj.mode !== 'alternat'){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
+    if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(adj.mode)){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
     endEdit(); sel = adj.id; rebuildProj(); refreshPanel(); toast(msg, 5200); return; }
   const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
-  if (mode === 'sens' && ow !== 0) cl.dir = ow;   // voie neutralisée sur un sens unique : c'est ce sens qui est concerné
+  // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
+  if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
   beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
-  if (TOOLOPT.autoDetour && mode !== 'alternat'){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
+  if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
@@ -168,7 +169,7 @@ function makeClosure(nr){
 /* les déviations automatiques des autres fermetures qui empruntent désormais un tronçon fermé sont recalculées */
 function refreshOtherDetours(exceptId){
   const C = closedSets(state.els);
-  for (const c of state.els.filter(e => e.t === 'closure' && e.id !== exceptId && e.mode !== 'alternat')){
+  for (const c of state.els.filter(e => e.t === 'closure' && e.id !== exceptId && !['alternat', 'voie'].includes(e.mode))){
     const hit = state.els.some(d => d.t === 'detour' && d.cl === c.id && d.auto && d.ids?.some((id, k) => k && (C.both.has(segKey(d.ids[k - 1], id)) || C.dir.has(`${d.ids[k - 1]}>${id}`))));
     if (hit){ addDetoursFor(c); if (TOOLOPT.autoSigns) autoSigns(c); } }
 }
@@ -202,18 +203,18 @@ function autoSigns(cl){
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
-  const lane = cl.mode === 'sens', apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
+  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
     if (lane && ((cl.dir === -1) === (i === 0))) return;        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
-    const d = V.norm(V.sub(B, A)), n = V.perp(d), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
+    const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), sd), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
     const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
     if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), face, {on:'red'}); add('AK3', right(back(40)), face); return; }
     // barrières K2 en travers de la chaussée, face aux usagers qui arrivent (pleine largeur, ou seule la voie de droite neutralisée)
     const o0 = -w / 2, o1 = lane ? 0 : w / 2, span = o1 - o0, nb = Math.max(1, Math.round(span / 2.2));
-    for (let k = 0; k < nb; k++) add(k === Math.floor(nb / 2) && !lane ? 'KR_ROUTE' : 'K2', V.add(base, V.mul(n, o0 + (k + 0.5) * span / nb)), face, k === Math.floor(nb / 2) && !lane ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'});
+    if (!lane) for (let k = 0; k < nb; k++) add(k === Math.floor(nb / 2) && !lane ? 'KR_ROUTE' : 'K2', V.add(base, V.mul(n, o0 + (k + 0.5) * span / nb)), face, k === Math.floor(nb / 2) && !lane ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'});
     if (lane){ // biseau de cônes K5a ramenant la circulation sur la voie restante
       const nc = Math.max(4, Math.round(taper / 3)); for (let k = 0; k <= nc; k++){ const t = k / nc; add('K5a', V.add(V.sub(base, V.mul(d, taper * (1 - t))), V.mul(n, -w / 2 + 0.3 + (w / 2 - 0.3) * t)), face); }
-      add('AK3', right(back(apD)), face); add('K8', V.add(base, V.mul(n, -w / 4)), face);
+      add('AK3', right(back(apD)), face); add('K8', V.add(base, V.mul(n, -w / 4)), face);   // K8 sur barrière : ferme la file neutralisée
     } else add('AK5', right(back(apD)), face);
     if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
