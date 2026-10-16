@@ -5498,7 +5498,8 @@ function pickType(){
   return opts.length ? pickWeighted(opts).k : 'berline';
 }
 function simSpawn(dt){
-  const C = closedSets(state.els), dens = +state.sim.dens || 1;
+  if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); }
+  const C = SIM.cSet, dens = +state.sim.dens || 1;
   for (const en of SIM.entries){
     let t = SIM.nextSpawn.get(en.id) ?? Math.random() * 6; t -= dt;
     if (t <= 0 && SIM.agents.length < SIM.cap - 4){
@@ -5509,7 +5510,7 @@ function simSpawn(dt){
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
       let r = SIM.rc.get(key); if (r === undefined){ r = route(en.id, dest, C, {vtype:T.pl ? 'pl' : ''}) || null; SIM.rc.set(key, r); }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
-      let base = SIM.base.get(key); if (base === undefined){ base = route(en.id, dest, closedSets([]), {vtype:T.pl ? 'pl' : ''}); SIM.base.set(key, base); }
+      let base = SIM.base.get(key); if (base === undefined){ base = route(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : ''}); SIM.base.set(key, base); }
       const col = new THREE.Color(T.mix === 'bus' ? 0xF2F4F6 : T.pl && Math.random() < 0.5 ? 0xE9ECEF : BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)]);
       const v0 = Math.min(NET.edges[r.edges[0]].sp, 14);
       SIM.agents.push({id:++SIM.seq, type, len:T.len, pl:!!T.pl, edges:r.edges.slice(), ei:0, s:0, v:v0 * 0.7, from:en.id, dest, col, t0:SIM.t, free:r.time, dev:!!base && r.len > base.len + 5, wait:0});
