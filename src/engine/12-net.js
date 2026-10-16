@@ -13,7 +13,7 @@ function buildNet(W){
       const a = node(r.nodes[k]), b = node(r.nodes[k + 1]); if (!a || !b || a === b) continue;
       a.nb.add(b.id); b.nb.add(a.id); a.ways.add(ri); b.ways.add(ri);
       const len = V.dist(a.xy, b.xy) || 0.01, sp = r.speed / 3.6;
-      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
+      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dl:!!r.deles, dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
       if (r.oneway >= 0) mk(a, b, false);
       if (r.oneway <= 0) mk(b, a, true);
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
@@ -122,6 +122,7 @@ function route(fromId, toId, C, opt = {}){
         if (opt.strict && !e.pl) continue;
         if (e.cls >= 6 && opt.lvl < 6) continue;                  // jamais de zone de rencontre / desserte pour dévier une rue circulée
         if (e.dest) continue;                                        // « sauf desserte / riverains » : transit interdit, donc pas de déviation
+        if (e.dl) c *= 0.7;                                          // itinéraire de délestage officiel (BD TOPO) : à privilégier
         if (e.near) c *= 1.8;                                        // abords d'école / hôpital
         if (e.z30 && opt.lvl <= 4) c *= 1.4;                         // zone 30 : pas de report d'un trafic de transit
         if (opt.strict && NET.nodes.get(e.to)?.lc) c += 90;          // passage à niveau : risque d'arrêt d'un PL sur les voies
@@ -146,7 +147,7 @@ function proposeDetours(cl, els){
   const ref = [...new Set(closedEdges.map(e => NET.roads[e.r].ref).filter(Boolean))].join(', ');
   cl.rules = [heavy ? `Voie ${ref ? ref + ' ' : ''}de niveau ${['', 'autoroute / voie express', 'route principale', 'route secondaire', 'route de liaison'][lvl] || 'locale'} : déviation par un réseau équivalent, apte aux poids lourds (tonnage, hauteur, largeur, revêtement, restrictions horaires)` : 'Rue locale : déviation par les rues ouvertes à la circulation de transit',
     'Exclus : zones de rencontre, aires piétonnes, voies de desserte, chemins non revêtus, voies « sauf riverains / desserte »',
-    'Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
+    'Privilégiés : itinéraires de délestage officiels (IGN). Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
   if (WORLD?.W?.zfe) cl.rules.push(`${WORLD.W.zfe} : vérifier les vignettes Crit'Air des véhicules déviés`);
   const dirs = cl.mode === 'sens' ? [cl.dir === -1 ? [B, A] : [A, B]] : ow === 1 ? [[A, B]] : ow === -1 ? [[B, A]] : [[A, B], [B, A]];
   for (const [f, t] of dirs){

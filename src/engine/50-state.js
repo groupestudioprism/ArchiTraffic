@@ -22,7 +22,7 @@ function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !
 
 /* ---------- chargement de la zone du chantier ---------- */
 const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
-const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
+const CORE = 1600;   // cœur détaillé (OSM + BD TOPO bâtiments + relief fin), chargé en premier ; au-delà, réseau routier IGN en arrière-plan
 /* barre de chargement fluide : elle avance toujours un peu (progression « d'attente ») sans jamais dépasser
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
@@ -61,35 +61,69 @@ async function loadSite(force = false){
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
-    let partial = '';
+    let partial = '', needOuter = false;
+    const big = size > CORE, core = Math.min(size, CORE);
     if (!raw){
-      const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
-      const big = size > CORE, core = Math.min(size, CORE);
-      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement de la zone', `Voirie, bâtiments et relief, secteur par secteur : ${prog.done} / ${prog.total}`, 0.04 + 0.72 * (prog.total ? prog.done / prog.total : 0)); }};
-      loadUI(true, 'Chargement de la zone', 'Préparation des secteurs…', 0.03);
-      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      raw = {at:Date.now(), src:{}};
+      // 1) le cœur du chantier (≤ 1,6 km) : tout ce qu'il faut pour travailler, en parallèle — c'est la seule attente bloquante
+      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement du chantier', `Voirie, bâtiments et relief : ${prog.done} / ${prog.total}`, 0.04 + 0.76 * (prog.total ? prog.done / prog.total : 0)); }};
+      const osmP = loadOSM(areaBounds(P, core + 120), false, null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
       const bdtP = bdtopoTiled(areaBounds(P, core + 40), prog).then(r => { raw.bdt = r.f; raw.bdtLost = r.lost; });
       prog.total++; const elP = elevRobust(P, size).then(el => { raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src; raw.flat = !!el.flat; prog.done++; prog.tick(); });
       const el2P = big ? (prog.total++, elevRobust(P, core).then(e2 => { if (!e2.flat) raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; prog.done++; prog.tick(); })) : null;
       await Promise.all([osmP, bdtP, elP, el2P]);
       if (tok !== loadToken) return;
       const L = raw.osm.lost, miss = [];
-      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (L.big) miss.push(`${L.big} secteur(s) du réseau éloigné`); if (raw.flat) miss.push('le relief');
-      partial = miss.join(', ');
-      if (!partial) IDB.set(key, raw);   // zone complète : mise en cache ; sinon les secteurs reçus sont déjà en cache et « Mettre à jour » ne recharge que le reste
-    }
-    loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
-    const W = parseWorld(raw, P, size);
-    const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
-    const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
-    WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    camRange(size); buildNet(W); orthoTex = null; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50); orthoState = '';
-    buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
-    loadUI(false); if (partial) toast(`Zone ouverte. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000); else toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.`, 5200);
+      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (raw.flat) miss.push('le relief');
+      partial = miss.join(', '); needOuter = big;
+      if (!partial && !big) IDB.set(key, raw);
+    } else needOuter = big && !raw.bdtRoads;
+    loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.85); await sleep(16);
+    openWorld(raw, P, size, true);
+    loadUI(false);
+    if (partial) toast(`Chantier ouvert. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000);
+    else toast(`Chantier chargé : ${WORLD.W.roads.filter(r => r.drive).length} voies, ${WORLD.W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.${needOuter ? ' Le réseau routier éloigné arrive en arrière-plan.' : ''}`, 5200);
+    // 2) grande zone : réseau routier éloigné (IGN BD TOPO, rapide et officiel) en arrière-plan, sans bloquer
+    if (needOuter) loadOuter(raw, P, size, key, tok, partial);
   } catch(e){
     console.error(e); loadUI(false);
     if (tok === loadToken){ toast('Chargement interrompu : les serveurs de cartographie ne répondent pas. Les secteurs déjà reçus sont gardés ; relancez « Mettre à jour les données » dans quelques instants.', 8000); WORLD = WORLD || null; refreshPanel(); }
   }
+}
+function openWorld(raw, P, size, first){
+  const W = parseWorld(raw, P, size);
+  const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
+  const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
+  WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
+  camRange(size); buildNet(W); orthoTex = null; orthoState = ''; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50);
+  buildWorld(); rematchClosures(); rebuildProj(); if (first) fit(); refreshPanel();
+}
+/* petite pastille de progression pour le travail en arrière-plan (l'interface reste utilisable) */
+function bgLoad(on, txt = '', pct = 0){
+  let el = $('#bgLoad'); if (!el){ el = document.createElement('div'); el.id = 'bgLoad'; el.className = 'bgload'; el.innerHTML = '<i class="ap-spin"></i><span></span><b><i></i></b>'; document.body.appendChild(el); }
+  el.hidden = !on; if (!on) return; el.querySelector('span').textContent = txt; el.querySelector('b i').style.width = Math.round(pct * 100) + '%';
+}
+async function loadOuter(raw, P, size, key, tok, partial){
+  const prog = {total:0, done:0, tick(){ if (tok === loadToken) bgLoad(true, `Réseau routier éloigné (IGN) : ${prog.done} / ${prog.total}`, prog.total ? prog.done / prog.total : 0); }};
+  bgLoad(true, 'Réseau routier éloigné (IGN)…', 0.02);
+  const tiles = splitBounds(areaBounds(P, size + 120), size > 10000 ? 5000 : 3500), out = [], seen = new Set(); let lost = 0, i = 0; prog.total = tiles.length;
+  const one = async b => { const k = tileKey('bdtr', b), hit = await IDB.get(k); let f = hit && Date.now() - hit.at < 30 * 864e5 ? hit.f : null;
+    for (let a = 0; !f && a < 4; a++){ try { f = await loadBDTRoads(b); IDB.set(k, {at:Date.now(), f}); } catch(e){ await sleep(1200 * (a + 1)); } }
+    if (!f){ lost++; return; }
+    for (const x of f){ const id = x.g?.[0]?.join() + '|' + x.g?.[x.g.length - 1]?.join(); if (seen.has(id)) continue; seen.add(id);
+      // au-delà de 10 km du chantier : seulement le réseau structurant (importance 1 à 4)
+      if (size > 10000 && (+x.importance || 6) > 4){ const c = x.g[x.g.length >> 1], q = P.toXY(c[0], c[1]); if (Math.max(Math.abs(q[0]), Math.abs(q[1])) > 5000) continue; }
+      out.push(x); } };
+  const worker = async () => { while (i < tiles.length){ await one(tiles[i++]); prog.done++; prog.tick(); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (tok !== loadToken){ bgLoad(false); return; }
+  raw.bdtRoads = out; raw.src.roadsOut = 'IGN BD TOPO®';
+  bgLoad(true, 'Intégration du réseau éloigné…', 1); await sleep(16);
+  const cam = persp.position.clone(), tgt = c3.target.clone();
+  openWorld(raw, P, size, false); persp.position.copy(cam); c3.target.copy(tgt); c3.update(); dirty = true;
+  bgLoad(false);
+  if (!partial && !lost) IDB.set(key, raw);
+  toast(lost ? `Réseau éloigné intégré (${lost} secteur(s) manquant(s), « Mettre à jour » les complétera).` : `Réseau routier éloigné intégré : ${out.length} tronçons sur ${size / 1000} × ${size / 1000} km.`, 5000);
 }
 /* routes barrées : les nœuds OSM peuvent changer entre deux mises à jour → on les retrouve par leur position */
 function rematchClosures(){

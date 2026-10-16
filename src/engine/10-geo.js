@@ -8,7 +8,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 6;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 7;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -105,18 +105,60 @@ async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slic
 async function loadOSM(B, withBuildings = true, Bbig = null, size = 0, prog = {total:0, done:0, tick(){}}){
   // voirie et points de circulation (équipements du sous-sol : chargés à la demande, calque Réseaux)
   const qRoads = bb => `[out:json][timeout:50];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
-  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : ''}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
+  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};way["building"]["name"]${bb};`}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
   // grande zone : réseau routier seul au-delà du cœur (résidentiel jusqu'à 10 km, structurant au-delà)
   const hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
   const qBig = bb => `[out:json][timeout:60];(way["highway"~"^(${hw})$"]${bb};relation["type"="restriction"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};);out body geom qt;`;
-  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 800, qRest, prog)];
+  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 1000, qRest, prog)];
   if (Bbig) jobs.push(overpassTiled('big' + (size > 10000 ? 'M' : 'R'), Bbig, size > 10000 ? 5000 : 3000, qBig, prog));
   const res = await Promise.all(jobs), seen = new Set(), all = [];
   for (const r of res) for (const e of r.elements){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
   return {elements:all, lost:{roads:res[0].lost, rest:res[1].lost, big:res[2]?.lost || 0}};
 }
+/* ---------- BD TOPO tronçons de route (IGN) : réseau officiel, rapide, avec les restrictions (poids, hauteur, largeur,
+   matières dangereuses), le classement (D 982…), l'agglomération et les itinéraires de délestage. Sert au-delà du cœur. ---------- */
+const BDT_ROAD_PROPS = 'nature,importance,sens_de_circulation,largeur_de_chaussee,nombre_de_voies,restriction_de_hauteur,restriction_de_poids_total,restriction_de_largeur,restriction_de_longueur,matieres_dangereuses_interdites,acces_vehicule_leger,prive,cpx_numero,cpx_classement_administratif,delestage,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol,vitesse_moyenne_vl,geometrie';
+async function loadBDTRoads(B){
+  const url = (start, props) => `${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:troncon_de_route', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), ...(props ? {PROPERTYNAME:BDT_ROAD_PROPS} : {}), BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`;
+  const page = async start => { try { return (await fetchJSON(url(start, true), 45000)).features || []; } catch(e){ return (await fetchJSON(url(start, false), 60000)).features || []; } };
+  const slim = f => { const P = f.properties || {}, o = {g:f.geometry?.coordinates}; for (const k of BDT_ROAD_PROPS.split(',')) if (P[k] != null && P[k] !== '' && k !== 'geometrie') o[k] = P[k]; return o; };
+  let all = (await page(0)).map(slim);
+  for (let st = 5000; all.length === st; st += 5000){ const more = await page(st); all = all.concat(more.map(slim)); if (more.length < 5000) break; }
+  return all;
+}
+const BDT_HW = (P, imp) => /autoroutier/i.test(P.nature) ? 'motorway' : /bretelle/i.test(P.nature) ? 'primary_link' : /rond-point/i.test(P.nature) ? (['', 'trunk', 'primary', 'secondary', 'tertiary', 'residential'][imp] || 'residential')
+  : /chemin|sentier|escalier|piste cyclable|bac|empierr/i.test(P.nature) ? (/piste cyclable/i.test(P.nature) ? 'cycleway' : /empierr|chemin/i.test(P.nature) ? 'track' : 'path')
+  : imp <= 1 ? 'trunk' : imp === 2 ? 'primary' : imp === 3 ? 'secondary' : imp === 4 ? 'tertiary' : imp === 5 ? (P.urbain ? 'residential' : 'unclassified') : 'service';
+function addBdtRoads(W, list, P, size){
+  const coreHalf = Math.min(size, CORE) / 2 - 40, half = size / 2 + 60;
+  // nœuds : extrémités partagées (BD TOPO est topologique) ; raccord aux nœuds OSM du cœur à moins de 8 m
+  const osmGrid = new Map(), gk = (x, y) => `${Math.floor(x / 20)},${Math.floor(y / 20)}`;
+  for (const r of W.roads) if (r.drive) for (const id of [r.nodes[0], r.nodes[r.nodes.length - 1]]){ const q = W.nodes.get(id); if (q && (Math.abs(q[0]) > coreHalf - 120 || Math.abs(q[1]) > coreHalf - 120)) (osmGrid.get(gk(...q)) || osmGrid.set(gk(...q), []).get(gk(...q))).push(id); }
+  const ends = new Map(); let nid = -1;
+  const nodeAt = (q, end) => { if (!end) { const id = nid--; W.nodes.set(id, q); return id; }
+    const k = `${Math.round(q[0] * 2)},${Math.round(q[1] * 2)}`; if (ends.has(k)) return ends.get(k);
+    let best = null, bd = 8; for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const id of osmGrid.get(`${Math.floor(q[0] / 20) + dx},${Math.floor(q[1] / 20) + dy}`) || []){ const d = V.dist(W.nodes.get(id), q); if (d < bd){ bd = d; best = id; } }
+    const id = best ?? nid--; if (best == null) W.nodes.set(id, q); ends.set(k, id); return id; };
+  let n = 0;
+  for (const f of list){
+    if (!f.g?.length || f.position_par_rapport_au_sol < 0 && false) continue;
+    const pts = f.g.map(c => P.toXY(c[0], c[1])); if (pts.length < 2) continue;
+    const mid = pts[pts.length >> 1]; if (Math.abs(mid[0]) < coreHalf && Math.abs(mid[1]) < coreHalf) continue;   // le cœur vient d'OSM (plus détaillé)
+    if (!pts.some(q => Math.abs(q[0]) < half && Math.abs(q[1]) < half)) continue;
+    const imp = +f.importance || 6, hw = BDT_HW(f, imp), foot = FOOT.test(hw);
+    const sens = String(f.sens_de_circulation || ''), drive = !foot && !/sans objet/i.test(sens) && !/impossible|interdit/i.test(f.acces_vehicule_leger || '') && !f.prive;
+    const ref = String(f.cpx_numero || ''), T = {highway:hw, ref, maxweight:f.restriction_de_poids_total, maxheight:f.restriction_de_hauteur, maxwidth:f.restriction_de_largeur, maxlength:f.restriction_de_longueur,
+      hazmat:f.matieres_dangereuses_interdites ? 'no' : undefined, access:/ayants droit|restreint/i.test(f.acces_vehicule_leger || '') ? 'destination' : undefined, delestage:f.delestage ? 'yes' : undefined, source:'BD TOPO'};
+    const nodes = pts.map((q, i) => nodeAt(q, i === 0 || i === pts.length - 1)), w = +f.largeur_de_chaussee > 1.5 ? +f.largeur_de_chaussee : roadWidth({highway:hw, lanes:f.nombre_de_voies});
+    W.roads.push({id:'b' + (n++), nodes, pts, hw, name:f.nom_voie_ban_gauche || f.nom_collaboratif_gauche || ref || '', ref, w, foot, drive,
+      oneway:/direct/i.test(sens) ? 1 : /inverse/i.test(sens) ? -1 : 0, speed:ROAD_SPEED[hw] || 50, cls:ROAD_CLASS[hw] || 8, lanes:+f.nombre_de_voies || 0, round:/rond-point/i.test(f.nature), bridge:+f.position_par_rapport_au_sol > 0, tunnel:+f.position_par_rapport_au_sol < 0, layer:+f.position_par_rapport_au_sol || 0,
+      sidewalk:'', surface:/empierr/i.test(f.nature) ? 'gravel' : '', psv:false, bus:false, cycle:'', parking:'', lite:true, urb:!!f.urbain, deles:!!f.delestage, tags:T});
+  }
+  W.src.roadsOut = n ? 'IGN BD TOPO® (réseau routier éloigné)' : '';
+}
+const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
 async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
-  const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
+  const page = async start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
   const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });
   if (first.length < 5000) return first;
   const rest = await Promise.all([5000, 10000, 15000, 20000, 25000].map(s => page(s).catch(() => [])));
@@ -202,6 +244,7 @@ function parseWorld(raw, P, size){
       if (p.length >= 3 && Math.abs(ringArea(p)) > 3 && inside(centroid(p))) W.bld.push({osm:e.id, p, h:parseFloat(T.height) || 0, lv:+T['building:levels'] || 0, minH:0, roof:T['roof:shape'] || '', roofC:T['roof:colour'] || '', wallC:T['building:colour'] || '', mat:'', roofM:'', kind:T.building, name:T.name || ''});
     }
   }
+  if (raw.bdtRoads?.length) addBdtRoads(W, raw.bdtRoads, P, size);
   // BD TOPO : remplace les bâtiments OSM (emprises et hauteurs officielles) ; les couleurs OSM sont reportées quand elles existent
   if (raw.bdt?.length){
     let swap = null;

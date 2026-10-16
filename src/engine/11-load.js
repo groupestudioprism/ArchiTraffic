@@ -70,7 +70,7 @@ async function bdtopoTiled(B, prog){
 }
 /* relief : 3 essais du WMS, puis le service ponctuel, puis terrain plat (jamais bloquant) */
 async function elevRobust(P, size, onStep){
-  for (let a = 0; a < 3; a++){ try { return await loadElevation(P, size, onStep); } catch(e){ await sleep(1000 * (a + 1)); } }
+  for (let a = 0; a < 2; a++){ try { return await loadElevation(P, size, onStep); } catch(e){ await sleep(700); } }
   const N = 41; return {N, z:new Float32Array(N * N).fill(0), src:'relief indisponible (terrain plat provisoire)', flat:true};
 }
 /* équipements du sous-sol (regards, armoires, poteaux incendie) : chargés seulement quand on active le calque Réseaux */

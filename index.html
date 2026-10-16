@@ -986,6 +986,11 @@ a.ap-link{text-decoration:none}
 :root[data-theme="dark"] .loadveil,.dark .loadveil{background:rgba(10,14,24,.45)}
 :root[data-theme="dark"] .loadveil .loadbox,.dark .loadveil .loadbox{background:linear-gradient(145deg,rgba(40,48,66,.72),rgba(24,30,44,.5));border-color:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 24px 60px -18px rgba(0,0,0,.6)}
 :root[data-theme="dark"] .lb-stop,.dark .lb-stop{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
+.bgload{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);z-index:800;display:flex;align-items:center;gap:10px;padding:8px 14px 8px 10px;border-radius:99px;font-size:12.5px;color:var(--ink);
+  background:linear-gradient(145deg,rgba(255,255,255,.7),rgba(255,255,255,.4));-webkit-backdrop-filter:blur(18px) saturate(1.8);backdrop-filter:blur(18px) saturate(1.8);border:1px solid rgba(255,255,255,.75);box-shadow:inset 0 1px 0 #fff,0 10px 30px -12px rgba(20,30,60,.35);animation:lvPop .35s cubic-bezier(.2,1.3,.4,1);max-width:calc(100vw - 32px)}
+.bgload[hidden]{display:none}.bgload .ap-spin{width:16px;height:16px;border:2px solid rgba(120,130,160,.25);border-top-color:var(--orange);border-radius:50%;animation:apSpin .9s linear infinite;flex:none}
+.bgload span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bgload b{display:block;width:70px;height:5px;border-radius:99px;background:rgba(120,130,160,.2);overflow:hidden;flex:none}.bgload b i{display:block;height:100%;width:0;background:var(--grad);transition:width .4s}
+:root[data-theme="dark"] .bgload{background:rgba(30,38,54,.7);border-color:rgba(255,255,255,.14)}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -2868,7 +2873,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 6;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 7;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -2965,18 +2970,60 @@ async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slic
 async function loadOSM(B, withBuildings = true, Bbig = null, size = 0, prog = {total:0, done:0, tick(){}}){
   // voirie et points de circulation (équipements du sous-sol : chargés à la demande, calque Réseaux)
   const qRoads = bb => `[out:json][timeout:50];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
-  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : ''}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
+  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};way["building"]["name"]${bb};`}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
   // grande zone : réseau routier seul au-delà du cœur (résidentiel jusqu'à 10 km, structurant au-delà)
   const hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
   const qBig = bb => `[out:json][timeout:60];(way["highway"~"^(${hw})$"]${bb};relation["type"="restriction"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};);out body geom qt;`;
-  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 800, qRest, prog)];
+  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 1000, qRest, prog)];
   if (Bbig) jobs.push(overpassTiled('big' + (size > 10000 ? 'M' : 'R'), Bbig, size > 10000 ? 5000 : 3000, qBig, prog));
   const res = await Promise.all(jobs), seen = new Set(), all = [];
   for (const r of res) for (const e of r.elements){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
   return {elements:all, lost:{roads:res[0].lost, rest:res[1].lost, big:res[2]?.lost || 0}};
 }
+/* ---------- BD TOPO tronçons de route (IGN) : réseau officiel, rapide, avec les restrictions (poids, hauteur, largeur,
+   matières dangereuses), le classement (D 982…), l'agglomération et les itinéraires de délestage. Sert au-delà du cœur. ---------- */
+const BDT_ROAD_PROPS = 'nature,importance,sens_de_circulation,largeur_de_chaussee,nombre_de_voies,restriction_de_hauteur,restriction_de_poids_total,restriction_de_largeur,restriction_de_longueur,matieres_dangereuses_interdites,acces_vehicule_leger,prive,cpx_numero,cpx_classement_administratif,delestage,urbain,nom_voie_ban_gauche,nom_collaboratif_gauche,position_par_rapport_au_sol,vitesse_moyenne_vl,geometrie';
+async function loadBDTRoads(B){
+  const url = (start, props) => `${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:troncon_de_route', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), ...(props ? {PROPERTYNAME:BDT_ROAD_PROPS} : {}), BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`;
+  const page = async start => { try { return (await fetchJSON(url(start, true), 45000)).features || []; } catch(e){ return (await fetchJSON(url(start, false), 60000)).features || []; } };
+  const slim = f => { const P = f.properties || {}, o = {g:f.geometry?.coordinates}; for (const k of BDT_ROAD_PROPS.split(',')) if (P[k] != null && P[k] !== '' && k !== 'geometrie') o[k] = P[k]; return o; };
+  let all = (await page(0)).map(slim);
+  for (let st = 5000; all.length === st; st += 5000){ const more = await page(st); all = all.concat(more.map(slim)); if (more.length < 5000) break; }
+  return all;
+}
+const BDT_HW = (P, imp) => /autoroutier/i.test(P.nature) ? 'motorway' : /bretelle/i.test(P.nature) ? 'primary_link' : /rond-point/i.test(P.nature) ? (['', 'trunk', 'primary', 'secondary', 'tertiary', 'residential'][imp] || 'residential')
+  : /chemin|sentier|escalier|piste cyclable|bac|empierr/i.test(P.nature) ? (/piste cyclable/i.test(P.nature) ? 'cycleway' : /empierr|chemin/i.test(P.nature) ? 'track' : 'path')
+  : imp <= 1 ? 'trunk' : imp === 2 ? 'primary' : imp === 3 ? 'secondary' : imp === 4 ? 'tertiary' : imp === 5 ? (P.urbain ? 'residential' : 'unclassified') : 'service';
+function addBdtRoads(W, list, P, size){
+  const coreHalf = Math.min(size, CORE) / 2 - 40, half = size / 2 + 60;
+  // nœuds : extrémités partagées (BD TOPO est topologique) ; raccord aux nœuds OSM du cœur à moins de 8 m
+  const osmGrid = new Map(), gk = (x, y) => `${Math.floor(x / 20)},${Math.floor(y / 20)}`;
+  for (const r of W.roads) if (r.drive) for (const id of [r.nodes[0], r.nodes[r.nodes.length - 1]]){ const q = W.nodes.get(id); if (q && (Math.abs(q[0]) > coreHalf - 120 || Math.abs(q[1]) > coreHalf - 120)) (osmGrid.get(gk(...q)) || osmGrid.set(gk(...q), []).get(gk(...q))).push(id); }
+  const ends = new Map(); let nid = -1;
+  const nodeAt = (q, end) => { if (!end) { const id = nid--; W.nodes.set(id, q); return id; }
+    const k = `${Math.round(q[0] * 2)},${Math.round(q[1] * 2)}`; if (ends.has(k)) return ends.get(k);
+    let best = null, bd = 8; for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const id of osmGrid.get(`${Math.floor(q[0] / 20) + dx},${Math.floor(q[1] / 20) + dy}`) || []){ const d = V.dist(W.nodes.get(id), q); if (d < bd){ bd = d; best = id; } }
+    const id = best ?? nid--; if (best == null) W.nodes.set(id, q); ends.set(k, id); return id; };
+  let n = 0;
+  for (const f of list){
+    if (!f.g?.length || f.position_par_rapport_au_sol < 0 && false) continue;
+    const pts = f.g.map(c => P.toXY(c[0], c[1])); if (pts.length < 2) continue;
+    const mid = pts[pts.length >> 1]; if (Math.abs(mid[0]) < coreHalf && Math.abs(mid[1]) < coreHalf) continue;   // le cœur vient d'OSM (plus détaillé)
+    if (!pts.some(q => Math.abs(q[0]) < half && Math.abs(q[1]) < half)) continue;
+    const imp = +f.importance || 6, hw = BDT_HW(f, imp), foot = FOOT.test(hw);
+    const sens = String(f.sens_de_circulation || ''), drive = !foot && !/sans objet/i.test(sens) && !/impossible|interdit/i.test(f.acces_vehicule_leger || '') && !f.prive;
+    const ref = String(f.cpx_numero || ''), T = {highway:hw, ref, maxweight:f.restriction_de_poids_total, maxheight:f.restriction_de_hauteur, maxwidth:f.restriction_de_largeur, maxlength:f.restriction_de_longueur,
+      hazmat:f.matieres_dangereuses_interdites ? 'no' : undefined, access:/ayants droit|restreint/i.test(f.acces_vehicule_leger || '') ? 'destination' : undefined, delestage:f.delestage ? 'yes' : undefined, source:'BD TOPO'};
+    const nodes = pts.map((q, i) => nodeAt(q, i === 0 || i === pts.length - 1)), w = +f.largeur_de_chaussee > 1.5 ? +f.largeur_de_chaussee : roadWidth({highway:hw, lanes:f.nombre_de_voies});
+    W.roads.push({id:'b' + (n++), nodes, pts, hw, name:f.nom_voie_ban_gauche || f.nom_collaboratif_gauche || ref || '', ref, w, foot, drive,
+      oneway:/direct/i.test(sens) ? 1 : /inverse/i.test(sens) ? -1 : 0, speed:ROAD_SPEED[hw] || 50, cls:ROAD_CLASS[hw] || 8, lanes:+f.nombre_de_voies || 0, round:/rond-point/i.test(f.nature), bridge:+f.position_par_rapport_au_sol > 0, tunnel:+f.position_par_rapport_au_sol < 0, layer:+f.position_par_rapport_au_sol || 0,
+      sidewalk:'', surface:/empierr/i.test(f.nature) ? 'gravel' : '', psv:false, bus:false, cycle:'', parking:'', lite:true, urb:!!f.urbain, deles:!!f.delestage, tags:T});
+  }
+  W.src.roadsOut = n ? 'IGN BD TOPO® (réseau routier éloigné)' : '';
+}
+const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
 async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
-  const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
+  const page = async start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
   const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });
   if (first.length < 5000) return first;
   const rest = await Promise.all([5000, 10000, 15000, 20000, 25000].map(s => page(s).catch(() => [])));
@@ -3062,6 +3109,7 @@ function parseWorld(raw, P, size){
       if (p.length >= 3 && Math.abs(ringArea(p)) > 3 && inside(centroid(p))) W.bld.push({osm:e.id, p, h:parseFloat(T.height) || 0, lv:+T['building:levels'] || 0, minH:0, roof:T['roof:shape'] || '', roofC:T['roof:colour'] || '', wallC:T['building:colour'] || '', mat:'', roofM:'', kind:T.building, name:T.name || ''});
     }
   }
+  if (raw.bdtRoads?.length) addBdtRoads(W, raw.bdtRoads, P, size);
   // BD TOPO : remplace les bâtiments OSM (emprises et hauteurs officielles) ; les couleurs OSM sont reportées quand elles existent
   if (raw.bdt?.length){
     let swap = null;
@@ -3172,7 +3220,7 @@ async function bdtopoTiled(B, prog){
 }
 /* relief : 3 essais du WMS, puis le service ponctuel, puis terrain plat (jamais bloquant) */
 async function elevRobust(P, size, onStep){
-  for (let a = 0; a < 3; a++){ try { return await loadElevation(P, size, onStep); } catch(e){ await sleep(1000 * (a + 1)); } }
+  for (let a = 0; a < 2; a++){ try { return await loadElevation(P, size, onStep); } catch(e){ await sleep(700); } }
   const N = 41; return {N, z:new Float32Array(N * N).fill(0), src:'relief indisponible (terrain plat provisoire)', flat:true};
 }
 /* équipements du sous-sol (regards, armoires, poteaux incendie) : chargés seulement quand on active le calque Réseaux */
@@ -3210,7 +3258,7 @@ function buildNet(W){
       const a = node(r.nodes[k]), b = node(r.nodes[k + 1]); if (!a || !b || a === b) continue;
       a.nb.add(b.id); b.nb.add(a.id); a.ways.add(ri); b.ways.add(ri);
       const len = V.dist(a.xy, b.xy) || 0.01, sp = r.speed / 3.6;
-      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
+      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dl:!!r.deles, dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
       if (r.oneway >= 0) mk(a, b, false);
       if (r.oneway <= 0) mk(b, a, true);
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
@@ -3319,6 +3367,7 @@ function route(fromId, toId, C, opt = {}){
         if (opt.strict && !e.pl) continue;
         if (e.cls >= 6 && opt.lvl < 6) continue;                  // jamais de zone de rencontre / desserte pour dévier une rue circulée
         if (e.dest) continue;                                        // « sauf desserte / riverains » : transit interdit, donc pas de déviation
+        if (e.dl) c *= 0.7;                                          // itinéraire de délestage officiel (BD TOPO) : à privilégier
         if (e.near) c *= 1.8;                                        // abords d'école / hôpital
         if (e.z30 && opt.lvl <= 4) c *= 1.4;                         // zone 30 : pas de report d'un trafic de transit
         if (opt.strict && NET.nodes.get(e.to)?.lc) c += 90;          // passage à niveau : risque d'arrêt d'un PL sur les voies
@@ -3343,7 +3392,7 @@ function proposeDetours(cl, els){
   const ref = [...new Set(closedEdges.map(e => NET.roads[e.r].ref).filter(Boolean))].join(', ');
   cl.rules = [heavy ? `Voie ${ref ? ref + ' ' : ''}de niveau ${['', 'autoroute / voie express', 'route principale', 'route secondaire', 'route de liaison'][lvl] || 'locale'} : déviation par un réseau équivalent, apte aux poids lourds (tonnage, hauteur, largeur, revêtement, restrictions horaires)` : 'Rue locale : déviation par les rues ouvertes à la circulation de transit',
     'Exclus : zones de rencontre, aires piétonnes, voies de desserte, chemins non revêtus, voies « sauf riverains / desserte »',
-    'Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
+    'Privilégiés : itinéraires de délestage officiels (IGN). Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
   if (WORLD?.W?.zfe) cl.rules.push(`${WORLD.W.zfe} : vérifier les vignettes Crit'Air des véhicules déviés`);
   const dirs = cl.mode === 'sens' ? [cl.dir === -1 ? [B, A] : [A, B]] : ow === 1 ? [[A, B]] : ow === -1 ? [[B, A]] : [[A, B], [B, A]];
   for (const [f, t] of dirs){
@@ -5056,7 +5105,7 @@ function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !
 
 /* ---------- chargement de la zone du chantier ---------- */
 const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
-const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
+const CORE = 1600;   // cœur détaillé (OSM + BD TOPO bâtiments + relief fin), chargé en premier ; au-delà, réseau routier IGN en arrière-plan
 /* barre de chargement fluide : elle avance toujours un peu (progression « d'attente ») sans jamais dépasser
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
@@ -5095,35 +5144,69 @@ async function loadSite(force = false){
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
-    let partial = '';
+    let partial = '', needOuter = false;
+    const big = size > CORE, core = Math.min(size, CORE);
     if (!raw){
-      const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
-      const big = size > CORE, core = Math.min(size, CORE);
-      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement de la zone', `Voirie, bâtiments et relief, secteur par secteur : ${prog.done} / ${prog.total}`, 0.04 + 0.72 * (prog.total ? prog.done / prog.total : 0)); }};
-      loadUI(true, 'Chargement de la zone', 'Préparation des secteurs…', 0.03);
-      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      raw = {at:Date.now(), src:{}};
+      // 1) le cœur du chantier (≤ 1,6 km) : tout ce qu'il faut pour travailler, en parallèle — c'est la seule attente bloquante
+      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement du chantier', `Voirie, bâtiments et relief : ${prog.done} / ${prog.total}`, 0.04 + 0.76 * (prog.total ? prog.done / prog.total : 0)); }};
+      const osmP = loadOSM(areaBounds(P, core + 120), false, null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
       const bdtP = bdtopoTiled(areaBounds(P, core + 40), prog).then(r => { raw.bdt = r.f; raw.bdtLost = r.lost; });
       prog.total++; const elP = elevRobust(P, size).then(el => { raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src; raw.flat = !!el.flat; prog.done++; prog.tick(); });
       const el2P = big ? (prog.total++, elevRobust(P, core).then(e2 => { if (!e2.flat) raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; prog.done++; prog.tick(); })) : null;
       await Promise.all([osmP, bdtP, elP, el2P]);
       if (tok !== loadToken) return;
       const L = raw.osm.lost, miss = [];
-      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (L.big) miss.push(`${L.big} secteur(s) du réseau éloigné`); if (raw.flat) miss.push('le relief');
-      partial = miss.join(', ');
-      if (!partial) IDB.set(key, raw);   // zone complète : mise en cache ; sinon les secteurs reçus sont déjà en cache et « Mettre à jour » ne recharge que le reste
-    }
-    loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
-    const W = parseWorld(raw, P, size);
-    const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
-    const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
-    WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    camRange(size); buildNet(W); orthoTex = null; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50); orthoState = '';
-    buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
-    loadUI(false); if (partial) toast(`Zone ouverte. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000); else toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.`, 5200);
+      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (raw.flat) miss.push('le relief');
+      partial = miss.join(', '); needOuter = big;
+      if (!partial && !big) IDB.set(key, raw);
+    } else needOuter = big && !raw.bdtRoads;
+    loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.85); await sleep(16);
+    openWorld(raw, P, size, true);
+    loadUI(false);
+    if (partial) toast(`Chantier ouvert. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000);
+    else toast(`Chantier chargé : ${WORLD.W.roads.filter(r => r.drive).length} voies, ${WORLD.W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.${needOuter ? ' Le réseau routier éloigné arrive en arrière-plan.' : ''}`, 5200);
+    // 2) grande zone : réseau routier éloigné (IGN BD TOPO, rapide et officiel) en arrière-plan, sans bloquer
+    if (needOuter) loadOuter(raw, P, size, key, tok, partial);
   } catch(e){
     console.error(e); loadUI(false);
     if (tok === loadToken){ toast('Chargement interrompu : les serveurs de cartographie ne répondent pas. Les secteurs déjà reçus sont gardés ; relancez « Mettre à jour les données » dans quelques instants.', 8000); WORLD = WORLD || null; refreshPanel(); }
   }
+}
+function openWorld(raw, P, size, first){
+  const W = parseWorld(raw, P, size);
+  const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
+  const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
+  WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
+  camRange(size); buildNet(W); orthoTex = null; orthoState = ''; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50);
+  buildWorld(); rematchClosures(); rebuildProj(); if (first) fit(); refreshPanel();
+}
+/* petite pastille de progression pour le travail en arrière-plan (l'interface reste utilisable) */
+function bgLoad(on, txt = '', pct = 0){
+  let el = $('#bgLoad'); if (!el){ el = document.createElement('div'); el.id = 'bgLoad'; el.className = 'bgload'; el.innerHTML = '<i class="ap-spin"></i><span></span><b><i></i></b>'; document.body.appendChild(el); }
+  el.hidden = !on; if (!on) return; el.querySelector('span').textContent = txt; el.querySelector('b i').style.width = Math.round(pct * 100) + '%';
+}
+async function loadOuter(raw, P, size, key, tok, partial){
+  const prog = {total:0, done:0, tick(){ if (tok === loadToken) bgLoad(true, `Réseau routier éloigné (IGN) : ${prog.done} / ${prog.total}`, prog.total ? prog.done / prog.total : 0); }};
+  bgLoad(true, 'Réseau routier éloigné (IGN)…', 0.02);
+  const tiles = splitBounds(areaBounds(P, size + 120), size > 10000 ? 5000 : 3500), out = [], seen = new Set(); let lost = 0, i = 0; prog.total = tiles.length;
+  const one = async b => { const k = tileKey('bdtr', b), hit = await IDB.get(k); let f = hit && Date.now() - hit.at < 30 * 864e5 ? hit.f : null;
+    for (let a = 0; !f && a < 4; a++){ try { f = await loadBDTRoads(b); IDB.set(k, {at:Date.now(), f}); } catch(e){ await sleep(1200 * (a + 1)); } }
+    if (!f){ lost++; return; }
+    for (const x of f){ const id = x.g?.[0]?.join() + '|' + x.g?.[x.g.length - 1]?.join(); if (seen.has(id)) continue; seen.add(id);
+      // au-delà de 10 km du chantier : seulement le réseau structurant (importance 1 à 4)
+      if (size > 10000 && (+x.importance || 6) > 4){ const c = x.g[x.g.length >> 1], q = P.toXY(c[0], c[1]); if (Math.max(Math.abs(q[0]), Math.abs(q[1])) > 5000) continue; }
+      out.push(x); } };
+  const worker = async () => { while (i < tiles.length){ await one(tiles[i++]); prog.done++; prog.tick(); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (tok !== loadToken){ bgLoad(false); return; }
+  raw.bdtRoads = out; raw.src.roadsOut = 'IGN BD TOPO®';
+  bgLoad(true, 'Intégration du réseau éloigné…', 1); await sleep(16);
+  const cam = persp.position.clone(), tgt = c3.target.clone();
+  openWorld(raw, P, size, false); persp.position.copy(cam); c3.target.copy(tgt); c3.update(); dirty = true;
+  bgLoad(false);
+  if (!partial && !lost) IDB.set(key, raw);
+  toast(lost ? `Réseau éloigné intégré (${lost} secteur(s) manquant(s), « Mettre à jour » les complétera).` : `Réseau routier éloigné intégré : ${out.length} tronçons sur ${size / 1000} × ${size / 1000} km.`, 5000);
 }
 /* routes barrées : les nœuds OSM peuvent changer entre deux mises à jour → on les retrouve par leur position */
 function rematchClosures(){
@@ -6290,7 +6373,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, loadBDTRoads, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>
