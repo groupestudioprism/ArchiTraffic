@@ -6,12 +6,18 @@ const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge int�
 const SIGT = () => SIM.on ? SIM.t : performance.now() / 1000;   // simulation en cours : temps simulé ; sinon les feux tournent en temps réel
 /* axe d'une approche : comparé à la première approche du carrefour (et non aux axes x/y), pour que deux rues
    d'un même carrefour diagonal ne soient jamais vertes en même temps ni rouges toutes les deux pour toujours */
-function sigAxis(n, d){ let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
+/* contrôleur d'un feu : OSM pose souvent les feux sur chaque approche (nœuds à 10-25 m du carrefour) et non sur le
+   carrefour lui-même. Tous les feux d'un même carrefour sont rattachés à ce carrefour : même cycle, même référence d'axe,
+   donc toujours un axe au vert (jamais 4 feux rouges ensemble hors des 2 s de dégagement). */
+function sigCtl(n){ if (n._ctl) return n._ctl; let best = n, bd = nodeDeg(n) >= 3 ? 0 : 30;
+  if (bd) for (const m of NET.nodes.values()){ if (nodeDeg(m) < 3) continue; const d = Math.hypot(m.xy[0] - n.xy[0], m.xy[1] - n.xy[1]); if (d < bd){ bd = d; best = m; } }
+  return n._ctl = best; }
+function sigAxis(n0, d){ const n = sigCtl(n0); let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
   return Math.abs(d[0] * r[0] + d[1] * r[1]) >= Math.SQRT1_2 ? 0 : 1; }
 /* coordination : les feux à moins de 300 m les uns des autres (OSM ou posés à la main) forment un ensemble ;
    chaque feu est décalé du feu pilote selon la distance (onde verte à 40 km/h) au lieu d'un décalage aléatoire */
 function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return o;
-  const sig = [...NET.nodes.values()].filter(m => m.sig), seen = new Set();
+  const sig = [...new Set([...NET.nodes.values()].filter(m => m.sig).map(sigCtl))], seen = new Set();
   for (const s of sig){ if (seen.has(s.id)) continue; const grp = [s]; seen.add(s.id);
     for (let i = 0; i < grp.length; i++) for (const m of sig) if (!seen.has(m.id) && Math.hypot(m.xy[0] - grp[i].xy[0], m.xy[1] - grp[i].xy[1]) < 300){ seen.add(m.id); grp.push(m); }
     const base = (hashStr(String(s.id)) % 640) / 10;
@@ -19,7 +25,7 @@ function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return
   return SIM.sigOff.get(n.id) ?? 0; }
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){
-  const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(n)) % per + per) % per, half = per / 2;
+  const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(sigCtl(n))) % per + per) % per, half = per / 2;
   const axis = sigAxis(n, d), q = (ph - axis * half + per) % per;
   return q < SIGCYC.g ? 'g' : q < SIGCYC.g + SIGCYC.y ? 'y' : 'r';
 }
@@ -29,7 +35,7 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()) n._sref = null;
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; }
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
