@@ -146,7 +146,7 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && sameStreet(e.name, sec.name) && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
@@ -157,7 +157,7 @@ function makeClosure(nr){
     if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(adj.mode)){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
     endEdit(); sel = adj.id; rebuildProj(); refreshPanel(); toast(msg, 5200); return; }
-  const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
+  const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:hasHomes(sec.pts), len:Math.round(sec.len * 10) / 10};
   // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
   if (curPh()) cl.ph = curPh(); beginEdit(); state.els.push(cl);
@@ -168,13 +168,15 @@ function makeClosure(nr){
   refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
 }
+/* habitations le long d'un tronçon (bâtiments à moins de 30 m de l'axe) → « Route barrée sauf riverains » */
+function hasHomes(pts){ const B = WORLD?.W?.bld || []; for (const b of B){ if (b.h < 2.5) continue; const c = centroid(b.p); for (let k = 0; k + 1 < pts.length; k++) if (V.dist(segClosest(c, pts[k], pts[k + 1]).pt, c) < 30) return true; } return false; }
 /* même rue : noms identiques ou partageant un nom (« Rue A / Rue B »), ou tronçon sans nom */
 const sameStreet = (a = '', b = '') => { if (!a || !b) return true; const A = a.split(' / '), B = new Set(b.split(' / ')); return A.some(x => B.has(x)); };
 /* une fermeture prolongée peut rejoindre une autre fermeture de la même rue : on les fusionne (une seule déviation, un seul jeu de barrières) */
 function mergeChain(cl){
   for (let guard = 0; guard < 20; guard++){
     const a0 = cl.ids[0], a1 = cl.ids.at(-1);
-    let o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
+    let o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
     if (!o){ // pas d'extrémité commune : le centre du carrefour (îlot, petit tronçon de jonction) les sépare → on comble s'il fait moins de 40 m
       const C0 = {both:new Set(), dir:new Set(), slow:new Map()};
       for (const e of state.els){ if (e === cl || e.t !== 'closure' || e.mode !== cl.mode || (e.ph || null) !== (cl.ph || null) || !e.ids?.length || !sameStreet(e.name, cl.name)) continue;
@@ -191,7 +193,7 @@ function mergeChain(cl){
     else if (a1 === b1){ cl.ids = [...cl.ids, ...ri.slice(1)]; cl.pts = [...cl.pts, ...rp.slice(1)]; }
     else if (a0 === b1){ cl.ids = [...o.ids, ...cl.ids.slice(1)]; cl.pts = [...o.pts, ...cl.pts.slice(1)]; }
     else { cl.ids = [...ri, ...cl.ids.slice(1)]; cl.pts = [...rp, ...cl.pts.slice(1)]; }
-    cl.len = Math.round(plLen(cl.pts) * 10) / 10;
+    cl.len = Math.round(plLen(cl.pts) * 10) / 10; if (o.name && cl.name && !sameStreet(o.name, cl.name)) cl.name = `${cl.name} / ${o.name}`; if (o.riv) cl.riv = true;
     state.els = state.els.filter(e => e !== o && e.cl !== o.id && e.auto !== o.id);   // l'ancienne fermeture, ses déviations et ses panneaux disparaissent
   }
 }
@@ -233,7 +235,7 @@ function autoSigns(cl){
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id, ph:cl.ph});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
-  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
+  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 100 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
     if (lane && ((cl.dir === -1) === (i === 0))) return;
     const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
@@ -250,6 +252,14 @@ function autoSigns(cl){
     if (cl.plWarn && !lane) add('B8', V.add(right(back(apD)), V.mul(d, 12)), face);   // interdiction PL : la déviation locale ne leur convient pas
     if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
+  // carrefours à l'intérieur de la section barrée : les rues latérales y débouchent → barrage en travers de chaque côté, face au carrefour
+  if (cl.mode === 'total') for (let k = 1; k + 1 < cl.ids.length; k++){
+    const n = NET.nodes.get(cl.ids[k]); if (!n) continue;
+    const side = [...n.nb].filter(x => x !== cl.ids[k - 1] && x !== cl.ids[k + 1] && (() => { const sg = NET.segIdx.get(segKey(n.id, x)); const r = sg && NET.roads[sg.ri]; return r && r.drive && r.cls < 7; })());
+    if (!side.length) continue;
+    for (const [j, nb] of [[0, cl.ids[k - 1]], [1, cl.ids[k + 1]]]){ const B = NET.nodes.get(nb)?.xy; if (!B) continue; const d = V.norm(V.sub(B, n.xy)), nn = V.perp(d), base = V.add(n.xy, V.mul(d, Math.min(5, V.dist(B, n.xy) / 2))), face = Math.atan2(-d[1], -d[0]);
+      const nbk = Math.max(1, Math.round(w / 2.2)); for (let q = 0; q < nbk; q++){ const pos = V.add(base, V.mul(nn, -w / 2 + (q + 0.5) * w / nbk)); add(q === Math.floor(nbk / 2) && j === 0 ? 'KR_ROUTE' : 'K2', pos, face, q === Math.floor(nbk / 2) && j === 0 ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'}); } }
+  }
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
   // un parcours n'est jalonné que s'il est praticable dans ce sens (sens uniques, interdictions, fermetures)
   const Cs = closedSets(state.els), drivable = ids => ids.every((id, k) => !k || (NET.nodes.get(ids[k - 1])?.out || []).some(ei => { const e = NET.edges[ei]; return e.to === id && !Cs.both.has(e.key) && !Cs.dir.has(`${e.from}>${e.to}`); }));

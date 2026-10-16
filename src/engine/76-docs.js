@@ -10,7 +10,7 @@ function siteChecks(){
   const cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1);
   if (!cls.length) add('info', 'Aucune route barrée dans cette vue : rien à contrôler côté signalisation.', null);
   for (const c of cls){
-    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, apD = agglo ? 50 : 150, name = c.name || 'Rue', L = c.len || plLen(c.pts);
+    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, apD = agglo ? 100 : 150, name = c.name || 'Rue', L = c.len || plLen(c.pts);
     const ends = [c.pts[0], c.pts[c.pts.length - 1]];
     if (c.mode === 'total'){
       const ow = sectionOneway(c.ids);

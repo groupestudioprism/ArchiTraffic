@@ -28,11 +28,18 @@ $('#simDens').addEventListener('change', e => { state.sim.dens = +e.target.value
 $('#simReset').addEventListener('click', () => { const was = SIM.on; simStop(true); if (was) simStart(); });
 
 /* boucle de rendu */
+/* résolution adaptative : pendant un mouvement de caméra, rendu à résolution réduite (fluide même avec beaucoup d'éléments) ;
+   dès que la vue s'arrête (200 ms), une image pleine résolution est redessinée. La réduction s'ajuste au temps réel d'une image. */
+const PR_FULL = Math.min(devicePixelRatio, 2); let prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, 1.25), frameMs = 16;
+function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
 function loop(now){
   requestAnimationFrame(loop);
   simTick(now);
   const moved = ctl().update(); if (updateSignals()) dirty = true;
-  if (moved || dirty){ renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false; }
+  if (moved){ lastMove = now; setPR(prLow); }
+  else if (prNow !== PR_FULL && now - lastMove > 200 && !SIM.on){ setPR(PR_FULL); dirty = true; }
+  if (moved || dirty){ const t = performance.now(); renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
+    if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, 1.25)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
 }
 
 /* ---------- exemple : rue barrée en centre-ville, déviation et balisage ---------- */
