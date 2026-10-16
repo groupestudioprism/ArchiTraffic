@@ -112,7 +112,7 @@ way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|
   let qBig = null;
   if (Bbig){ const B2 = `(${Bbig.s},${Bbig.w},${Bbig.n},${Bbig.e})`, hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
     qBig = `[out:json][timeout:180][maxsize:536870912];(way["highway"~"^(${hw})$"]${B2};relation["type"="restriction"]${B2};node["railway"="level_crossing"]${B2};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${B2};);out body geom qt;`; }
-  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 2, 200000) : null]);
+  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0, 40000), overpassOn(qRest, 0, 40000).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 0, 200000) : null]);
   if (qBig && !c) throw new Error('overpass big');
   const seen = new Set(), all = [];
   for (const e of [...(a.elements || []), ...(b.elements || []), ...(c?.elements || [])]){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
