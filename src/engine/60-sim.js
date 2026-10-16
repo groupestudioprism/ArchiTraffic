@@ -80,7 +80,7 @@ function simStep(dt){
   SIM.t += dt; simSpawn(dt);
   // occupation des arêtes (tri par abscisse)
   const occ = new Map(); for (const a of SIM.agents){ const ei = a.edges[a.ei]; (occ.get(ei) || occ.set(ei, []).get(ei)).push(a); } for (const l of occ.values()) l.sort((x, y) => x.s - y.s);
-  const C = closedSets(state.els);
+  if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); } const C = SIM.cSet;
   for (const a of SIM.agents){
     const e = NET.edges[a.edges[a.ei]]; if (!e){ a.kill = true; continue; }
     const v0 = e.sp * (C.slow.get(e.key) || 1) * (a.pl ? 0.85 : 1);
@@ -135,7 +135,8 @@ let lastT = performance.now(), statT = 0;
 function simTick(now){
   if (!SIM.on){ lastT = now; return; }
   let dt = Math.min(0.1, (now - lastT) / 1000) * SIM.speed; lastT = now;
-  while (dt > 0){ const st = Math.min(0.1, dt); simStep(st); dt -= st; }
+  // pas adaptatif : en ×10 saturé on fait au plus 4 pas par image (0,25 s max chacun) au lieu de 10 petits pas
+  const n = Math.min(4, Math.ceil(dt / 0.1)); for (let i = 0; i < n && dt > 0; i++){ const st = i === n - 1 ? Math.min(0.25, dt) : Math.min(dt / (n - i), 0.25); simStep(st); dt -= st; }
   simRender(); dirty = true;
   if (now - statT > 500){ statT = now; simStatus(); congRender(); if (activeTab === 'traffic') renderTrafficStats(); }
 }

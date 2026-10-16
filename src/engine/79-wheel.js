@@ -17,15 +17,25 @@
       cam.zoom = Math.max(c.minZoom, Math.min(c.maxZoom, cam.zoom / k)); cam.updateProjectionMatrix();
       if (c.zoomToCursor !== false){ w.set(ndc.x, ndc.y, 0).unproject(cam); v.sub(w); cam.position.add(v); c.target.add(v); }
     } else {
-      const dist = cam.position.distanceTo(c.target), nd = Math.max(c.minDistance, Math.min(c.maxDistance, dist * k));
-      const hit = () => { rc.setFromCamera(ndc, cam); return rc.ray.intersectPlane(pl, new THREE.Vector3()); };
-      if (c.zoomToCursor){ cam.getWorldDirection(w); pl.setFromNormalAndCoplanarPoint(w, c.target); }
-      const p0 = c.zoomToCursor ? hit() : null;
-      v.subVectors(cam.position, c.target).setLength(nd); cam.position.copy(c.target).add(v); cam.updateMatrixWorld();
-      const p1 = p0 && hit(); if (p0 && p1){ v.subVectors(p0, p1); cam.position.add(v); c.target.add(v); }
+      /* zoom « vers ce qui est sous le curseur » : la caméra ET le point visé se rapprochent du point du sol (ou de la maquette)
+         pointé — on peut donc toujours aller au plus près, quel que soit l'endroit où se trouvait le point visé */
+      rc.setFromCamera(ndc, cam); let P = null;
+      const terr = typeof worldGroup !== 'undefined' ? worldGroup.children.find(o => o.userData?.terrain) : null;
+      if (terr) P = rc.intersectObject(terr, false)[0]?.point || null;
+      if (!P){ pl.setFromNormalAndCoplanarPoint(w.set(0, 1, 0), c.target); P = rc.ray.intersectPlane(pl, new THREE.Vector3()); }
+      if (!P || P.distanceTo(cam.position) > c.maxDistance * 2) P = c.target.clone();
+      const dC = cam.position.distanceTo(P), dT = cam.position.distanceTo(c.target); let kk = k;
+      if (dC * kk < 1.5) kk = 1.5 / Math.max(dC, 1e-3);                        // jamais à moins de 1,5 m du point visé
+      if (dT * kk > c.maxDistance) kk = c.maxDistance / Math.max(dT, 1e-3);     // ni plus loin que la limite
+      cam.position.sub(P).multiplyScalar(kk).add(P); c.target.sub(P).multiplyScalar(kk).add(P);
+      keepAbove(cam, c);
     }
     c.update();
   };
+  /* la caméra ne passe jamais sous le sol / la maquette (relief NGF quand il est connu, sinon le plan du sol) */
+  const keepAbove = (cam, c) => { if (cam.isOrthographicCamera) return; const g = typeof H === 'function' && typeof WORLD !== 'undefined' && WORLD ? H(cam.position.x, -cam.position.z) : 0, min = g + 1.2;
+    if (cam.position.y < min){ cam.position.y = min; } if (c && c.target.y < g - 0.5) c.target.y = g - 0.5; };
+  for (const c of ctls) c.addEventListener('change', () => keepAbove(c.object, c));
   /* glissement : chaque cran ajoute son zoom à une réserve, consommée en douceur sur ≈ 150 ms (même amplitude qu'avant, sans à-coup) */
   let pend = 0, pc = null, px = 0, py = 0, raf = 0, last = 0;
   const tick = now => { const dt = Math.min(50, now - (last || now)); last = now; if (!pc || Math.abs(pend) < 1e-4){ pend = 0; raf = 0; last = 0; return; }

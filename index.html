@@ -942,8 +942,8 @@ a.ap-link{text-decoration:none}
 .anno{position:absolute;left:0;top:0;will-change:translate;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
 .anno.big{font-size:16px}
 .anno.dimtxt{border:0;color:#fff;font:700 12.5px var(--f-mono);padding:3px 8px;border-radius:7px;white-space:pre;text-align:center;line-height:1.25;box-shadow:0 1px 3px rgba(0,0,0,.3)}
-.anno.street{border:0;background:transparent;box-shadow:none;font:600 11px var(--f-body);color:#3B4556;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;letter-spacing:.02em}
-:root[data-theme="dark"] .anno.street{color:#C9D3E3;text-shadow:0 0 3px #000,0 0 3px #000}
+.anno.street{border:0;background:rgba(255,255,255,.86);box-shadow:0 0 0 1px rgba(0,0,0,.06);font:600 10.5px var(--f-body);color:#2B3445;text-shadow:none;letter-spacing:.02em;padding:1px 6px;border-radius:7px}
+:root[data-theme="dark"] .anno.street{color:#DDE5F2;background:rgba(20,26,38,.82);text-shadow:none}
 .anno.closed{color:#fff;background:var(--closed);border-color:var(--closed);font-size:11.5px}
 .anno.detour{color:#fff;background:var(--orange);border-color:var(--orange);font-size:11.5px}
 
@@ -3373,7 +3373,7 @@ const previewGroup = new THREE.Group(), markGroup = new THREE.Group();
 scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 
 /* Réglages d'affichage, par appareil */
-const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true}};
+const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';
@@ -3683,7 +3683,7 @@ const GROUND_COL = {
 };
 let groundCanvas = null, groundTex = null, orthoTex = null, orthoState = '';
 function paintGround(){
-  const W = WORLD.W, S = WORLD.size, PX = 2048, k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
+  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
   groundCanvas ??= document.createElement('canvas'); groundCanvas.width = groundCanvas.height = PX; const g = groundCanvas.getContext('2d');
   const X = x => (x + S / 2) * k, Y = y => (S / 2 - y) * k, R = rng(7);
   g.fillStyle = C.base; g.fillRect(0, 0, PX, PX);
@@ -3830,7 +3830,7 @@ function buildRoads(grp){
 /* sens de circulation : flèches de sens unique le long des voies, disque « sens interdit » à la sortie de chaque sens unique */
 let ARROW_GEO = null, NOENTRY_GEO = null;
 function buildOneways(grp, plan){
-  if (DISPLAY.lay.marks === false && !plan) return;
+  if (DISPLAY.lay.oneway === false || (DISPLAY.lay.marks === false && !plan)) return;
   if (!ARROW_GEO){ const sh = new THREE.Shape([[-1.6, -0.22], [0.4, -0.22], [0.4, -0.55], [1.6, 0], [0.4, 0.55], [0.4, 0.22], [-1.6, 0.22]].map(q => new THREE.Vector2(q[0], q[1]))); ARROW_GEO = new THREE.ShapeGeometry(sh); ARROW_GEO.rotateX(-Math.PI / 2); }
   if (!NOENTRY_GEO){ NOENTRY_GEO = new THREE.CircleGeometry(0.9, 24); NOENTRY_GEO.rotateX(-Math.PI / 2); }
   const arrows = [], ends = [];
@@ -4181,11 +4181,23 @@ $('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.ta
    et repère sur la carte avec la couleur en cours. Les véhicules simulés s'arrêtent au rouge et au jaune. */
 const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge intégral) = 64 s
 const SIGT = () => SIM.on ? SIM.t : performance.now() / 1000;   // simulation en cours : temps simulé ; sinon les feux tournent en temps réel
-function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o === undefined){ o = (hashStr(String(n.id)) % 640) / 10; SIM.sigOff.set(n.id, o); } return o; }
+/* axe d'une approche : comparé à la première approche du carrefour (et non aux axes x/y), pour que deux rues
+   d'un même carrefour diagonal ne soient jamais vertes en même temps ni rouges toutes les deux pour toujours */
+function sigAxis(n, d){ let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
+  return Math.abs(d[0] * r[0] + d[1] * r[1]) >= Math.SQRT1_2 ? 0 : 1; }
+/* coordination : les feux à moins de 300 m les uns des autres (OSM ou posés à la main) forment un ensemble ;
+   chaque feu est décalé du feu pilote selon la distance (onde verte à 40 km/h) au lieu d'un décalage aléatoire */
+function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return o;
+  const sig = [...NET.nodes.values()].filter(m => m.sig), seen = new Set();
+  for (const s of sig){ if (seen.has(s.id)) continue; const grp = [s]; seen.add(s.id);
+    for (let i = 0; i < grp.length; i++) for (const m of sig) if (!seen.has(m.id) && Math.hypot(m.xy[0] - grp[i].xy[0], m.xy[1] - grp[i].xy[1]) < 300){ seen.add(m.id); grp.push(m); }
+    const base = (hashStr(String(s.id)) % 640) / 10;
+    for (const m of grp) SIM.sigOff.set(m.id, base - Math.hypot(m.xy[0] - s.xy[0], m.xy[1] - s.xy[1]) / 11.1); }
+  return SIM.sigOff.get(n.id) ?? 0; }
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){
   const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(n)) % per + per) % per, half = per / 2;
-  const axis = Math.abs(d[0]) > Math.abs(d[1]) ? 0 : 1, q = (ph - axis * half + per) % per;
+  const axis = sigAxis(n, d), q = (ph - axis * half + per) % per;
   return q < SIGCYC.g ? 'g' : q < SIGCYC.g + SIGCYC.y ? 'y' : 'r';
 }
 let SIGHEADS = null;   // {heads:[{n, d}], lamps:{r,y,g:InstancedMesh}, last:''}
@@ -4194,6 +4206,7 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()) n._sref = null;
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
@@ -5510,7 +5523,7 @@ function simStep(dt){
   SIM.t += dt; simSpawn(dt);
   // occupation des arêtes (tri par abscisse)
   const occ = new Map(); for (const a of SIM.agents){ const ei = a.edges[a.ei]; (occ.get(ei) || occ.set(ei, []).get(ei)).push(a); } for (const l of occ.values()) l.sort((x, y) => x.s - y.s);
-  const C = closedSets(state.els);
+  if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); } const C = SIM.cSet;
   for (const a of SIM.agents){
     const e = NET.edges[a.edges[a.ei]]; if (!e){ a.kill = true; continue; }
     const v0 = e.sp * (C.slow.get(e.key) || 1) * (a.pl ? 0.85 : 1);
@@ -5565,7 +5578,8 @@ let lastT = performance.now(), statT = 0;
 function simTick(now){
   if (!SIM.on){ lastT = now; return; }
   let dt = Math.min(0.1, (now - lastT) / 1000) * SIM.speed; lastT = now;
-  while (dt > 0){ const st = Math.min(0.1, dt); simStep(st); dt -= st; }
+  // pas adaptatif : en ×10 saturé on fait au plus 4 pas par image (0,25 s max chacun) au lieu de 10 petits pas
+  const n = Math.min(4, Math.ceil(dt / 0.1)); for (let i = 0; i < n && dt > 0; i++){ const st = i === n - 1 ? Math.min(0.25, dt) : Math.min(dt / (n - i), 0.25); simStep(st); dt -= st; }
   simRender(); dirty = true;
   if (now - statT > 500){ statT = now; simStatus(); congRender(); if (activeTab === 'traffic') renderTrafficStats(); }
 }
@@ -6408,7 +6422,7 @@ $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[d
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
 function renderViewMenu(){
   const L = DISPLAY.lay, m = $('#viewMenu');
-  m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['pins', 'Repères des panneaux (vue éloignée)'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}<label class="mi"><input type="checkbox" data-lay="nets"${L.nets ? ' checked' : ''}> Réseaux souterrains (vue en coupe)</label>
+  m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['oneway', 'Sens uniques et sens interdits'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['pins', 'Repères des panneaux (vue éloignée)'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}<label class="mi"><input type="checkbox" data-lay="nets"${L.nets ? ' checked' : ''}> Réseaux souterrains (vue en coupe)</label>
     <hr><div class="lbl">Éléments du chantier</div><label class="mi"><input type="checkbox" data-proj${projGroup.visible ? ' checked' : ''}> Afficher le chantier</label><label class="mi"><input type="checkbox" data-legend${state.legend.show ? ' checked' : ''}> Légende sur la vue</label>
     <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-night${DISPLAY.night ? ' checked' : ''}> Vue de nuit (éclairage public, feux, rétroréflexion)</label><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
     <hr><div class="lbl">Thème de l'interface</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px">${[['light', 'Clair'], ['dark', 'Sombre']].map(([k, n]) => `<button type="button" class="btn" data-thm="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'light') === k}">${n}</button>`).join('')}</div>`;
@@ -6742,15 +6756,25 @@ function exportDXF(){
       cam.zoom = Math.max(c.minZoom, Math.min(c.maxZoom, cam.zoom / k)); cam.updateProjectionMatrix();
       if (c.zoomToCursor !== false){ w.set(ndc.x, ndc.y, 0).unproject(cam); v.sub(w); cam.position.add(v); c.target.add(v); }
     } else {
-      const dist = cam.position.distanceTo(c.target), nd = Math.max(c.minDistance, Math.min(c.maxDistance, dist * k));
-      const hit = () => { rc.setFromCamera(ndc, cam); return rc.ray.intersectPlane(pl, new THREE.Vector3()); };
-      if (c.zoomToCursor){ cam.getWorldDirection(w); pl.setFromNormalAndCoplanarPoint(w, c.target); }
-      const p0 = c.zoomToCursor ? hit() : null;
-      v.subVectors(cam.position, c.target).setLength(nd); cam.position.copy(c.target).add(v); cam.updateMatrixWorld();
-      const p1 = p0 && hit(); if (p0 && p1){ v.subVectors(p0, p1); cam.position.add(v); c.target.add(v); }
+      /* zoom « vers ce qui est sous le curseur » : la caméra ET le point visé se rapprochent du point du sol (ou de la maquette)
+         pointé — on peut donc toujours aller au plus près, quel que soit l'endroit où se trouvait le point visé */
+      rc.setFromCamera(ndc, cam); let P = null;
+      const terr = typeof worldGroup !== 'undefined' ? worldGroup.children.find(o => o.userData?.terrain) : null;
+      if (terr) P = rc.intersectObject(terr, false)[0]?.point || null;
+      if (!P){ pl.setFromNormalAndCoplanarPoint(w.set(0, 1, 0), c.target); P = rc.ray.intersectPlane(pl, new THREE.Vector3()); }
+      if (!P || P.distanceTo(cam.position) > c.maxDistance * 2) P = c.target.clone();
+      const dC = cam.position.distanceTo(P), dT = cam.position.distanceTo(c.target); let kk = k;
+      if (dC * kk < 1.5) kk = 1.5 / Math.max(dC, 1e-3);                        // jamais à moins de 1,5 m du point visé
+      if (dT * kk > c.maxDistance) kk = c.maxDistance / Math.max(dT, 1e-3);     // ni plus loin que la limite
+      cam.position.sub(P).multiplyScalar(kk).add(P); c.target.sub(P).multiplyScalar(kk).add(P);
+      keepAbove(cam, c);
     }
     c.update();
   };
+  /* la caméra ne passe jamais sous le sol / la maquette (relief NGF quand il est connu, sinon le plan du sol) */
+  const keepAbove = (cam, c) => { if (cam.isOrthographicCamera) return; const g = typeof H === 'function' && typeof WORLD !== 'undefined' && WORLD ? H(cam.position.x, -cam.position.z) : 0, min = g + 1.2;
+    if (cam.position.y < min){ cam.position.y = min; } if (c && c.target.y < g - 0.5) c.target.y = g - 0.5; };
+  for (const c of ctls) c.addEventListener('change', () => keepAbove(c.object, c));
   /* glissement : chaque cran ajoute son zoom à une réserve, consommée en douceur sur ≈ 150 ms (même amplitude qu'avant, sans à-coup) */
   let pend = 0, pc = null, px = 0, py = 0, raf = 0, last = 0;
   const tick = now => { const dt = Math.min(50, now - (last || now)); last = now; if (!pc || Math.abs(pend) < 1e-4){ pend = 0; raf = 0; last = 0; return; }
@@ -6813,7 +6837,7 @@ function loop(now){
   simTick(now);
   const moved = ctl().update(); if (updateSignals()) dirty = true;
   if (moved){ lastMove = now; setPR(prLow); }
-  else if (prNow !== PR_FULL && now - lastMove > 200 && !SIM.on){ setPR(PR_FULL); dirty = true; }
+  else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (moved || dirty){ const t = performance.now(); renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
     if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, 1.25)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
 }
@@ -6871,7 +6895,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+window.ATDebug = {camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>

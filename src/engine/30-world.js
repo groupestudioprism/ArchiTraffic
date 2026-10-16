@@ -71,7 +71,7 @@ const GROUND_COL = {
 };
 let groundCanvas = null, groundTex = null, orthoTex = null, orthoState = '';
 function paintGround(){
-  const W = WORLD.W, S = WORLD.size, PX = 2048, k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
+  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
   groundCanvas ??= document.createElement('canvas'); groundCanvas.width = groundCanvas.height = PX; const g = groundCanvas.getContext('2d');
   const X = x => (x + S / 2) * k, Y = y => (S / 2 - y) * k, R = rng(7);
   g.fillStyle = C.base; g.fillRect(0, 0, PX, PX);
@@ -218,7 +218,7 @@ function buildRoads(grp){
 /* sens de circulation : flèches de sens unique le long des voies, disque « sens interdit » à la sortie de chaque sens unique */
 let ARROW_GEO = null, NOENTRY_GEO = null;
 function buildOneways(grp, plan){
-  if (DISPLAY.lay.marks === false && !plan) return;
+  if (DISPLAY.lay.oneway === false || (DISPLAY.lay.marks === false && !plan)) return;
   if (!ARROW_GEO){ const sh = new THREE.Shape([[-1.6, -0.22], [0.4, -0.22], [0.4, -0.55], [1.6, 0], [0.4, 0.55], [0.4, 0.22], [-1.6, 0.22]].map(q => new THREE.Vector2(q[0], q[1]))); ARROW_GEO = new THREE.ShapeGeometry(sh); ARROW_GEO.rotateX(-Math.PI / 2); }
   if (!NOENTRY_GEO){ NOENTRY_GEO = new THREE.CircleGeometry(0.9, 24); NOENTRY_GEO.rotateX(-Math.PI / 2); }
   const arrows = [], ends = [];
