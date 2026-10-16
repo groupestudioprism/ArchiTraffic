@@ -418,7 +418,7 @@ function buildWorld(){
   if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
   if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
   if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
-  if (DISPLAY.lay.nets){ if (!WORLD.W.utilsLoaded) ensureUtilities(); buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
+  if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
   worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
