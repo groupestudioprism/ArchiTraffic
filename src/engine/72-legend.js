@@ -44,7 +44,7 @@ function renderLegendTab(){
   $('#lgPos').onclick = () => { state.legend.pos = null; save(); renderLegend(); };
 }
 /* ---------- étiquettes HTML : noms de rues, annotations, cotes, routes barrées ---------- */
-let annoKey = '', annos = []; const PIN_IMG = {};
+let annoKey = '', annos = [], labelsKey = null, labelsVer = -1; const PIN_IMG = {};
 function buildAnnos(){
   const L = $('#labels'); L.innerHTML = ''; annos = [];
   const mk = (cls, txt, xy, z = 0, extra = {}) => { const d = document.createElement('div'); d.className = 'anno ' + cls; d.textContent = txt; L.appendChild(d); annos.push({d, xy, z, ...extra}); return d; };
@@ -64,21 +64,23 @@ function buildAnnos(){
   }
 }
 function updateLabels(){
-  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || '');
+  const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
-  for (const a of pins){ const g = WORLD ? H(a.xy[0], a.xy[1]) : 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  for (const a of pins){ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+  // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
+  const show = (a, v) => { if (a.vis !== v){ a.vis = v; a.d.hidden = !v; } }, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
-    if (a.pin){ a.d.hidden = !a.show; if (a.show){ a.d.style.left = a.sx + 'px'; a.d.style.top = a.sy + 'px'; } continue; }
-    if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ a.d.hidden = true; continue; }
-    const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z));
-    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; a.d.hidden = !vis; if (!vis) continue;
-    a.d.style.left = x + 'px'; a.d.style.top = y + 'px';
-    if (a.street && view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; a.d.style.transform = `translate(-50%,-50%) rotate(${ang}deg)`; } else if (a.street) a.d.style.transform = 'translate(-50%,-50%)';
+    if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
+    if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
+    const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
+    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!vis) continue;
+    place(a, x, y);
+    if (a.street){ let tr = 'translate(-50%,-50%)'; if (view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; tr += ` rotate(${ang.toFixed(1)}deg)`; } if (a.tr !== tr){ a.tr = tr; a.d.style.transform = tr; } }
   }
 }
 function updateCompass(){ const g = $('#cmpG'); if (!g) return; let a = 0; if (view !== '2d'){ const d = new THREE.Vector3(); persp.getWorldDirection(d); a = Math.atan2(d.x, -d.z) * 180 / Math.PI; } g.style.transform = `rotate(${-a}deg)`; }

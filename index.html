@@ -939,7 +939,7 @@ a.ap-link{text-decoration:none}
 :root[data-theme="dark"] .ap-warnbox{background:#2A2114;border-color:#5A4321;color:#F0CF9C}
 
 /* annotations à l'écran (texte des notes) */
-.anno{position:absolute;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
+.anno{position:absolute;left:0;top:0;will-change:translate;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
 .anno.big{font-size:16px}
 .anno.dimtxt{border:0;background:#FFFFFFD9;font:600 12px var(--f-mono);padding:1px 5px;border-radius:4px}
 .anno.street{border:0;background:transparent;box-shadow:none;font:600 11px var(--f-body);color:#3B4556;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;letter-spacing:.02em}
@@ -993,7 +993,7 @@ a.ap-link{text-decoration:none}
 :root[data-theme="dark"] .bgload{background:rgba(30,38,54,.7);border-color:rgba(255,255,255,.14)}
 
 /* repères de panneaux, façon point d'intérêt : bulle blanche + pointe, taille constante à l'écran */
-.anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
+.anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;}
 .anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
 .anno.pin img{width:50px;height:50px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:46px;height:46px;border-radius:50%;background:#F4F6FA}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
@@ -5333,7 +5333,9 @@ function lineModules(g, pts, tpl, len, id, make){
 function closureWidth(c){ let w = 0; for (let i = 0; i + 1 < (c.ids?.length || 0); i++){ const s = NET.segIdx.get(segKey(c.ids[i], c.ids[i + 1])); if (s) w = Math.max(w, NET.roads[s.ri].w); } return w || 6; }
 const OBJ_PROTO = new Map();
 let feuxKey = '';
+let stateVer = 0;   // incrémenté à chaque reconstruction du projet (les étiquettes ne recalculent leur clé qu'à ce moment)
 function rebuildProj(){
+  stateVer++;
   const fk = (state?.els || []).filter(e => e.t === 'obj' && e.k === 'FEUX' && !phOff(e)).map(e => Math.round(e.x) + ',' + Math.round(e.y)).join(';'); if (fk !== feuxKey){ feuxKey = fk; if (WORLD) buildWorld(); }   // carrefours à feux ajoutés ou retirés
   const keep = new Set();
   for (const e of state?.els || []){
@@ -6160,7 +6162,7 @@ function renderLegendTab(){
   $('#lgPos').onclick = () => { state.legend.pos = null; save(); renderLegend(); };
 }
 /* ---------- étiquettes HTML : noms de rues, annotations, cotes, routes barrées ---------- */
-let annoKey = '', annos = []; const PIN_IMG = {};
+let annoKey = '', annos = [], labelsKey = null, labelsVer = -1; const PIN_IMG = {};
 function buildAnnos(){
   const L = $('#labels'); L.innerHTML = ''; annos = [];
   const mk = (cls, txt, xy, z = 0, extra = {}) => { const d = document.createElement('div'); d.className = 'anno ' + cls; d.textContent = txt; L.appendChild(d); annos.push({d, xy, z, ...extra}); return d; };
@@ -6180,21 +6182,23 @@ function buildAnnos(){
   }
 }
 function updateLabels(){
-  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || '');
+  const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
-  for (const a of pins){ const g = WORLD ? H(a.xy[0], a.xy[1]) : 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  for (const a of pins){ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+  // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
+  const show = (a, v) => { if (a.vis !== v){ a.vis = v; a.d.hidden = !v; } }, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
-    if (a.pin){ a.d.hidden = !a.show; if (a.show){ a.d.style.left = a.sx + 'px'; a.d.style.top = a.sy + 'px'; } continue; }
-    if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ a.d.hidden = true; continue; }
-    const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z));
-    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; a.d.hidden = !vis; if (!vis) continue;
-    a.d.style.left = x + 'px'; a.d.style.top = y + 'px';
-    if (a.street && view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; a.d.style.transform = `translate(-50%,-50%) rotate(${ang}deg)`; } else if (a.street) a.d.style.transform = 'translate(-50%,-50%)';
+    if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
+    if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
+    const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
+    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!vis) continue;
+    place(a, x, y);
+    if (a.street){ let tr = 'translate(-50%,-50%)'; if (view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; tr += ` rotate(${ang.toFixed(1)}deg)`; } if (a.tr !== tr){ a.tr = tr; a.d.style.transform = tr; } }
   }
 }
 function updateCompass(){ const g = $('#cmpG'); if (!g) return; let a = 0; if (view !== '2d'){ const d = new THREE.Vector3(); persp.getWorldDirection(d); a = Math.atan2(d.x, -d.z) * 180 / Math.PI; } g.style.transform = `rotate(${-a}deg)`; }

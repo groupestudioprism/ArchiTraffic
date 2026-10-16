@@ -199,7 +199,9 @@ function lineModules(g, pts, tpl, len, id, make){
 function closureWidth(c){ let w = 0; for (let i = 0; i + 1 < (c.ids?.length || 0); i++){ const s = NET.segIdx.get(segKey(c.ids[i], c.ids[i + 1])); if (s) w = Math.max(w, NET.roads[s.ri].w); } return w || 6; }
 const OBJ_PROTO = new Map();
 let feuxKey = '';
+let stateVer = 0;   // incrémenté à chaque reconstruction du projet (les étiquettes ne recalculent leur clé qu'à ce moment)
 function rebuildProj(){
+  stateVer++;
   const fk = (state?.els || []).filter(e => e.t === 'obj' && e.k === 'FEUX' && !phOff(e)).map(e => Math.round(e.x) + ',' + Math.round(e.y)).join(';'); if (fk !== feuxKey){ feuxKey = fk; if (WORLD) buildWorld(); }   // carrefours à feux ajoutés ou retirés
   const keep = new Set();
   for (const e of state?.els || []){
