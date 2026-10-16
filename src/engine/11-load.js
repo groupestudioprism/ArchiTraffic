@@ -18,23 +18,21 @@ function splitBounds(B, m){
   const cx = (B.w + B.e) / 2, cy = (B.s + B.n) / 2; return out.sort((a, b) => Math.hypot(a.cx - cx, a.cy - cy) - Math.hypot(b.cx - cx, b.cy - cy));
 }
 const quarter = b => { const ms = (b.s + b.n) / 2, mw = (b.w + b.e) / 2; return [{s:b.s, w:b.w, n:ms, e:mw}, {s:b.s, w:mw, n:ms, e:b.e}, {s:ms, w:b.w, n:b.n, e:mw}, {s:ms, w:mw, n:b.n, e:b.e}]; };
-let opSlot = 0;
-async function overpassTile(q){
-  let wait = 1500;
-  for (let a = 0; a < 6; a++){
-    const url = OVERPASS[(opSlot++) % OVERPASS.length], c = new AbortController(), t = setTimeout(() => c.abort(), 60000);
-    try {
-      const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal});
-      if (r.status === 400) throw Object.assign(new Error('bad'), {fatal:true});
-      if (!r.ok) throw new Error('http ' + r.status);
-      const j = await r.json();
-      if (/runtime error|out of memory|timed out|Timeout/i.test(j.remark || '')) throw Object.assign(new Error('heavy'), {heavy:true});
-      return j;
-    } catch(e){ if (e.fatal || e.heavy && a >= 1) throw e; }
-    finally { clearTimeout(t); }
-    await sleep(wait + Math.random() * 800); wait = Math.min(wait * 2, 15000);
-  }
-  throw new Error('overpass injoignable');
+/* une requête Overpass rapide : serveur principal d'abord ; s'il n'a pas répondu en 6 s, on lance la même requête
+   sur un miroir et on garde la première réponse (l'autre est annulée). Une erreur passe aussitôt au serveur suivant.
+   Plafond 40 s au total : jamais d'attente de plusieurs minutes. */
+function overpassTile(q, {hedge = 4000, total = 40000} = {}){
+  return new Promise((res, rej) => {
+    const ctrls = []; let idx = 0, pending = 0, done = false, last = null;
+    const end = (ok, v) => { if (done) return; done = true; clearTimeout(tT); clearTimeout(tH); ctrls.forEach(c => c.abort()); ok ? res(v) : rej(v); };
+    const launch = () => { if (done || idx >= OVERPASS.length) return; const url = OVERPASS[idx++], c = new AbortController(); ctrls.push(c); pending++;
+      fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal})
+        .then(async r => { if (r.status === 400) throw Object.assign(new Error('bad'), {fatal:true}); if (!r.ok) throw new Error('http ' + r.status);
+          const j = await r.json(); if (/runtime error|out of memory|timed out|Timeout/i.test(j.remark || '')) throw Object.assign(new Error('heavy'), {heavy:true}); end(true, j); })
+        .catch(e => { last = e; pending--; if (done) return; if (e.fatal || e.heavy) return end(false, e); if (idx < OVERPASS.length) launch(); else if (!pending) end(false, e); }); };
+    const tT = setTimeout(() => end(false, last || new Error('délai dépassé')), total), tH = setTimeout(launch, hedge);
+    launch();
+  });
 }
 /* q(bb) : texte de requête pour une emprise « (s,w,n,e) » ; renvoie {elements, lost} */
 async function overpassTiled(kind, B, tileM, q, prog, depth = 0){
@@ -46,7 +44,8 @@ async function overpassTiled(kind, B, tileM, q, prog, depth = 0){
     if (hit && Date.now() - hit.at < 30 * 864e5){ take(hit.el); return; }
     try { const j = await overpassTile(q(`(${b.s},${b.w},${b.n},${b.e})`)); take(j.elements || []); IDB.set(key, {at:Date.now(), el:j.elements || []}); }
     catch(e){
-      if (depth < 2 && !e.fatal){ for (const s of quarter(b)){ const r = await overpassTiled(kind, s, 0, q, prog, depth + 1); take(r.elements); lost += r.lost; } }
+      // trop lourd pour le serveur : on découpe ; sinon on n'insiste pas
+      if (e.heavy && depth < 2){ for (const s of quarter(b)){ const r = await overpassTiled(kind, s, 0, q, prog, depth + 1); take(r.elements); lost += r.lost; } }
       else lost++;
     }
   };
@@ -56,11 +55,11 @@ async function overpassTiled(kind, B, tileM, q, prog, depth = 0){
 }
 /* BD TOPO par tuiles de 1 km (≈ 1 000 à 5 000 bâtiments en ville) */
 async function bdtopoTiled(B, prog){
-  const tiles = splitBounds(B, 1000), out = [], seen = new Set(); let lost = 0, i = 0; prog.total += tiles.length;
+  const tiles = splitBounds(B, 2200), out = [], seen = new Set(); let lost = 0, i = 0; prog.total += tiles.length;
   const one = async b => {
     const key = tileKey('bdt', b), hit = await IDB.get(key);
     let f = hit && Date.now() - hit.at < 30 * 864e5 ? hit.f : null;
-    for (let a = 0; !f && a < 4; a++){ try { f = await loadBDTopo(b); IDB.set(key, {at:Date.now(), f}); } catch(e){ await sleep(1200 * (a + 1)); } }
+    for (let a = 0; !f && a < 2; a++){ try { f = await loadBDTopo(b); IDB.set(key, {at:Date.now(), f}); } catch(e){ await sleep(800); } }
     if (!f){ lost++; return; }
     for (const x of f){ const id = x.id || x.properties?.cleabs; if (id && seen.has(id)) continue; if (id) seen.add(id); out.push(x); }
   };
