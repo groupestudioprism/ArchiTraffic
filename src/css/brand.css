@@ -178,3 +178,11 @@
 .bgload[hidden]{display:none}.bgload .ap-spin{width:16px;height:16px;border:2px solid rgba(120,130,160,.25);border-top-color:var(--orange);border-radius:50%;animation:apSpin .9s linear infinite;flex:none}
 .bgload span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bgload b{display:block;width:70px;height:5px;border-radius:99px;background:rgba(120,130,160,.2);overflow:hidden;flex:none}.bgload b i{display:block;height:100%;width:0;background:var(--grad);transition:width .4s}
 :root[data-theme="dark"] .bgload{background:rgba(30,38,54,.7);border-color:rgba(255,255,255,.14)}
+
+/* repères de panneaux, façon point d'intérêt : bulle blanche + pointe, taille constante à l'écran */
+.anno.pin{padding:3px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
+.anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
+.anno.pin img{width:26px;height:26px;object-fit:contain;display:block}
+.anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
+@keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
+:root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
