@@ -201,11 +201,11 @@ function rebuildProj(){
   for (const e of state?.els || []){
     const sig = elSig(e); let c = projCache.get(e.id);
     if (!c || c.sig !== sig){ if (c){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); } let grp; try { grp = buildEl(e); } catch(err){ console.warn('élément', e, err); grp = new THREE.Group(); } c = {sig, grp}; projCache.set(e.id, c); projGroup.add(grp); }
-    if (e.hidden) c.grp.visible = false; else c.grp.visible = true;
+    c.grp.visible = !e.hidden && !phOff(e);
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => o.geometry?.dispose()); projCache.delete(id); }
-  applySel(); renderLegend(); simNetworkChanged(); dirty = true;
+  applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);

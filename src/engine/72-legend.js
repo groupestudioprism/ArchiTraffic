@@ -3,7 +3,7 @@ function legendEntries(){
   const out = [], seen = new Map(), hide = new Set(state.legend.hide || []);
   const add = (key, html, label, n = 1) => { if (seen.has(key)){ seen.get(key).n += n; return; } const e = {key, html, label, n}; seen.set(key, e); out.push(e); };
   for (const e of state.els){
-    if (e.hidden) continue;
+    if (e.hidden || phOff(e)) continue;
     if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'voie' ? 'File neutralisée (circulation maintenue)' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
@@ -53,7 +53,7 @@ function buildAnnos(){
   if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
     const d = mk('pin sigpin', '', n.xy, 4, {pin:true, sig:true, pri:1.5, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
   for (const e of state?.els || []){
-    if (e.hidden) continue;
+    if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
@@ -64,7 +64,7 @@ function buildAnnos(){
   }
 }
 function updateLabels(){
-  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names;
+  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || '');
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)

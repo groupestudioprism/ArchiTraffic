@@ -114,7 +114,7 @@ function detourPath(pts){
   out = ids.map(id => NET.nodes.get(id).xy); return {pts:out, ids};
 }
 /* ---------- actions des outils ---------- */
-function addEl(e, select = true){ edit(() => { state.els.push(e); }); if (select){ sel = e.id; applySel(); refreshPanel(); } return e; }
+function addEl(e, select = true){ if (curPh() && e.ph === undefined) e.ph = curPh(); edit(() => { state.els.push(e); }); if (select){ sel = e.id; applySel(); refreshPanel(); } return e; }
 function onClick(ev, q){
   if (tool === 'select'){ const id = pickEl(ev); sel = id; applySel(); if (id && activeTab !== 'props') setTab('props'); else refreshPanel(); return; }
   if (tool === 'copy'){ if (draw.copy){ const e = JSON.parse(JSON.stringify(draw.copy)); e.id = uid8(); if (e.t === 'obj' || e.t === 'note' || e.t === 'model'){ e.x = q[0]; e.y = q[1]; } else { const c = elCenter(draw.copy), d = V.sub(q, c); shiftEl(e, d); } addEl(e); return; }
@@ -146,7 +146,7 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
@@ -159,7 +159,7 @@ function makeClosure(nr){
   const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
   // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
-  beginEdit(); state.els.push(cl);
+  if (curPh()) cl.ph = curPh(); beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
   if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; if (cl.plWarn) msg += ' · ⚠ aucun itinéraire adapté aux poids lourds dans la zone : déviation VL, PL à dévier en amont (panneau B8 posé)'; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
@@ -194,14 +194,14 @@ function addDetoursFor(cl){
   }
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
-    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
+    state.els.push({id:uid8(), t:'detour', cl:cl.id, ph:cl.ph, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
   cl.plWarn = list.some(r => r.vl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
 function autoSigns(cl){
   state.els = state.els.filter(e => !(e.t === 'obj' && e.auto === cl.id));
-  const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id});
+  const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id, ph:cl.ph});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
   const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)

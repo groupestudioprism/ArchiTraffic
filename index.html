@@ -1006,6 +1006,18 @@ a.ap-link{text-decoration:none}
 .anno.sigpin[data-s="r"] i:nth-child(1){background:#FF2A1A;box-shadow:0 0 6px #FF2A1A}
 .anno.sigpin[data-s="y"] i:nth-child(2){background:#FFB300;box-shadow:0 0 6px #FFB300}
 .anno.sigpin[data-s="g"] i:nth-child(3){background:#18E070;box-shadow:0 0 6px #18E070}
+
+/* barre de phasage (haut gauche de la vue) */
+.phbar{position:absolute;left:12px;top:12px;z-index:6;display:flex;align-items:center;gap:4px;padding:5px;border-radius:14px;background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6);border:1px solid rgba(255,255,255,.8);box-shadow:0 6px 20px -10px rgba(20,30,60,.35);max-width:calc(100% - 420px);overflow-x:auto}
+.ph-l{font:700 10.5px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--mut);padding:0 6px}
+.ph-c{border:0;background:transparent;color:var(--ink);font:600 12.5px var(--f-body);padding:6px 10px;border-radius:9px;cursor:pointer;white-space:nowrap;display:flex;gap:5px;align-items:center}
+.ph-c em{font-style:normal;font-weight:500;color:var(--mut);max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.ph-c:hover{background:rgba(0,0,0,.05)}.ph-c.on{background:var(--grad);color:#fff}.ph-c.on em{color:#fffd}
+.ph-add{font-size:15px;padding:4px 10px}.ph-auto{color:var(--accent)}
+.phinfo{position:absolute;left:12px;top:58px;z-index:6;font-size:12px;color:var(--ink);padding:7px 11px;border-radius:11px;background:rgba(255,255,255,.8);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 4px 14px -8px rgba(20,30,60,.35);max-width:min(520px,calc(100% - 420px))}
+.phinfo[hidden]{display:none}.ph-w{display:block;color:#B3261E;margin-top:3px}
+:root[data-theme="dark"] .phbar,:root[data-theme="dark"] .phinfo{background:rgba(30,38,54,.75);border-color:rgba(255,255,255,.12)}
+@media (max-width:760px){.phbar,.phinfo{max-width:calc(100% - 24px)}}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -3211,7 +3223,7 @@ function sectionOneway(ids){
 /* routes barrées actives → ensembles de segments fermés */
 function closedSets(els){
   const both = new Set(), dir = new Set(), slow = new Map();
-  for (const c of els) if (c.t === 'closure' && !c.off && c.ids?.length > 1){
+  for (const c of els) if (c.t === 'closure' && !c.off && !phOff(c) && c.ids?.length > 1){
     for (let i = 0; i + 1 < c.ids.length; i++){
       const a = c.ids[i], b = c.ids[i + 1];
       if (c.mode === 'alternat') slow.set(segKey(a, b), 0.45);
@@ -5207,11 +5219,11 @@ function rebuildProj(){
   for (const e of state?.els || []){
     const sig = elSig(e); let c = projCache.get(e.id);
     if (!c || c.sig !== sig){ if (c){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); } let grp; try { grp = buildEl(e); } catch(err){ console.warn('élément', e, err); grp = new THREE.Group(); } c = {sig, grp}; projCache.set(e.id, c); projGroup.add(grp); }
-    if (e.hidden) c.grp.visible = false; else c.grp.visible = true;
+    c.grp.visible = !e.hidden && !phOff(e);
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => o.geometry?.dispose()); projCache.delete(id); }
-  applySel(); renderLegend(); simNetworkChanged(); dirty = true;
+  applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
@@ -5523,7 +5535,7 @@ function detourPath(pts){
   out = ids.map(id => NET.nodes.get(id).xy); return {pts:out, ids};
 }
 /* ---------- actions des outils ---------- */
-function addEl(e, select = true){ edit(() => { state.els.push(e); }); if (select){ sel = e.id; applySel(); refreshPanel(); } return e; }
+function addEl(e, select = true){ if (curPh() && e.ph === undefined) e.ph = curPh(); edit(() => { state.els.push(e); }); if (select){ sel = e.id; applySel(); refreshPanel(); } return e; }
 function onClick(ev, q){
   if (tool === 'select'){ const id = pickEl(ev); sel = id; applySel(); if (id && activeTab !== 'props') setTab('props'); else refreshPanel(); return; }
   if (tool === 'copy'){ if (draw.copy){ const e = JSON.parse(JSON.stringify(draw.copy)); e.id = uid8(); if (e.t === 'obj' || e.t === 'note' || e.t === 'model'){ e.x = q[0]; e.y = q[1]; } else { const c = elCenter(draw.copy), d = V.sub(q, c); shiftEl(e, d); } addEl(e); return; }
@@ -5555,7 +5567,7 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
@@ -5568,7 +5580,7 @@ function makeClosure(nr){
   const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
   // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
-  beginEdit(); state.els.push(cl);
+  if (curPh()) cl.ph = curPh(); beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
   if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; if (cl.plWarn) msg += ' · ⚠ aucun itinéraire adapté aux poids lourds dans la zone : déviation VL, PL à dévier en amont (panneau B8 posé)'; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
@@ -5603,14 +5615,14 @@ function addDetoursFor(cl){
   }
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
-    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
+    state.els.push({id:uid8(), t:'detour', cl:cl.id, ph:cl.ph, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
   cl.plWarn = list.some(r => r.vl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
 function autoSigns(cl){
   state.els = state.els.filter(e => !(e.t === 'obj' && e.auto === cl.id));
-  const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id});
+  const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id, ph:cl.ph});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
   const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
@@ -5809,6 +5821,7 @@ function renderElProps(e){
   } else if (e.t === 'model'){
     h += `<div class="fields">${fld('eA', 'Orientation (°)', Math.round((e.a || 0) * 180 / Math.PI), 'number', 'step="1"')}</div><p class="hint">${MODELS.has(e.key) ? 'Maquette ARCHIPLAN placée à son adresse.' : 'La maquette n\'est pas enregistrée sur cet appareil : réimportez le fichier .glb (Fichier → Importer une maquette ARCHIPLAN).'}</p>`;
   }
+  if (state.phases?.length) h += `<div class="fields">${selF('ePh', 'Phase de travaux', [['', 'Toutes les phases (permanent)'], ...state.phases.map(p => [p.id, p.name])], e.ph || '')}</div>`;
   h += `<div class="btns"><button class="btn" id="eZoom">Centrer la vue</button><button class="btn" id="eHide">${e.hidden ? 'Afficher' : 'Masquer'}</button><button class="btn danger" id="eDel">Supprimer</button><button class="btn" id="eBack">← Tous les éléments</button></div>`;
   return h;
 }
@@ -5832,6 +5845,7 @@ function bindElProps(){
   b('eDet', () => { const r = (() => { let out; edit(() => { out = addDetoursFor(e); }); return out; })(); toast(r.ok ? `${r.ok} déviation${r.ok > 1 ? 's' : ''} recalculée${r.ok > 1 ? 's' : ''}` : 'Aucune déviation possible depuis ce tronçon.'); });
   b('eSig', () => { edit(() => autoSigns(e)); toast('Panneaux de route barrée et de déviation reposés'); });
   b('eZoom', () => { const c = elCenter(e); frameAt(c[0], c[1], e.pts ? Math.max(30, plLen(e.pts) / 2) : 20); });
+  ch('ePh', el => { const v = el.value || undefined; e.ph = v; for (const x of state.els) if (x.cl === e.id || x.auto === e.id) x.ph = v; });
   b('eHide', () => edit(() => { e.hidden = !e.hidden; })); b('eDel', deleteSel); b('eBack', () => { sel = null; applySel(); renderProps(); });
 }
 /* variantes d'exploitation d'une fermeture : fermeture totale ou sens unique temporaire (un seul sens dévié) */
@@ -5904,7 +5918,7 @@ function legendEntries(){
   const out = [], seen = new Map(), hide = new Set(state.legend.hide || []);
   const add = (key, html, label, n = 1) => { if (seen.has(key)){ seen.get(key).n += n; return; } const e = {key, html, label, n}; seen.set(key, e); out.push(e); };
   for (const e of state.els){
-    if (e.hidden) continue;
+    if (e.hidden || phOff(e)) continue;
     if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'voie' ? 'File neutralisée (circulation maintenue)' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
@@ -5954,7 +5968,7 @@ function buildAnnos(){
   if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
     const d = mk('pin sigpin', '', n.xy, 4, {pin:true, sig:true, pri:1.5, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
   for (const e of state?.els || []){
-    if (e.hidden) continue;
+    if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
@@ -5965,7 +5979,7 @@ function buildAnnos(){
   }
 }
 function updateLabels(){
-  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names;
+  const k = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || '');
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
@@ -6133,6 +6147,71 @@ function renderViewMenu(){
   m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });
+}
+
+/* ==== 75-phases.js ==== */
+/* ============ Phasage des travaux ============
+   Un chantier se découpe en phases (phase 1 : cette rue, phase 2 : celle-là…). Chaque élément appartient à une phase,
+   ou à toutes (permanent : base vie, panneaux d'information…). En choisissant une phase, on ne voit et on ne simule que
+   ce qui est en place pendant cette phase : les déviations sont calculées sur les seules fermetures de la phase.
+   « Phasage automatique » répartit les routes barrées dans le moins de phases possible, sans jamais fermer en même temps
+   deux rues voisines ni une rue qui sert de déviation à une autre (coloration de graphe des conflits). */
+const curPh = () => state?.phase && state.phase !== 'all' ? state.phase : null;
+const phOff = e => !!(curPh() && e?.ph && e.ph !== curPh());
+const phName = id => state.phases?.find(p => p.id === id)?.name || 'Phase';
+function setPhase(id){ state.phase = id || 'all'; save(); sel = null; rebuildProj(); refreshPanel(); renderPhaseBar(); annoKey = ''; dirty = true; }
+function addPhase(){ edit(() => { state.phases = state.phases || []; const n = state.phases.length + 1; state.phases.push({id:uid8(), name:`Phase ${n}`, from:'', to:''}); }); setPhase(state.phases.at(-1).id); }
+function renderPhaseBar(){
+  let bar = $('#phBar'); if (!bar){ bar = document.createElement('div'); bar.id = 'phBar'; bar.className = 'phbar'; vpEl.appendChild(bar); }
+  const P = state?.phases || [], cur = state?.phase || 'all';
+  bar.innerHTML = `<span class="ph-l">Phasage</span><button class="ph-c${cur === 'all' ? ' on' : ''}" data-ph="all" title="Tout le chantier, toutes phases confondues">Toutes</button>`
+    + P.map((p, i) => `<button class="ph-c${cur === p.id ? ' on' : ''}" data-ph="${p.id}" title="${esc(p.name)}${p.from ? ' · du ' + p.from : ''}${p.to ? ' au ' + p.to : ''} — double-clic pour modifier">${i + 1}<em>${esc(p.name.replace(/^Phase \d+\s*[:·-]?\s*/, '')) || ''}</em></button>`).join('')
+    + `<button class="ph-c ph-add" id="phAdd" title="Ajouter une phase">+</button>${P.length ? '' : ''}<button class="ph-c ph-auto" id="phAuto" title="Répartir automatiquement les routes barrées en phases compatibles">Auto</button>`;
+  bar.querySelectorAll('[data-ph]').forEach(b => { b.onclick = () => setPhase(b.dataset.ph); if (b.dataset.ph !== 'all') b.ondblclick = () => editPhase(b.dataset.ph); });
+  $('#phAdd').onclick = addPhase; $('#phAuto').onclick = autoPhasing;
+  let info = $('#phInfo'); if (!info){ info = document.createElement('div'); info.id = 'phInfo'; info.className = 'phinfo'; vpEl.appendChild(info); }
+  const a = curPh() ? phaseReport(curPh()) : null; info.hidden = !a;
+  if (a) info.innerHTML = `<b>${esc(phName(curPh()))}</b> · ${a.cl} route${a.cl > 1 ? 's' : ''} barrée${a.cl > 1 ? 's' : ''} · ${a.det} déviation${a.det > 1 ? 's' : ''}${a.extra ? ` (+${fmtM(a.extra)} max)` : ''}${a.warn.map(w => `<span class="ph-w">⚠ ${esc(w)}</span>`).join('')}`;
+}
+function editPhase(id){
+  const p = state.phases.find(x => x.id === id); if (!p) return;
+  dlgEngine(`<div class="ed-h"><div><p class="eyebrow">Phase de travaux</p><h3 class="ed-name" style="margin:0">${esc(p.name)}</h3></div></div>
+    <div class="ed-body" style="display:block"><div class="fields"><label class="f wide"><span>Nom</span><span class="in"><input id="phN" value="${esc(p.name)}"></span></label>
+    <label class="f"><span>Du</span><span class="in"><input id="phF" type="date" value="${esc(p.from || '')}"></span></label><label class="f"><span>Au</span><span class="in"><input id="phT" type="date" value="${esc(p.to || '')}"></span></label></div></div>
+    <div class="ed-f"><button class="btn" id="phDel" style="color:var(--closed)">Supprimer la phase</button><span style="flex:1"></span><button class="btn" id="phNo">Annuler</button><button class="btn primary" id="phOk">Enregistrer</button></div>`);
+  $('#phNo').onclick = closeEngine;
+  $('#phOk').onclick = () => { edit(() => { p.name = $('#phN').value.trim() || p.name; p.from = $('#phF').value; p.to = $('#phT').value; }); closeEngine(); renderPhaseBar(); };
+  $('#phDel').onclick = () => { edit(() => { state.phases = state.phases.filter(x => x !== p); for (const e of state.els) if (e.ph === p.id) delete e.ph; }); closeEngine(); setPhase('all'); toast('Phase supprimée : ses éléments sont repassés en « toutes phases ».', 4000); };
+}
+/* bilan d'une phase + contrôles de cohérence */
+function phaseReport(id){
+  const els = state.els.filter(e => e.ph === id || !e.ph), cls = els.filter(e => e.t === 'closure' && e.ph === id), dets = els.filter(e => e.t === 'detour' && e.ph === id), warn = [];
+  for (const c of cls) if (c.mode === 'total' && !dets.some(d => d.cl === c.id)) warn.push(`${c.name || 'Rue'} : aucune déviation`);
+  const C = closedSets(els);
+  for (const d of dets) if (d.ids?.some((n, k) => k && C.both.has(segKey(d.ids[k - 1], n)))) warn.push(`${d.name} emprunte une rue barrée de la phase`);
+  for (let i = 0; i < cls.length; i++) for (let j = i + 1; j < cls.length; j++){ const A = new Set(cls[i].ids); if (cls[j].ids.some(n => A.has(n)) && cls[i].mode !== cls[j].mode) warn.push(`${cls[i].name} et ${cls[j].name} se touchent : vérifier l'accès riverains`); }
+  return {cl:cls.length, det:dets.length, extra:Math.max(0, ...dets.map(d => d.extra || 0)), warn:[...new Set(warn)]};
+}
+/* phasage automatique : graphe des conflits entre routes barrées, coloration gloutonne (plus contraint d'abord) */
+function autoPhasing(){
+  const cls = state.els.filter(e => e.t === 'closure' && e.ids?.length > 1);
+  if (cls.length < 2){ toast('Il faut au moins deux routes barrées pour proposer un phasage.', 4000); return; }
+  const empty = {both:new Set(), dir:new Set(), slow:new Map()}, use = new Map();
+  for (const c of cls){ const s = new Set(); for (const r of proposeDetours({...c, ph:undefined}, [])) if (!r.fail) for (let k = 1; k < r.ids.length; k++) s.add(segKey(r.ids[k - 1], r.ids[k])); use.set(c.id, s); }
+  const keys = c => { const s = new Set(); for (let k = 1; k < c.ids.length; k++) s.add(segKey(c.ids[k - 1], c.ids[k])); return s; };
+  const conflict = (a, b) => { const A = new Set(a.ids); if (b.ids.some(n => A.has(n))) return true;   // rues voisines (même carrefour)
+    const kb = keys(b), ka = keys(a); for (const k of use.get(a.id)) if (kb.has(k)) return true; for (const k of use.get(b.id)) if (ka.has(k)) return true; return false; };
+  const deg = new Map(cls.map(c => [c.id, cls.filter(o => o !== c && conflict(c, o)).length])), order = cls.slice().sort((a, b) => deg.get(b.id) - deg.get(a.id)), col = new Map();
+  for (const c of order){ const used = new Set(cls.filter(o => col.has(o.id) && conflict(c, o)).map(o => col.get(o.id))); let k = 0; while (used.has(k)) k++; col.set(c.id, k); }
+  const nPh = Math.max(...col.values()) + 1;
+  beginEdit();
+  state.phases = Array.from({length:nPh}, (_, i) => state.phases?.[i] || {id:uid8(), name:`Phase ${i + 1}`, from:'', to:''}).slice(0, nPh);
+  for (const c of cls){ const ph = state.phases[col.get(c.id)].id; c.ph = ph; for (const x of state.els) if (x.cl === c.id || x.auto === c.id) x.ph = ph; }
+  endEdit();
+  // déviations recalculées phase par phase (chacune ne voit que ses propres fermetures)
+  for (const p of state.phases){ state.phase = p.id; for (const c of cls.filter(c => c.ph === p.id && c.mode !== 'alternat' && c.mode !== 'voie')){ addDetoursFor(c); if (TOOLOPT.autoSigns) autoSigns(c); } }
+  setPhase(state.phases[0].id);
+  toast(`${cls.length} routes barrées réparties en ${nPh} phase${nPh > 1 ? 's' : ''} : jamais deux rues voisines fermées ensemble, ni une rue qui sert de déviation à une autre.`, 7000);
 }
 
 /* ==== 79-wheel.js ==== */

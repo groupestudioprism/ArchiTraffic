@@ -102,6 +102,7 @@ function renderElProps(e){
   } else if (e.t === 'model'){
     h += `<div class="fields">${fld('eA', 'Orientation (°)', Math.round((e.a || 0) * 180 / Math.PI), 'number', 'step="1"')}</div><p class="hint">${MODELS.has(e.key) ? 'Maquette ARCHIPLAN placée à son adresse.' : 'La maquette n\'est pas enregistrée sur cet appareil : réimportez le fichier .glb (Fichier → Importer une maquette ARCHIPLAN).'}</p>`;
   }
+  if (state.phases?.length) h += `<div class="fields">${selF('ePh', 'Phase de travaux', [['', 'Toutes les phases (permanent)'], ...state.phases.map(p => [p.id, p.name])], e.ph || '')}</div>`;
   h += `<div class="btns"><button class="btn" id="eZoom">Centrer la vue</button><button class="btn" id="eHide">${e.hidden ? 'Afficher' : 'Masquer'}</button><button class="btn danger" id="eDel">Supprimer</button><button class="btn" id="eBack">← Tous les éléments</button></div>`;
   return h;
 }
@@ -125,6 +126,7 @@ function bindElProps(){
   b('eDet', () => { const r = (() => { let out; edit(() => { out = addDetoursFor(e); }); return out; })(); toast(r.ok ? `${r.ok} déviation${r.ok > 1 ? 's' : ''} recalculée${r.ok > 1 ? 's' : ''}` : 'Aucune déviation possible depuis ce tronçon.'); });
   b('eSig', () => { edit(() => autoSigns(e)); toast('Panneaux de route barrée et de déviation reposés'); });
   b('eZoom', () => { const c = elCenter(e); frameAt(c[0], c[1], e.pts ? Math.max(30, plLen(e.pts) / 2) : 20); });
+  ch('ePh', el => { const v = el.value || undefined; e.ph = v; for (const x of state.els) if (x.cl === e.id || x.auto === e.id) x.ph = v; });
   b('eHide', () => edit(() => { e.hidden = !e.hidden; })); b('eDel', deleteSel); b('eBack', () => { sel = null; applySel(); renderProps(); });
 }
 /* variantes d'exploitation d'une fermeture : fermeture totale ou sens unique temporaire (un seul sens dévié) */

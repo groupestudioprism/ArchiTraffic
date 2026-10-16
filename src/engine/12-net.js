@@ -83,7 +83,7 @@ function sectionOneway(ids){
 /* routes barrées actives → ensembles de segments fermés */
 function closedSets(els){
   const both = new Set(), dir = new Set(), slow = new Map();
-  for (const c of els) if (c.t === 'closure' && !c.off && c.ids?.length > 1){
+  for (const c of els) if (c.t === 'closure' && !c.off && !phOff(c) && c.ids?.length > 1){
     for (let i = 0; i + 1 < c.ids.length; i++){
       const a = c.ids[i], b = c.ids[i + 1];
       if (c.mode === 'alternat') slow.set(segKey(a, b), 0.45);
