@@ -208,3 +208,9 @@
 .chk{display:flex;gap:10px;align-items:flex-start;padding:7px 9px;border-radius:9px;font-size:13px}.chk[data-i]{cursor:pointer}.chk[data-i]:hover{background:rgba(0,0,0,.04)}
 .chk b{width:18px;flex:none;text-align:center}.chk.ok b{color:#1B8A3A}.chk.warn b{color:#C77700}.chk.err b{color:#C62828}.chk.info b{color:var(--accent)}
 .chk.ok span{color:var(--mut)}
+
+.gantt .gt-r{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.gantt .gt-r span{font-weight:600;font-size:13px}.gantt .gt-r small{display:block;font-weight:400;color:var(--mut);font-size:11.5px}
+.gantt .gt-r i{position:relative;height:26px;background:rgba(120,130,160,.1);border-radius:7px;display:block}
+.gantt .gt-r b{position:absolute;top:2px;bottom:2px;border-radius:6px;background:var(--grad);color:#fff;font:600 11px var(--f-body);display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden}
+.gantt .gt-r em{font-size:11.5px;color:var(--mut);padding-left:8px;line-height:26px}

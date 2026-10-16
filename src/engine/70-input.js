@@ -241,7 +241,9 @@ function autoSigns(cl){
     const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
     const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), sd), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
     const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
-    if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), face, {on:'red'}); add('AK3', right(back(40)), face); return; }
+    if (cl.mode === 'alternat'){ const A = alternatAdvice(cl), sp = V.add(base, V.mul(n, -w / 2 - 0.6));   // mode d'alternat selon le trafic (CEREMA)
+      if (A.mode === 'B15/C18') add(i === 0 ? 'B15' : 'C18', sp, face); else if (A.mode === 'K10') add('K10', sp, face); else add('KR11', sp, face, {on:'red'});
+      add('AK3', right(back(Math.min(apD, 100))), face); return; }
     // barrières K2 en travers de la chaussée, face aux usagers qui arrivent (pleine largeur, ou seule la voie de droite neutralisée)
     const o0 = -w / 2, o1 = lane ? 0 : w / 2, span = o1 - o0, nb = Math.max(1, Math.round(span / 2.2));
     if (!lane) for (let k = 0; k < nb; k++) add(k === Math.floor(nb / 2) && !lane ? 'KR_ROUTE' : 'K2', V.add(base, V.mul(n, o0 + (k + 0.5) * span / nb)), face, k === Math.floor(nb / 2) && !lane ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'});

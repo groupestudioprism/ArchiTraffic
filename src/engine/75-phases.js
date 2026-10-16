@@ -14,9 +14,9 @@ function renderPhaseBar(){
   const P = state?.phases || [], cur = state?.phase || 'all';
   bar.innerHTML = `<span class="ph-l">Phasage</span><button class="ph-c${cur === 'all' ? ' on' : ''}" data-ph="all" title="Tout le chantier, toutes phases confondues">Toutes</button>`
     + P.map((p, i) => `<button class="ph-c${cur === p.id ? ' on' : ''}" data-ph="${p.id}" title="${esc(p.name)}${p.from ? ' · du ' + p.from : ''}${p.to ? ' au ' + p.to : ''} — double-clic pour modifier">${i + 1}<em>${esc(p.name.replace(/^Phase \d+\s*[:·-]?\s*/, '')) || ''}</em></button>`).join('')
-    + `<button class="ph-c ph-add" id="phAdd" title="Ajouter une phase">+</button>${P.length ? '' : ''}<button class="ph-c ph-auto" id="phAuto" title="Répartir automatiquement les routes barrées en phases compatibles">Auto</button>`;
+    + `<button class="ph-c ph-add" id="phAdd" title="Ajouter une phase">+</button>${P.length ? '' : ''}${P.length ? '<button class="ph-c" id="phPlan" title="Planning des phases dans le temps">Planning</button>' : ''}<button class="ph-c ph-auto" id="phAuto" title="Répartir automatiquement les routes barrées en phases compatibles">Auto</button>`;
   bar.querySelectorAll('[data-ph]').forEach(b => { b.onclick = () => setPhase(b.dataset.ph); if (b.dataset.ph !== 'all') b.ondblclick = () => editPhase(b.dataset.ph); });
-  $('#phAdd').onclick = addPhase; $('#phAuto').onclick = autoPhasing;
+  $('#phAdd').onclick = addPhase; $('#phAuto').onclick = autoPhasing; if ($('#phPlan')) $('#phPlan').onclick = phasePlanning;
   let info = $('#phInfo'); if (!info){ info = document.createElement('div'); info.id = 'phInfo'; info.className = 'phinfo'; vpEl.appendChild(info); }
   const a = curPh() ? phaseReport(curPh()) : null; info.hidden = !a;
   if (a) info.innerHTML = `<b>${esc(phName(curPh()))}</b> · ${a.cl} route${a.cl > 1 ? 's' : ''} barrée${a.cl > 1 ? 's' : ''} · ${a.det} déviation${a.det > 1 ? 's' : ''}${a.extra ? ` (+${fmtM(a.extra)} max)` : ''}${a.warn.map(w => `<span class="ph-w">⚠ ${esc(w)}</span>`).join('')}`;

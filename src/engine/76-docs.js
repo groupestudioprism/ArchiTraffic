@@ -35,6 +35,8 @@ function siteChecks(){
       if (c.mode === 'sens' && !els.some(d => d.t === 'detour' && d.cl === c.id)) add('err', `${name} : sens fermé sans déviation`, q);
     }
   }
+  for (const c of cls) if (c.mode === 'alternat'){ const A = alternatAdvice(c); add(A.mode === 'impossible' ? 'err' : 'info', `${c.name} — alternat : ${A.txt}`, plAt(c.pts, plLen(c.pts) / 2).pt); }
+  extraChecks(add, els);
   // panneaux trop proches les uns des autres (lisibilité : ≥ 10 m entre deux panneaux successifs d'un même côté)
   const signs = objs.filter(o => LIBK[o.k]?.sign && !/^K5|^K2$/.test(o.k)); let close = 0;
   for (let i = 0; i < signs.length; i++) for (let j = i + 1; j < signs.length; j++){ const d = Math.hypot(signs[i].x - signs[j].x, signs[i].y - signs[j].y); if (d > 0.5 && d < 4 && Math.abs(((signs[i].a - signs[j].a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.5) close++; }
