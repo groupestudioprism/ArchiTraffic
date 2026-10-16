@@ -26,6 +26,9 @@ function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){
   const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(sigCtl(n))) % per + per) % per, half = per / 2;
+  const c = sigCtl(n);
+  // un seul axe équipé de feux (passage piéton, feux sur une seule rue) : vert long, rouge court (phase piétons/rue transversale)
+  if (c._one){ const P = SIGCYC.g + SIGCYC.y + 10, q1 = ((t + sigOffset(c)) % P + P) % P; return q1 < SIGCYC.g ? 'g' : q1 < SIGCYC.g + SIGCYC.y ? 'y' : 'r'; }
   const axis = sigAxis(n, d), q = (ph - axis * half + per) % per;
   return q < SIGCYC.g ? 'g' : q < SIGCYC.g + SIGCYC.y ? 'y' : 'r';
 }
@@ -35,11 +38,14 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; }
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; }
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
     const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); heads.push({n, d, p, a:Math.atan2(-d[1], -d[0])}); }
+  // référence d'axe = première approche ÉQUIPÉE de feux du carrefour ; si toutes les approches équipées sont sur le même axe → cycle « un seul axe »
+  for (const h of heads){ const c = sigCtl(h.n); if (!c._sref) c._sref = h.d; c._one = true; }
+  for (const h of heads){ const c = sigCtl(h.n); if (sigAxis(h.n, h.d) === 1) c._one = false; }
   // mât + caisson noir à plaque de contraste jaune (feux R11v français), face aux usagers
   const pole = new THREE.CylinderGeometry(0.055, 0.065, 3.3, 8); pole.translate(0, 1.65, 0);
   const box = new THREE.BoxGeometry(0.22, 0.78, 0.3); box.translate(0, 3.0, 0);

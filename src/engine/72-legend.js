@@ -73,7 +73,7 @@ function updateLabels(){
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
-  const show = (a, v) => { if (a.vis !== v){ a.vis = v; a.d.hidden = false; a.d.classList.toggle('off', !v); } }   // fondu au lieu d'apparition/disparition sèche, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
+  const show = (a, v) => { if (a.vis !== v){ a.vis = v; a.d.hidden = false; a.d.classList.toggle('off', !v); } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
