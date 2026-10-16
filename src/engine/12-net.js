@@ -19,7 +19,7 @@ function buildNet(W){
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
     }
   });
-  for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
+  for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals' || p.tags?.crossing === 'traffic_signals' || p.tags?.['crossing:signals'] === 'yes' || p.tags?.crossing_ref === 'pelican' || p.tags?.crossing_ref === 'toucan') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
   // abords d'écoles, crèches, collèges, hôpitaux (à moins de 80 m) : on n'y fait pas passer une déviation si l'on peut l'éviter
   const SENS = W.sens || []; for (const e of N.edges){ const a = N.nodes.get(e.from).xy, b = N.nodes.get(e.to).xy, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; e.near = SENS.some(q => Math.hypot(q.x - m[0], q.y - m[1]) < 80); }
   for (const p of W.points) if (p.k === 'level_crossing'){ const n = N.nodes.get(p.id); if (n) n.lc = true; }

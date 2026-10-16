@@ -35,7 +35,7 @@ function signPlate(code, p = {}, scale = 1){
   const w = sz[0] * scale, h = sz[1] * scale, t = signFaceTex(code, p), grp = new THREE.Group(), shape = S.s === 'rect' || S.s === 'sq' ? 'rect' : S.s;
   const key = `slab|${shape}|${w.toFixed(3)}|${h.toFixed(3)}`, slab = (MAT.__g ??= {})[key] ??= (() => { const g = new THREE.ExtrudeGeometry(signOutline(shape, w * (shape === 'tri' || shape === 'inv' ? 0.95 : shape === 'oct' ? 0.98 : 0.965), h * (shape === 'tri' || shape === 'inv' ? 0.82 : shape === 'oct' ? 0.98 : 0.965)), {depth:0.018, bevelEnabled:true, bevelSize:0.004, bevelThickness:0.004, bevelSegments:1, curveSegments:24}); g.rotateY(-Math.PI / 2); return g; })();
   grp.add(part(slab, SIGN_MAT.alu, 0.002, 0, 0));
-  const fm = MAT['face|' + t.uuid] ??= new THREE.MeshPhysicalMaterial({map:t, alphaTest:0.5, roughness:0.28, metalness:0, clearcoat:0.5, clearcoatRoughness:0.25, emissive:0xffffff, emissiveMap:t, emissiveIntensity:0.08});
+  const fm = MAT['face|' + t.uuid] ??= new THREE.MeshPhysicalMaterial({map:t, alphaTest:0.5, roughness:0.28, metalness:0, clearcoat:0.5, clearcoatRoughness:0.25, emissive:0xffffff, emissiveMap:t, emissiveIntensity:isNight() ? 0.55 : 0.08});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fm); face.rotation.y = Math.PI / 2; face.position.x = 0.0075; face.castShadow = true; grp.add(face);
   for (const y of shape === 'rect' ? [-h * 0.22, h * 0.22] : [-h * 0.12]) grp.add(part(BOX(0.025, 0.04, w * (shape === 'rect' ? 0.7 : 0.32)), SIGN_MAT.rail, -0.03, y, 0));   // rails de fixation au dos
   grp.userData.size = [w, h]; return grp;

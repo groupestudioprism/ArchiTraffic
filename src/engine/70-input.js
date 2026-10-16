@@ -161,7 +161,8 @@ function makeClosure(nr){
   // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
   if (curPh()) cl.ph = curPh(); beginEdit(); state.els.push(cl);
-  let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
+  mergeChain(cl);   // rejoint une fermeture voisine de la même rue (y compris de l'autre côté d'un carrefour)
+  let msg = `${cap(cl.name)} barrée sur ${fmtM(cl.len)}`;
   if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; if (cl.plWarn) msg += ' · ⚠ aucun itinéraire adapté aux poids lourds dans la zone : déviation VL, PL à dévier en amont (panneau B8 posé)'; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
@@ -173,8 +174,18 @@ const sameStreet = (a = '', b = '') => { if (!a || !b) return true; const A = a.
 function mergeChain(cl){
   for (let guard = 0; guard < 20; guard++){
     const a0 = cl.ids[0], a1 = cl.ids.at(-1);
-    const o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
-    if (!o) return;
+    let o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
+    if (!o){ // pas d'extrémité commune : le centre du carrefour (îlot, petit tronçon de jonction) les sépare → on comble s'il fait moins de 40 m
+      const C0 = {both:new Set(), dir:new Set(), slow:new Map()};
+      for (const e of state.els){ if (e === cl || e.t !== 'closure' || e.mode !== cl.mode || (e.ph || null) !== (cl.ph || null) || !e.ids?.length || !sameStreet(e.name, cl.name)) continue;
+        for (const [x, y, fx, fy] of [[a1, e.ids[0], 1, 0], [a1, e.ids.at(-1), 1, 1], [a0, e.ids[0], 0, 0], [a0, e.ids.at(-1), 0, 1]]){
+          const X = NET.nodes.get(x), Y = NET.nodes.get(y); if (!X || !Y || V.dist(X.xy, Y.xy) > 40) continue;
+          const r = route(x, y, C0, {}) || route(y, x, C0, {}); if (!r || r.len > 45) continue;
+          const path = r.ids[0] === x ? r : {ids:r.ids.slice().reverse(), pts:r.pts.slice().reverse()};   // de x vers y
+          if (fx){ cl.ids = [...cl.ids, ...path.ids.slice(1)]; cl.pts = [...cl.pts, ...path.pts.slice(1)]; } else { cl.ids = [...path.ids.slice().reverse(), ...cl.ids.slice(1)]; cl.pts = [...path.pts.slice().reverse(), ...cl.pts.slice(1)]; }
+          o = e; break; }
+        if (o) break; }
+      if (!o) return; continue; }
     const b0 = o.ids[0], b1 = o.ids.at(-1), ri = o.ids.slice().reverse(), rp = o.pts.slice().reverse();
     if (a1 === b0){ cl.ids = [...cl.ids, ...o.ids.slice(1)]; cl.pts = [...cl.pts, ...o.pts.slice(1)]; }
     else if (a1 === b1){ cl.ids = [...cl.ids, ...ri.slice(1)]; cl.pts = [...cl.pts, ...rp.slice(1)]; }

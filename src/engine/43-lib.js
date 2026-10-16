@@ -59,6 +59,15 @@ function renderPreview(obj, W = 160, Hh = W, opt = {}){
   for (let y = 0; y < Hh; y++) img.data.set(px.subarray((Hh - 1 - y) * W * 4, (Hh - y) * W * 4), y * W * 4);
   g.putImageData(img, 0, 0); dirty = true; return cv.toDataURL('image/png');
 }
+/* vignette sans bloquer : panneaux dessinés tout de suite (canvas), objets 3D rendus un par un en tâche de fond */
+const THUMB_Q = []; let thumbT = 0;
+function thumbLazy(e){
+  if (THUMBS[e.k]) return THUMBS[e.k]; if (e.sign) return libThumb(e);
+  if (!THUMB_Q.includes(e)) THUMB_Q.push(e);
+  if (!thumbT) thumbT = setTimeout(function step(){ const x = THUMB_Q.shift(); if (x) libThumb(x);
+    if (THUMB_Q.length) thumbT = setTimeout(step, 40); else { thumbT = 0; annoKey = ''; renderLegend(); refreshPanel(); dirty = true; } }, 60);
+  return BLANK;
+}
 function libThumb(e){
   if (THUMBS[e.k]) return THUMBS[e.k];
   if (e.sign) return THUMBS[e.k] = signThumb(e.sign, e.p);

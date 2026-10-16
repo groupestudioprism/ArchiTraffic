@@ -182,7 +182,7 @@
 /* repères de panneaux, façon point d'intérêt : bulle blanche + pointe, taille constante à l'écran */
 .anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
 .anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
-.anno.pin img{width:38px;height:38px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:34px;height:34px;border-radius:50%;background:#F4F6FA}
+.anno.pin img{width:50px;height:50px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:46px;height:46px;border-radius:50%;background:#F4F6FA}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}

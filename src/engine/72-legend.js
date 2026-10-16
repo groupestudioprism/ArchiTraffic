@@ -8,7 +8,7 @@ function legendEntries(){
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
     else if (e.t === 'line'){ const T = LINE_TYPES[e.k]; add('line|' + e.k, `<i class="lg-line dash" style="border-color:${T?.col || '#F06A12'}"></i>`, T?.legend || 'Balisage'); }
-    else if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) continue; const p = L.sign ? JSON.stringify(e.p || {}) : ''; add('obj|' + e.k + '|' + p, `<img src="${libThumb(L)}" alt="">`, (L.ref && L.sign ? L.ref.replace('KR1', 'KC1') + ' · ' : '') + L.name); }
+    else if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) continue; const p = L.sign ? JSON.stringify(e.p || {}) : ''; add('obj|' + e.k + '|' + p, `<img src="${thumbLazy(L)}" alt="">`, (L.ref && L.sign ? L.ref.replace('KR1', 'KC1') + ' · ' : '') + L.name); }
     else if (e.t === 'swept') add('swept|' + e.veh, `<i class="lg-zone" style="border-color:#7B1FA2;background:#7B1FA233"></i>`, `Giration · ${SWEPT_VEH[e.veh]?.n || ''}`);
     else if (e.t === 'arrow' && e.label) add('arrow|' + e.col + e.label, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, e.label);
   }
@@ -58,7 +58,7 @@ function buildAnnos(){
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
-      const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); PIN_IMG[key] ??= L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : libThumb(L);   // panneau, ou vignette de l'engin / du matériel
+      const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
       const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
@@ -70,8 +70,8 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
   for (const a of pins){ const g = WORLD ? H(a.xy[0], a.xy[1]) : 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
-    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 26;
-    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 44)},${Math.round(A[1] / 50)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
+    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
   for (const a of annos){
     if (a.pin){ a.d.hidden = !a.show; if (a.show){ a.d.style.left = a.sx + 'px'; a.d.style.top = a.sy + 'px'; } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ a.d.hidden = true; continue; }

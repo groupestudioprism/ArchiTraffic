@@ -52,6 +52,7 @@ function skyTexture(){
 }
 let skyTex = null;
 function applyThemeToScene(){
+  hemi.color.set(0xEAF2FF); sun.color.set(0xFFF4E2);
   const st = DISPLAY.style, real = st === 'realistic' || view === 'render', plan = planLook();
   if (real || st === 'textured' || st === 'aerial'){
     if (!pmrem){ pmrem = new THREE.PMREMGenerator(renderer); envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture; }
@@ -63,7 +64,7 @@ function applyThemeToScene(){
   renderer.shadowMap.enabled = DISPLAY.shadows && !plan && view !== '2d';
   sun.castShadow = renderer.shadowMap.enabled;
   hemi.intensity = plan ? 2.2 : real ? 0.55 : 1.15; sun.intensity = plan ? 0.6 : real ? 3.4 : 2.3;
-  positionSun(); dirty = true;
+  positionSun(); applyNight(); dirty = true;
 }
 function positionSun(){
   const az = DISPLAY.sunAz * Math.PI / 180, el = DISPLAY.sunEl * Math.PI / 180, d = 400, t = c3.target;

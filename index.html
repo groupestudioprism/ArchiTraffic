@@ -995,7 +995,7 @@ a.ap-link{text-decoration:none}
 /* repères de panneaux, façon point d'intérêt : bulle blanche + pointe, taille constante à l'écran */
 .anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
 .anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
-.anno.pin img{width:38px;height:38px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:34px;height:34px;border-radius:50%;background:#F4F6FA}
+.anno.pin img{width:50px;height:50px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:46px;height:46px;border-radius:50%;background:#F4F6FA}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
@@ -3165,7 +3165,7 @@ function buildNet(W){
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
     }
   });
-  for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
+  for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals' || p.tags?.crossing === 'traffic_signals' || p.tags?.['crossing:signals'] === 'yes' || p.tags?.crossing_ref === 'pelican' || p.tags?.crossing_ref === 'toucan') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
   // abords d'écoles, crèches, collèges, hôpitaux (à moins de 80 m) : on n'y fait pas passer une déviation si l'on peut l'éviter
   const SENS = W.sens || []; for (const e of N.edges){ const a = N.nodes.get(e.from).xy, b = N.nodes.get(e.to).xy, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; e.near = SENS.some(q => Math.hypot(q.x - m[0], q.y - m[1]) < 80); }
   for (const p of W.points) if (p.k === 'level_crossing'){ const n = N.nodes.get(p.id); if (n) n.lc = true; }
@@ -3376,6 +3376,7 @@ function skyTexture(){
 }
 let skyTex = null;
 function applyThemeToScene(){
+  hemi.color.set(0xEAF2FF); sun.color.set(0xFFF4E2);
   const st = DISPLAY.style, real = st === 'realistic' || view === 'render', plan = planLook();
   if (real || st === 'textured' || st === 'aerial'){
     if (!pmrem){ pmrem = new THREE.PMREMGenerator(renderer); envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture; }
@@ -3387,7 +3388,7 @@ function applyThemeToScene(){
   renderer.shadowMap.enabled = DISPLAY.shadows && !plan && view !== '2d';
   sun.castShadow = renderer.shadowMap.enabled;
   hemi.intensity = plan ? 2.2 : real ? 0.55 : 1.15; sun.intensity = plan ? 0.6 : real ? 3.4 : 2.3;
-  positionSun(); dirty = true;
+  positionSun(); applyNight(); dirty = true;
 }
 function positionSun(){
   const az = DISPLAY.sunAz * Math.PI / 180, el = DISPLAY.sunEl * Math.PI / 180, d = 400, t = c3.target;
@@ -4009,7 +4010,7 @@ function buildWorld(){
   if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
   if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
-  worldGroup.userData.ms = Math.round(performance.now() - t0);
+  applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
 }
 TEX_LISTENERS.add(() => { dirty = true; });
@@ -4166,7 +4167,7 @@ $('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.ta
    Têtes de feux R/J/V à 3 feux sur mât, allumées selon le cycle (en simulation : temps simulé ; sinon horloge),
    et repère sur la carte avec la couleur en cours. Les véhicules simulés s'arrêtent au rouge et au jaune. */
 const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge intégral) = 64 s
-const SIGT = () => (SIM.on || SIM.t > 0) ? SIM.t : performance.now() / 1000;
+const SIGT = () => SIM.on ? SIM.t : performance.now() / 1000;   // simulation en cours : temps simulé ; sinon les feux tournent en temps réel
 function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o === undefined){ o = (hashStr(String(n.id)) % 640) / 10; SIM.sigOff.set(n.id, o); } return o; }
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){
@@ -4207,6 +4208,32 @@ function updateSignals(force = false){
   // repères carte : couleur de l'axe principal
   for (const a of annos) if (a.sig) a.d.dataset.s = sigState(a.sn, a.sd, t);
   return true;
+}
+
+/* ==== 34-night.js ==== */
+/* ============ Vue de nuit ============
+   Ciel nocturne, lune froide, éclairage public (halo au sol sous chaque lampadaire), feux et panneaux rétroréfléchissants
+   qui ressortent : pour vérifier la visibilité de la signalisation temporaire de nuit. */
+let nightSky = null, nightGlow = null, glowT = null;
+const isNight = () => !!DISPLAY.night && view !== '2d' && !planLook();
+function nightSkyTex(){ const cv = document.createElement('canvas'); cv.width = 16; cv.height = 512; const g = cv.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#04070F'); gr.addColorStop(0.5, '#0B1426'); gr.addColorStop(0.66, '#1B2740'); gr.addColorStop(0.72, '#2A2C38'); gr.addColorStop(1, '#0B0C10'); g.fillStyle = gr; g.fillRect(0, 0, 16, 512);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.mapping = THREE.EquirectangularReflectionMapping; return t; }
+function glowTex(){ const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,214,150,0.9)'); gr.addColorStop(0.35, 'rgba(255,190,120,0.4)'); gr.addColorStop(1, 'rgba(255,170,90,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; }
+function applyNight(){
+  const on = isNight();
+  if (nightGlow){ nightGlow.parent?.remove(nightGlow); nightGlow.geometry.dispose(); nightGlow = null; }
+  for (const k in MAT) if (k.startsWith('face|')) MAT[k].emissiveIntensity = on ? 0.55 : 0.08;   // films rétroréfléchissants : bien visibles dans les phares
+  if (!on) return;
+  nightSky ??= nightSkyTex(); scene.background = nightSky; scene.fog = new THREE.Fog(0x0B1020, FOGR[0] * 0.6, FOGR[1] * 0.8); scene.environment = null;
+  hemi.intensity = 0.18; hemi.color.set(0x8FA6D8); sun.intensity = 0.25; sun.color.set(0xA9C1FF); renderer.toneMappingExposure = 1.15;
+  // halos d'éclairage public au sol, sous chaque lampadaire
+  let lamps = null; worldGroup.traverse(o => { if (o.name === 'Lampadaires') lamps = o; }); if (!lamps) return;
+  const n = lamps.count, plane = new THREE.PlaneGeometry(1, 1); plane.rotateX(-Math.PI / 2); glowT ??= glowTex();
+  const im = new THREE.InstancedMesh(plane, new THREE.MeshBasicMaterial({map:glowT, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false}), n), m4 = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  for (let i = 0; i < n; i++){ lamps.getMatrixAt(i, m4); m4.decompose(p, q, s); m4.compose(new THREE.Vector3(p.x, p.y + 0.15, p.z), new THREE.Quaternion(), new THREE.Vector3(16, 1, 16)); im.setMatrixAt(i, m4); }
+  im.renderOrder = 3; im.name = 'Éclairage public (nuit)'; nightGlow = im; worldGroup.add(im);
 }
 
 /* ==== 40-signs.js ==== */
@@ -4466,7 +4493,7 @@ function signPlate(code, p = {}, scale = 1){
   const w = sz[0] * scale, h = sz[1] * scale, t = signFaceTex(code, p), grp = new THREE.Group(), shape = S.s === 'rect' || S.s === 'sq' ? 'rect' : S.s;
   const key = `slab|${shape}|${w.toFixed(3)}|${h.toFixed(3)}`, slab = (MAT.__g ??= {})[key] ??= (() => { const g = new THREE.ExtrudeGeometry(signOutline(shape, w * (shape === 'tri' || shape === 'inv' ? 0.95 : shape === 'oct' ? 0.98 : 0.965), h * (shape === 'tri' || shape === 'inv' ? 0.82 : shape === 'oct' ? 0.98 : 0.965)), {depth:0.018, bevelEnabled:true, bevelSize:0.004, bevelThickness:0.004, bevelSegments:1, curveSegments:24}); g.rotateY(-Math.PI / 2); return g; })();
   grp.add(part(slab, SIGN_MAT.alu, 0.002, 0, 0));
-  const fm = MAT['face|' + t.uuid] ??= new THREE.MeshPhysicalMaterial({map:t, alphaTest:0.5, roughness:0.28, metalness:0, clearcoat:0.5, clearcoatRoughness:0.25, emissive:0xffffff, emissiveMap:t, emissiveIntensity:0.08});
+  const fm = MAT['face|' + t.uuid] ??= new THREE.MeshPhysicalMaterial({map:t, alphaTest:0.5, roughness:0.28, metalness:0, clearcoat:0.5, clearcoatRoughness:0.25, emissive:0xffffff, emissiveMap:t, emissiveIntensity:isNight() ? 0.55 : 0.08});
   const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), fm); face.rotation.y = Math.PI / 2; face.position.x = 0.0075; face.castShadow = true; grp.add(face);
   for (const y of shape === 'rect' ? [-h * 0.22, h * 0.22] : [-h * 0.12]) grp.add(part(BOX(0.025, 0.04, w * (shape === 'rect' ? 0.7 : 0.32)), SIGN_MAT.rail, -0.03, y, 0));   // rails de fixation au dos
   grp.userData.size = [w, h]; return grp;
@@ -5073,6 +5100,15 @@ function renderPreview(obj, W = 160, Hh = W, opt = {}){
   for (let y = 0; y < Hh; y++) img.data.set(px.subarray((Hh - 1 - y) * W * 4, (Hh - y) * W * 4), y * W * 4);
   g.putImageData(img, 0, 0); dirty = true; return cv.toDataURL('image/png');
 }
+/* vignette sans bloquer : panneaux dessinés tout de suite (canvas), objets 3D rendus un par un en tâche de fond */
+const THUMB_Q = []; let thumbT = 0;
+function thumbLazy(e){
+  if (THUMBS[e.k]) return THUMBS[e.k]; if (e.sign) return libThumb(e);
+  if (!THUMB_Q.includes(e)) THUMB_Q.push(e);
+  if (!thumbT) thumbT = setTimeout(function step(){ const x = THUMB_Q.shift(); if (x) libThumb(x);
+    if (THUMB_Q.length) thumbT = setTimeout(step, 40); else { thumbT = 0; annoKey = ''; renderLegend(); refreshPanel(); dirty = true; } }, 60);
+  return BLANK;
+}
 function libThumb(e){
   if (THUMBS[e.k]) return THUMBS[e.k];
   if (e.sign) return THUMBS[e.k] = signThumb(e.sign, e.p);
@@ -5215,7 +5251,7 @@ function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){
   const g = new THREE.Group(); g.userData.id = e.id;
-  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); pr.traverse(m => { m.userData.shared = true; }); OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
+  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); const light = L.sign || /^(temp|bal|chan)$/.test(L.cat || ''); pr.traverse(m => { m.userData.shared = true; if (light && m.isMesh) m.castShadow = false; });   /* petits objets : pas d'ombre portée (rendu plus léger) */ OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
     o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
     if (L.sign){ // en plan : symbole du panneau vu de face, à l'échelle du plan
       const sp = new THREE.Sprite(MAT['spr|' + L.sign + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(L.sign, e.p || {}), depthTest:false})); const sh = signShape(L.sign), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
@@ -5649,7 +5685,8 @@ function makeClosure(nr){
   // sur une voie à sens unique, « droite / gauche » désignent les files du même sens : la circulation est maintenue sur l'autre file si la chaussée le permet (≥ 5,50 m)
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
   if (curPh()) cl.ph = curPh(); beginEdit(); state.els.push(cl);
-  let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
+  mergeChain(cl);   // rejoint une fermeture voisine de la même rue (y compris de l'autre côté d'un carrefour)
+  let msg = `${cap(cl.name)} barrée sur ${fmtM(cl.len)}`;
   if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; if (cl.plWarn) msg += ' · ⚠ aucun itinéraire adapté aux poids lourds dans la zone : déviation VL, PL à dévier en amont (panneau B8 posé)'; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
@@ -5661,8 +5698,18 @@ const sameStreet = (a = '', b = '') => { if (!a || !b) return true; const A = a.
 function mergeChain(cl){
   for (let guard = 0; guard < 20; guard++){
     const a0 = cl.ids[0], a1 = cl.ids.at(-1);
-    const o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
-    if (!o) return;
+    let o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
+    if (!o){ // pas d'extrémité commune : le centre du carrefour (îlot, petit tronçon de jonction) les sépare → on comble s'il fait moins de 40 m
+      const C0 = {both:new Set(), dir:new Set(), slow:new Map()};
+      for (const e of state.els){ if (e === cl || e.t !== 'closure' || e.mode !== cl.mode || (e.ph || null) !== (cl.ph || null) || !e.ids?.length || !sameStreet(e.name, cl.name)) continue;
+        for (const [x, y, fx, fy] of [[a1, e.ids[0], 1, 0], [a1, e.ids.at(-1), 1, 1], [a0, e.ids[0], 0, 0], [a0, e.ids.at(-1), 0, 1]]){
+          const X = NET.nodes.get(x), Y = NET.nodes.get(y); if (!X || !Y || V.dist(X.xy, Y.xy) > 40) continue;
+          const r = route(x, y, C0, {}) || route(y, x, C0, {}); if (!r || r.len > 45) continue;
+          const path = r.ids[0] === x ? r : {ids:r.ids.slice().reverse(), pts:r.pts.slice().reverse()};   // de x vers y
+          if (fx){ cl.ids = [...cl.ids, ...path.ids.slice(1)]; cl.pts = [...cl.pts, ...path.pts.slice(1)]; } else { cl.ids = [...path.ids.slice().reverse(), ...cl.ids.slice(1)]; cl.pts = [...path.pts.slice().reverse(), ...cl.pts.slice(1)]; }
+          o = e; break; }
+        if (o) break; }
+      if (!o) return; continue; }
     const b0 = o.ids[0], b1 = o.ids.at(-1), ri = o.ids.slice().reverse(), rp = o.pts.slice().reverse();
     if (a1 === b0){ cl.ids = [...cl.ids, ...o.ids.slice(1)]; cl.pts = [...cl.pts, ...o.pts.slice(1)]; }
     else if (a1 === b1){ cl.ids = [...cl.ids, ...ri.slice(1)]; cl.pts = [...cl.pts, ...rp.slice(1)]; }
@@ -5824,7 +5871,7 @@ function elLabel(e){
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
 function elIcon(e){
-  if (e.t === 'obj'){ const L = LIBK[e.k]; const th = L ? libThumb(L) : ''; return th ? `<img src="${th}" alt="">` : ''; }
+  if (e.t === 'obj'){ const L = LIBK[e.k]; const th = L ? thumbLazy(L) : ''; return th ? `<img src="${th}" alt="">` : ''; }
   const col = e.t === 'closure' ? '#D32F2F' : e.t === 'detour' ? (e.col || '#F28A1A') : e.t === 'zone' ? '#F28A1A' : e.t === 'line' ? (LINE_TYPES[e.k]?.col || '#F06A12') : e.t === 'swept' ? '#7B1FA2' : e.t === 'arrow' ? (e.col || '#1565C0') : '#5B6B7F';
   return `<i style="background:${col}"></i>`;
 }
@@ -6011,7 +6058,7 @@ function legendEntries(){
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
     else if (e.t === 'line'){ const T = LINE_TYPES[e.k]; add('line|' + e.k, `<i class="lg-line dash" style="border-color:${T?.col || '#F06A12'}"></i>`, T?.legend || 'Balisage'); }
-    else if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) continue; const p = L.sign ? JSON.stringify(e.p || {}) : ''; add('obj|' + e.k + '|' + p, `<img src="${libThumb(L)}" alt="">`, (L.ref && L.sign ? L.ref.replace('KR1', 'KC1') + ' · ' : '') + L.name); }
+    else if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) continue; const p = L.sign ? JSON.stringify(e.p || {}) : ''; add('obj|' + e.k + '|' + p, `<img src="${thumbLazy(L)}" alt="">`, (L.ref && L.sign ? L.ref.replace('KR1', 'KC1') + ' · ' : '') + L.name); }
     else if (e.t === 'swept') add('swept|' + e.veh, `<i class="lg-zone" style="border-color:#7B1FA2;background:#7B1FA233"></i>`, `Giration · ${SWEPT_VEH[e.veh]?.n || ''}`);
     else if (e.t === 'arrow' && e.label) add('arrow|' + e.col + e.label, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, e.label);
   }
@@ -6061,7 +6108,7 @@ function buildAnnos(){
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
-      const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); PIN_IMG[key] ??= L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : libThumb(L);   // panneau, ou vignette de l'engin / du matériel
+      const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
       const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
@@ -6073,8 +6120,8 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
   for (const a of pins){ const g = WORLD ? H(a.xy[0], a.xy[1]) : 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
-    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 26;
-    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 44)},${Math.round(A[1] / 50)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
+    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
   for (const a of annos){
     if (a.pin){ a.d.hidden = !a.show; if (a.show){ a.d.style.left = a.sx + 'px'; a.d.style.top = a.sy + 'px'; } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ a.d.hidden = true; continue; }
@@ -6235,11 +6282,12 @@ function renderViewMenu(){
   const L = DISPLAY.lay, m = $('#viewMenu');
   m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['pins', 'Repères des panneaux (vue éloignée)'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}<label class="mi"><input type="checkbox" data-lay="nets"${L.nets ? ' checked' : ''}> Réseaux souterrains (vue en coupe)</label>
     <hr><div class="lbl">Éléments du chantier</div><label class="mi"><input type="checkbox" data-proj${projGroup.visible ? ' checked' : ''}> Afficher le chantier</label><label class="mi"><input type="checkbox" data-legend${state.legend.show ? ' checked' : ''}> Légende sur la vue</label>
-    <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
+    <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-night${DISPLAY.night ? ' checked' : ''}> Vue de nuit (éclairage public, feux, rétroréflexion)</label><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
     <hr><div class="lbl">Thème de l'interface</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px">${[['light', 'Clair'], ['dark', 'Sombre']].map(([k, n]) => `<button type="button" class="btn" data-thm="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'light') === k}">${n}</button>`).join('')}</div>`;
   m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); buildWorld(); annoKey = ''; renderLegend(); if (c.dataset.lay === 'nets' && c.checked) toast((state.nets || []).length ? 'Réseaux : plans importés, et réseau présumé pour les autres types.' : 'Réseaux PRÉSUMÉS (règles de pose usuelles) : à confirmer par les réponses DT/DICT. Fichier → Importer un plan de réseaux.', 6500); });
   m.querySelector('[data-proj]').onchange = e => { projGroup.visible = e.target.checked; dirty = true; };
   m.querySelector('[data-legend]').onchange = e => { state.legend.show = e.target.checked; save(); renderLegend(); };
+  m.querySelector('[data-night]').onchange = e => { DISPLAY.night = e.target.checked; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });

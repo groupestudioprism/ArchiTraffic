@@ -17,7 +17,7 @@ function elLabel(e){
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
 function elIcon(e){
-  if (e.t === 'obj'){ const L = LIBK[e.k]; const th = L ? libThumb(L) : ''; return th ? `<img src="${th}" alt="">` : ''; }
+  if (e.t === 'obj'){ const L = LIBK[e.k]; const th = L ? thumbLazy(L) : ''; return th ? `<img src="${th}" alt="">` : ''; }
   const col = e.t === 'closure' ? '#D32F2F' : e.t === 'detour' ? (e.col || '#F28A1A') : e.t === 'zone' ? '#F28A1A' : e.t === 'line' ? (LINE_TYPES[e.k]?.col || '#F06A12') : e.t === 'swept' ? '#7B1FA2' : e.t === 'arrow' ? (e.col || '#1565C0') : '#5B6B7F';
   return `<i style="background:${col}"></i>`;
 }
