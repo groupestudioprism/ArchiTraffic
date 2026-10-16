@@ -49,6 +49,9 @@ function buildAnnos(){
   const L = $('#labels'); L.innerHTML = ''; annos = [];
   const mk = (cls, txt, xy, z = 0, extra = {}) => { const d = document.createElement('div'); d.className = 'anno ' + cls; d.textContent = txt; L.appendChild(d); annos.push({d, xy, z, ...extra}); return d; };
   if (WORLD?.labels && DISPLAY.lay.names !== false) for (const s of WORLD.labels) mk('street', s.name, s.xy, 0.5, {street:true, dir:s.dir});
+  // carrefours à feux : repère avec l'état du feu (axe principal), visible de loin comme les panneaux
+  if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
+    const d = mk('pin sigpin', '', n.xy, 4, {pin:true, sig:true, pri:1.5, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
   for (const e of state?.els || []){
     if (e.hidden) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }

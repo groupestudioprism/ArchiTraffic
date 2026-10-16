@@ -386,16 +386,7 @@ function buildFurniture(grp){
     lamps.forEach((l, i) => { const nr = nearestRoad([l.x, l.y], 15); const a = nr ? Math.atan2(nr.pt[1] - l.y, nr.pt[0] - l.x) : 0; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), a); m4.compose(new THREE.Vector3(l.x, H(l.x, l.y), -l.y), q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); });
     im.castShadow = true; im.name = 'Lampadaires'; grp.add(im);
   }
-  // feux tricolores existants : un mât par branche entrante du carrefour
-  const sig = [...NET.nodes.values()].filter(n => n.sig);
-  if (sig.length){
-    const pole = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6); pole.translate(0, 1.6, 0); const box = new THREE.BoxGeometry(0.32, 0.95, 0.25); box.translate(0, 3.1, 0.15);
-    const g = mergeGeometries([pole.toNonIndexed(), box.toNonIndexed()]), pos = [];
-    for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w; const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); pos.push([p, Math.atan2(-d[1], -d[0])]); }
-    const im = new THREE.InstancedMesh(g, matCol(0x2F3439, {metal:0.4, rough:0.5}), pos.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
-    pos.forEach(([p, a], i) => { q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), a + Math.PI / 2); m4.compose(new THREE.Vector3(p[0], H(p[0], p[1]), -p[1]), q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); });
-    im.castShadow = true; im.name = 'Feux tricolores'; grp.add(im);
-  }
+  buildSignals(grp);
 }
 /* noms des rues (étiquettes à l'écran) */
 function buildStreetLabels(){

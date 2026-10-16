@@ -186,3 +186,10 @@
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
+
+.anno.sigpin{display:flex;flex-direction:column;gap:2px;padding:4px 5px;background:#1E2226;border-radius:8px;cursor:default}
+.anno.sigpin::after{background:#1E2226}
+.anno.sigpin i{display:block;width:8px;height:8px;border-radius:50%;background:#3a3f45}
+.anno.sigpin[data-s="r"] i:nth-child(1){background:#FF2A1A;box-shadow:0 0 6px #FF2A1A}
+.anno.sigpin[data-s="y"] i:nth-child(2){background:#FFB300;box-shadow:0 0 6px #FFB300}
+.anno.sigpin[data-s="g"] i:nth-child(3){background:#18E070;box-shadow:0 0 6px #18E070}

@@ -999,6 +999,13 @@ a.ap-link{text-decoration:none}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
+
+.anno.sigpin{display:flex;flex-direction:column;gap:2px;padding:4px 5px;background:#1E2226;border-radius:8px;cursor:default}
+.anno.sigpin::after{background:#1E2226}
+.anno.sigpin i{display:block;width:8px;height:8px;border-radius:50%;background:#3a3f45}
+.anno.sigpin[data-s="r"] i:nth-child(1){background:#FF2A1A;box-shadow:0 0 6px #FF2A1A}
+.anno.sigpin[data-s="y"] i:nth-child(2){background:#FFB300;box-shadow:0 0 6px #FFB300}
+.anno.sigpin[data-s="g"] i:nth-child(3){background:#18E070;box-shadow:0 0 6px #18E070}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -3957,16 +3964,7 @@ function buildFurniture(grp){
     lamps.forEach((l, i) => { const nr = nearestRoad([l.x, l.y], 15); const a = nr ? Math.atan2(nr.pt[1] - l.y, nr.pt[0] - l.x) : 0; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), a); m4.compose(new THREE.Vector3(l.x, H(l.x, l.y), -l.y), q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); });
     im.castShadow = true; im.name = 'Lampadaires'; grp.add(im);
   }
-  // feux tricolores existants : un mât par branche entrante du carrefour
-  const sig = [...NET.nodes.values()].filter(n => n.sig);
-  if (sig.length){
-    const pole = new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6); pole.translate(0, 1.6, 0); const box = new THREE.BoxGeometry(0.32, 0.95, 0.25); box.translate(0, 3.1, 0.15);
-    const g = mergeGeometries([pole.toNonIndexed(), box.toNonIndexed()]), pos = [];
-    for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w; const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); pos.push([p, Math.atan2(-d[1], -d[0])]); }
-    const im = new THREE.InstancedMesh(g, matCol(0x2F3439, {metal:0.4, rough:0.5}), pos.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
-    pos.forEach(([p, a], i) => { q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), a + Math.PI / 2); m4.compose(new THREE.Vector3(p[0], H(p[0], p[1]), -p[1]), q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); });
-    im.castShadow = true; im.name = 'Feux tricolores'; grp.add(im);
-  }
+  buildSignals(grp);
 }
 /* noms des rues (étiquettes à l'écran) */
 function buildStreetLabels(){
@@ -4085,6 +4083,55 @@ function buildUtilities(grp){
   hyd.forEach((u, i) => { m4.makeTranslation(u.x, H(u.x, u.y) + 0.15, -u.y); im.setMatrixAt(i, m4); }); im.castShadow = true; im.name = 'Poteaux incendie'; grp.add(im);
 }
 $('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier.'); return; } const r = new FileReader(); r.onload = () => importNetworks(r.result, f.name); r.readAsText(f); });
+
+/* ==== 33-signals.js ==== */
+/* ============ Feux tricolores (carrefours à feux OSM) ============
+   Cycle à la française : vert 27 s, jaune fixe 3 s, rouge intégral 2 s, par axe (deux phases en opposition).
+   Têtes de feux R/J/V à 3 feux sur mât, allumées selon le cycle (en simulation : temps simulé ; sinon horloge),
+   et repère sur la carte avec la couleur en cours. Les véhicules simulés s'arrêtent au rouge et au jaune. */
+const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge intégral) = 64 s
+const SIGT = () => (SIM.on || SIM.t > 0) ? SIM.t : performance.now() / 1000;
+function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o === undefined){ o = (hashStr(String(n.id)) % 640) / 10; SIM.sigOff.set(n.id, o); } return o; }
+/* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
+function sigState(n, d, t = SIGT()){
+  const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(n)) % per + per) % per, half = per / 2;
+  const axis = Math.abs(d[0]) > Math.abs(d[1]) ? 0 : 1, q = (ph - axis * half + per) % per;
+  return q < SIGCYC.g ? 'g' : q < SIGCYC.g + SIGCYC.y ? 'y' : 'r';
+}
+let SIGHEADS = null;   // {heads:[{n, d}], lamps:{r,y,g:InstancedMesh}, last:''}
+const SIGCOL = {r:[0xFF2A1A, 0x3A0D0A], y:[0xFFB300, 0x3A2A06], g:[0x18E070, 0x0A2E18]};
+function buildSignals(grp){
+  SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
+  const heads = [];
+  for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
+    const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); heads.push({n, d, p, a:Math.atan2(-d[1], -d[0])}); }
+  // mât + caisson noir à plaque de contraste jaune (feux R11v français), face aux usagers
+  const pole = new THREE.CylinderGeometry(0.055, 0.065, 3.3, 8); pole.translate(0, 1.65, 0);
+  const box = new THREE.BoxGeometry(0.22, 0.78, 0.3); box.translate(0, 3.0, 0);
+  const plate = new THREE.BoxGeometry(0.03, 0.98, 0.46); plate.translate(-0.12, 3.0, 0);
+  const visor = []; for (const y of [3.24, 3.0, 2.76]){ const v = new THREE.CylinderGeometry(0.1, 0.1, 0.12, 12, 1, true, 0, Math.PI); v.rotateZ(Math.PI / 2); v.rotateX(Math.PI / 2); v.translate(0.17, y + 0.02, 0); visor.push(v.toNonIndexed()); }
+  const body = new THREE.InstancedMesh(mergeGeometries([pole.toNonIndexed(), box.toNonIndexed(), ...visor]), matCol(0x1E2226, {metal:0.4, rough:0.55}), heads.length);
+  const back = new THREE.InstancedMesh(plate, matCol(0xF2C200, {rough:0.6}), heads.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+  const lamps = {};
+  for (const [k, y] of [['r', 3.24], ['y', 3.0], ['g', 2.76]]){
+    const gL = new THREE.CircleGeometry(0.085, 18); gL.rotateY(Math.PI / 2); gL.translate(0.112, y, 0);
+    const im = new THREE.InstancedMesh(gL, new THREE.MeshBasicMaterial({color:0xffffff, toneMapped:false}), heads.length); im.name = 'Feux · lampes'; lamps[k] = im; grp.add(im); }
+  heads.forEach((h, i) => { q.setFromAxisAngle(up, h.a); m4.compose(new THREE.Vector3(h.p[0], H(h.p[0], h.p[1]), -h.p[1]), q, one);
+    body.setMatrixAt(i, m4); back.setMatrixAt(i, m4); for (const k in lamps) lamps[k].setMatrixAt(i, m4); });
+  body.castShadow = true; body.name = 'Feux tricolores'; back.name = 'Feux tricolores · plaques'; grp.add(body, back);
+  SIGHEADS = {heads, lamps, last:''}; updateSignals(true);
+}
+/* rafraîchit les lampes allumées (appelé à chaque image ; ne redessine que si un feu a changé) */
+function updateSignals(force = false){
+  if (!SIGHEADS) return false; const t = SIGT(), st = SIGHEADS.heads.map(h => sigState(h.n, h.d, t)), key = st.join('');
+  if (!force && key === SIGHEADS.last) return false; SIGHEADS.last = key; const c = new THREE.Color();
+  st.forEach((s, i) => { for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
+  for (const k in SIGHEADS.lamps) if (SIGHEADS.lamps[k].instanceColor) SIGHEADS.lamps[k].instanceColor.needsUpdate = true;
+  // repères carte : couleur de l'axe principal
+  for (const a of annos) if (a.sig) a.d.dataset.s = sigState(a.sn, a.sd, t);
+  return true;
+}
 
 /* ==== 40-signs.js ==== */
 /* ============ Signalisation française (temporaire et permanente) ============
@@ -5295,11 +5342,7 @@ function simSpawn(dt){
     SIM.nextSpawn.set(en.id, t);
   }
 }
-function sigGreen(n, e){ // feu vert pour l'approche e au nœud n ?
-  let off = SIM.sigOff.get(n.id); if (off === undefined){ off = Math.random() * 60; SIM.sigOff.set(n.id, off); }
-  const a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), ew = Math.abs(d[0]) > Math.abs(d[1]), ph = (SIM.t + off) % 60;
-  return ew ? ph < 27 : ph >= 30 && ph < 57;
-}
+function sigGreen(n, e){ const a = NET.nodes.get(e.from).xy; return sigState(n, V.norm(V.sub(n.xy, a))) === 'g'; }   // jaune = arrêt si possible
 function simStep(dt){
   SIM.t += dt; simSpawn(dt);
   // occupation des arêtes (tri par abscisse)
@@ -5907,6 +5950,9 @@ function buildAnnos(){
   const L = $('#labels'); L.innerHTML = ''; annos = [];
   const mk = (cls, txt, xy, z = 0, extra = {}) => { const d = document.createElement('div'); d.className = 'anno ' + cls; d.textContent = txt; L.appendChild(d); annos.push({d, xy, z, ...extra}); return d; };
   if (WORLD?.labels && DISPLAY.lay.names !== false) for (const s of WORLD.labels) mk('street', s.name, s.xy, 0.5, {street:true, dir:s.dir});
+  // carrefours à feux : repère avec l'état du feu (axe principal), visible de loin comme les panneaux
+  if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
+    const d = mk('pin sigpin', '', n.xy, 4, {pin:true, sig:true, pri:1.5, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
   for (const e of state?.els || []){
     if (e.hidden) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
@@ -6166,7 +6212,7 @@ $('#simReset').addEventListener('click', () => { const was = SIM.on; simStop(tru
 function loop(now){
   requestAnimationFrame(loop);
   simTick(now);
-  const moved = ctl().update();
+  const moved = ctl().update(); if (updateSignals()) dirty = true;
   if (moved || dirty){ renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false; }
 }
 
@@ -6223,7 +6269,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+window.ATDebug = {sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>

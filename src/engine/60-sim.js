@@ -75,11 +75,7 @@ function simSpawn(dt){
     SIM.nextSpawn.set(en.id, t);
   }
 }
-function sigGreen(n, e){ // feu vert pour l'approche e au nœud n ?
-  let off = SIM.sigOff.get(n.id); if (off === undefined){ off = Math.random() * 60; SIM.sigOff.set(n.id, off); }
-  const a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), ew = Math.abs(d[0]) > Math.abs(d[1]), ph = (SIM.t + off) % 60;
-  return ew ? ph < 27 : ph >= 30 && ph < 57;
-}
+function sigGreen(n, e){ const a = NET.nodes.get(e.from).xy; return sigState(n, V.norm(V.sub(n.xy, a))) === 'g'; }   // jaune = arrêt si possible
 function simStep(dt){
   SIM.t += dt; simSpawn(dt);
   // occupation des arêtes (tri par abscisse)
