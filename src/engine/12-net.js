@@ -13,13 +13,16 @@ function buildNet(W){
       const a = node(r.nodes[k]), b = node(r.nodes[k + 1]); if (!a || !b || a === b) continue;
       a.nb.add(b.id); b.nb.add(a.id); a.ways.add(ri); b.ways.add(ri);
       const len = V.dist(a.xy, b.xy) || 0.01, sp = r.speed / 3.6;
-      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
+      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
       if (r.oneway >= 0) mk(a, b, false);
       if (r.oneway <= 0) mk(b, a, true);
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
     }
   });
   for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
+  // abords d'écoles, crèches, collèges, hôpitaux (à moins de 80 m) : on n'y fait pas passer une déviation si l'on peut l'éviter
+  const SENS = W.sens || []; for (const e of N.edges){ const a = N.nodes.get(e.from).xy, b = N.nodes.get(e.to).xy, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; e.near = SENS.some(q => Math.hypot(q.x - m[0], q.y - m[1]) < 80); }
+  for (const p of W.points) if (p.k === 'level_crossing'){ const n = N.nodes.get(p.id); if (n) n.lc = true; }
   for (const R of W.restr){ const k = `${R.from}|${R.via}`; if (R.only) N.only.set(k, R.to); else { (N.restr.get(k) || N.restr.set(k, new Set()).get(k)).add(R.to); } }
   // index spatial des segments (toutes voies, piétonnes comprises, pour l'accroche)
   W.roads.forEach((r, ri) => { for (let k = 0; k + 1 < r.pts.length; k++){ const a = r.pts[k], b = r.pts[k + 1];
@@ -34,6 +37,8 @@ const UNPAVED = /^(unpaved|gravel|fine_gravel|dirt|earth|ground|grass|sand|mud|c
 function plOk(r){
   const T = r.tags || {}, num = v => parseFloat(String(v || '').replace(',', '.'));
   if (/^(no|destination|delivery|local)$/.test(T.hgv || '') || /^(destination|private)$/.test(T.access || '')) return 0;
+  if (/no|destination|delivery/.test(T['hgv:conditional'] || '') || /no|destination/.test(T['motor_vehicle:conditional'] || '')) return 0;   // restrictions horaires locales (arrêté municipal) : non garanties pendant le chantier
+  if (T['maxweight:conditional'] || T['maxlength'] && num(T.maxlength) < 12) return 0;
   if (num(T.maxweight) > 0 && num(T.maxweight) < 19) return 0;
   if (num(T.maxheight) > 0 && num(T.maxheight) < 4) return 0;
   if (num(T.maxwidth) > 0 && num(T.maxwidth) < 2.6) return 0;
@@ -116,6 +121,10 @@ function route(fromId, toId, C, opt = {}){
       if (opt.lvl){   // déviation d'une route classée : rester sur le réseau de même niveau, jamais de chemin inadapté aux PL
         if (opt.strict && !e.pl) continue;
         if (e.cls >= 6 && opt.lvl < 6) continue;                  // jamais de zone de rencontre / desserte pour dévier une rue circulée
+        if (e.dest) continue;                                        // « sauf desserte / riverains » : transit interdit, donc pas de déviation
+        if (e.near) c *= 1.8;                                        // abords d'école / hôpital
+        if (e.z30 && opt.lvl <= 4) c *= 1.4;                         // zone 30 : pas de report d'un trafic de transit
+        if (opt.strict && NET.nodes.get(e.to)?.lc) c += 90;          // passage à niveau : risque d'arrêt d'un PL sur les voies
         const drop = e.cls - opt.lvl; if (drop > 0 && !e.dep) c *= drop === 1 ? 2.5 : 8;   // descendre dans la hiérarchie coûte cher (lotissements, rues résidentielles)
       }
       const nk = e.to + '|' + e.r, ng = cost + c;
@@ -134,6 +143,11 @@ function proposeDetours(cl, els){
   const ow = sectionOneway(ids), out = [];
   const closedEdges = []; for (let i = 0; i + 1 < ids.length; i++){ const n = NET.nodes.get(ids[i]); for (const ei of n?.out || []) if (NET.edges[ei].to === ids[i + 1]) closedEdges.push(NET.edges[ei]); for (const ei of n?.inn || []) if (NET.edges[ei].from === ids[i + 1]) closedEdges.push(NET.edges[ei]); }
   const lvl = Math.min(...closedEdges.map(e => e.cls), 8), heavy = closedEdges.some(e => e.dep) || lvl <= 4;   // route départementale / nationale ou voie principale : trafic PL à dévier
+  const ref = [...new Set(closedEdges.map(e => NET.roads[e.r].ref).filter(Boolean))].join(', ');
+  cl.rules = [heavy ? `Voie ${ref ? ref + ' ' : ''}de niveau ${['', 'autoroute / voie express', 'route principale', 'route secondaire', 'route de liaison'][lvl] || 'locale'} : déviation par un réseau équivalent, apte aux poids lourds (tonnage, hauteur, largeur, revêtement, restrictions horaires)` : 'Rue locale : déviation par les rues ouvertes à la circulation de transit',
+    'Exclus : zones de rencontre, aires piétonnes, voies de desserte, chemins non revêtus, voies « sauf riverains / desserte »',
+    'Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
+  if (WORLD?.W?.zfe) cl.rules.push(`${WORLD.W.zfe} : vérifier les vignettes Crit'Air des véhicules déviés`);
   const dirs = cl.mode === 'sens' ? [cl.dir === -1 ? [B, A] : [A, B]] : ow === 1 ? [[A, B]] : ow === -1 ? [[B, A]] : [[A, B], [B, A]];
   for (const [f, t] of dirs){
     // niveau de la voie barrée : une départementale / route principale se dévie par le même réseau, apte aux PL

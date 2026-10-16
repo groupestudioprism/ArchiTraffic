@@ -13,12 +13,12 @@ function openSiteDialog(){
   const search = async () => { const v = q.value.trim(); if (v.length < 3){ res.innerHTML = ''; return; }
     res.innerHTML = '<p class="hint">Recherche…</p>';
     try { const L = await geoSearch(v); res.innerHTML = L.length ? L.map((r, i) => `<div class="erow" data-i="${i}"><span class="ei"><i style="background:var(--accent)"></i></span><span><b>${esc(r.label)}</b><small>${esc(r.context)}</small></span><span></span></div>`).join('') : '<p class="hint">Aucun résultat : précisez la commune.</p>';
-      res.querySelectorAll('[data-i]').forEach(r => r.onclick = () => { const x = L[+r.dataset.i]; pick = {label:x.label, lat:x.lat, lon:x.lon, citycode:x.citycode, city:x.city}; res.querySelectorAll('.erow').forEach(e => e.classList.toggle('on', e === r)); ok.disabled = false; q.value = x.label; }); }
+      res.querySelectorAll('[data-i]').forEach(r => r.onclick = () => { const x = L[+r.dataset.i]; pick = {label:x.label, lat:x.lat, lon:x.lon, citycode:x.citycode, city:x.city, type:x.type}; res.querySelectorAll('.erow').forEach(e => e.classList.toggle('on', e === r)); ok.disabled = false; q.value = x.label; }); }
     catch(e){ res.innerHTML = '<p class="hint">Service d\'adresses injoignable. Vérifiez la connexion.</p>'; } };
   q.oninput = () => { clearTimeout(t); t = setTimeout(search, 320); }; q.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); search(); } };
   setTimeout(() => { q.focus(); q.select(); }, 40);
   $('#sdX').onclick = $('#sdNo').onclick = closeEngine;
-  ok.onclick = () => { if (!pick) return; const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
+  ok.onclick = async () => { if (!pick) return; if (pick.type === 'municipality' && !pick.centred){ ok.disabled = true; const c = await townCenter(pick); ok.disabled = false; if (c){ pick = {...pick, lat:c.lat, lon:c.lon, centred:true}; toast(`Commune : zone centrée sur le bourg (${c.via}).`, 4000); } } const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
     if (moved && state.els.length && !confirm('Changer de lieu : les éléments déjà placés seront repositionnés par rapport à la nouvelle adresse. Continuer ?')) return;
     closeEngine(); beginEdit(); state.site = {...pick, size}; if (state.name === 'Nouveau chantier' || !state.name) state.name = pick.label.split(',')[0]; endEdit(); $('#projName').textContent = state.name; loadSite(false); };
 }

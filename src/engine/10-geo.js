@@ -8,7 +8,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 5;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 6;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -19,6 +19,23 @@ async function geoSearch(q){
   return (j.features || []).map(f => { const p = f.properties || {}, [lon, lat] = f.geometry?.coordinates || [];
     return {label:p.label || p.name || q, lon, lat, postcode:p.postcode || '', citycode:String(p.citycode || ''), city:p.city || '', context:p.context || '', type:p.type || ''}; })
     .filter(r => Number.isFinite(r.lon) && Number.isFinite(r.lat));
+}
+/* centre réel d'une commune : le géocodeur renvoie pour une commune un point « centre » qui, pour une commune étendue ou
+   une commune nouvelle (ex. Port-Jérôme-sur-Seine), tombe souvent dans les champs. On cherche le bourg : le lieu-dit
+   OSM portant le nom de la commune, sinon sa mairie principale, sinon le bourg le plus peuplé. */
+async function townCenter(r){
+  if (r.type !== 'municipality' || !r.citycode) return null;
+  const q = `[out:json][timeout:20];area["ref:INSEE"="${r.citycode}"]["boundary"="administrative"]->.a;(node(area.a)["place"~"^(city|town|village|suburb|quarter)$"];nwr(area.a)["amenity"="townhall"];);out center tags;`;
+  try {
+    const j = await overpassOn(q, 0), E = j.elements || [], norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+    const ll = e => e.lat != null ? [e.lon, e.lat] : e.center ? [e.center.lon, e.center.lat] : null, name = norm(r.city || r.label.split(',')[0]);
+    const places = E.filter(e => e.tags?.place), halls = E.filter(e => e.tags?.amenity === 'townhall');
+    const pick = places.find(e => norm(e.tags.name) === name)
+      || halls.find(e => /city|commune/.test(e.tags['townhall:type'] || '') && !/d[ée]l[ée]gu/i.test(e.tags.name || ''))
+      || halls.find(e => !/d[ée]l[ée]gu|annexe/i.test(e.tags.name || ''))
+      || places.filter(e => /city|town|village/.test(e.tags.place)).sort((a, b) => (+b.tags.population || 0) - (+a.tags.population || 0))[0];
+    const c = pick && ll(pick); return c ? {lon:c[0], lat:c[1], via:pick.tags.name || 'mairie'} : null;
+  } catch(e){ return null; }
 }
 async function geoReverse(lon, lat){
   try { const j = await fetchJSON(`${GEO_REVERSE}?${new URLSearchParams({lon:lon.toFixed(6), lat:lat.toFixed(6), limit:'1'})}`, 8000); const p = j.features?.[0]?.properties; return p ? (p.label || '') : ''; } catch(e){ return ''; }
@@ -87,7 +104,7 @@ async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ..
   throw err || new Error('overpass'); }
 async function loadOSM(B, withBuildings = true){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
@@ -122,7 +139,7 @@ const BDT_WALL = {'00':'enduit', '01':'pierre', '02':'meuliere', '03':'beton', '
 const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'beton', '05':'verre', '06':'bois', '09':'', '10':'tuiles', '12':'tuiles', '13':'tuiles', '20':'ardoises', '30':'zinc', '40':'beton'};
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
-  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
+  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], sens:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
   const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
@@ -133,9 +150,13 @@ function parseWorld(raw, P, size){
       else if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
       else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T['street_cabinet'] || ''), tags:T});
       else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T});
+      else if (T.railway === 'level_crossing') W.points.push({id:e.id, x:xy[0], y:xy[1], k:'level_crossing', tags:T});
+      else if (/^(school|kindergarten|college|hospital)$/.test(T.amenity || '')) W.sens.push({x:xy[0], y:xy[1], k:T.amenity, name:T.name || ''});
       else if (T.highway || T.amenity) W.points.push({id:e.id, x:xy[0], y:xy[1], k:T.highway || T.amenity, tags:T});
       continue;
     }
+    if ((e.type === 'way' || e.type === 'relation') && /^(school|kindergarten|college|hospital)$/.test(e.tags?.amenity || '')){ const c = e.center || (e.geometry?.length ? {lon:e.geometry.reduce((s, g) => s + g.lon, 0) / e.geometry.length, lat:e.geometry.reduce((s, g) => s + g.lat, 0) / e.geometry.length} : e.bounds ? {lon:(e.bounds.minlon + e.bounds.maxlon) / 2, lat:(e.bounds.minlat + e.bounds.maxlat) / 2} : null); if (c){ const xy = P.toXY(c.lon, c.lat); W.sens.push({x:xy[0], y:xy[1], k:e.tags.amenity, name:e.tags.name || ''}); } if (e.type === 'relation' || !e.tags.building) continue; }
+    if (e.type === 'relation' && e.tags?.boundary === 'low_emission_zone'){ W.zfe = e.tags.name || 'Zone à faibles émissions'; continue; }
     if (e.type === 'way'){
       const pts = (e.geometry || []).map(g => P.toXY(g.lon, g.lat)); if (pts.length < 2) continue;
       const T = e.tags || {}; byId.set(e.id, {pts, nodes:e.nodes || []});

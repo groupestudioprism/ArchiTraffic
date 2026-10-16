@@ -2837,7 +2837,7 @@ const GEO_SEARCH = 'https://data.geopf.fr/geocodage/search', GEO_REVERSE = 'http
 const GEO_ALTI = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 const WMS_R = 'https://data.geopf.fr/wms-r', WFS_URL = 'https://data.geopf.fr/wfs/ows';
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DATA_VER = 5;   // version du format en cache (incrémenter si l'analyse change)
+const DATA_VER = 6;   // version du format en cache (incrémenter si l'analyse change)
 
 async function fetchJSON(url, ms = 12000, opt = {}){
   const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
@@ -2848,6 +2848,23 @@ async function geoSearch(q){
   return (j.features || []).map(f => { const p = f.properties || {}, [lon, lat] = f.geometry?.coordinates || [];
     return {label:p.label || p.name || q, lon, lat, postcode:p.postcode || '', citycode:String(p.citycode || ''), city:p.city || '', context:p.context || '', type:p.type || ''}; })
     .filter(r => Number.isFinite(r.lon) && Number.isFinite(r.lat));
+}
+/* centre réel d'une commune : le géocodeur renvoie pour une commune un point « centre » qui, pour une commune étendue ou
+   une commune nouvelle (ex. Port-Jérôme-sur-Seine), tombe souvent dans les champs. On cherche le bourg : le lieu-dit
+   OSM portant le nom de la commune, sinon sa mairie principale, sinon le bourg le plus peuplé. */
+async function townCenter(r){
+  if (r.type !== 'municipality' || !r.citycode) return null;
+  const q = `[out:json][timeout:20];area["ref:INSEE"="${r.citycode}"]["boundary"="administrative"]->.a;(node(area.a)["place"~"^(city|town|village|suburb|quarter)$"];nwr(area.a)["amenity"="townhall"];);out center tags;`;
+  try {
+    const j = await overpassOn(q, 0), E = j.elements || [], norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+    const ll = e => e.lat != null ? [e.lon, e.lat] : e.center ? [e.center.lon, e.center.lat] : null, name = norm(r.city || r.label.split(',')[0]);
+    const places = E.filter(e => e.tags?.place), halls = E.filter(e => e.tags?.amenity === 'townhall');
+    const pick = places.find(e => norm(e.tags.name) === name)
+      || halls.find(e => /city|commune/.test(e.tags['townhall:type'] || '') && !/d[ée]l[ée]gu/i.test(e.tags.name || ''))
+      || halls.find(e => !/d[ée]l[ée]gu|annexe/i.test(e.tags.name || ''))
+      || places.filter(e => /city|town|village/.test(e.tags.place)).sort((a, b) => (+b.tags.population || 0) - (+a.tags.population || 0))[0];
+    const c = pick && ll(pick); return c ? {lon:c[0], lat:c[1], via:pick.tags.name || 'mairie'} : null;
+  } catch(e){ return null; }
 }
 async function geoReverse(lon, lat){
   try { const j = await fetchJSON(`${GEO_REVERSE}?${new URLSearchParams({lon:lon.toFixed(6), lat:lat.toFixed(6), limit:'1'})}`, 8000); const p = j.features?.[0]?.properties; return p ? (p.label || '') : ''; } catch(e){ return ''; }
@@ -2916,7 +2933,7 @@ async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ..
   throw err || new Error('overpass'); }
 async function loadOSM(B, withBuildings = true){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
@@ -2951,7 +2968,7 @@ const BDT_WALL = {'00':'enduit', '01':'pierre', '02':'meuliere', '03':'beton', '
 const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'beton', '05':'verre', '06':'bois', '09':'', '10':'tuiles', '12':'tuiles', '13':'tuiles', '20':'ardoises', '30':'zinc', '40':'beton'};
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
-  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
+  const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], sens:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
   const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
@@ -2962,9 +2979,13 @@ function parseWorld(raw, P, size){
       else if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
       else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T['street_cabinet'] || ''), tags:T});
       else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T});
+      else if (T.railway === 'level_crossing') W.points.push({id:e.id, x:xy[0], y:xy[1], k:'level_crossing', tags:T});
+      else if (/^(school|kindergarten|college|hospital)$/.test(T.amenity || '')) W.sens.push({x:xy[0], y:xy[1], k:T.amenity, name:T.name || ''});
       else if (T.highway || T.amenity) W.points.push({id:e.id, x:xy[0], y:xy[1], k:T.highway || T.amenity, tags:T});
       continue;
     }
+    if ((e.type === 'way' || e.type === 'relation') && /^(school|kindergarten|college|hospital)$/.test(e.tags?.amenity || '')){ const c = e.center || (e.geometry?.length ? {lon:e.geometry.reduce((s, g) => s + g.lon, 0) / e.geometry.length, lat:e.geometry.reduce((s, g) => s + g.lat, 0) / e.geometry.length} : e.bounds ? {lon:(e.bounds.minlon + e.bounds.maxlon) / 2, lat:(e.bounds.minlat + e.bounds.maxlat) / 2} : null); if (c){ const xy = P.toXY(c.lon, c.lat); W.sens.push({x:xy[0], y:xy[1], k:e.tags.amenity, name:e.tags.name || ''}); } if (e.type === 'relation' || !e.tags.building) continue; }
+    if (e.type === 'relation' && e.tags?.boundary === 'low_emission_zone'){ W.zfe = e.tags.name || 'Zone à faibles émissions'; continue; }
     if (e.type === 'way'){
       const pts = (e.geometry || []).map(g => P.toXY(g.lon, g.lat)); if (pts.length < 2) continue;
       const T = e.tags || {}; byId.set(e.id, {pts, nodes:e.nodes || []});
@@ -3062,13 +3083,16 @@ function buildNet(W){
       const a = node(r.nodes[k]), b = node(r.nodes[k + 1]); if (!a || !b || a === b) continue;
       a.nb.add(b.id); b.nb.add(a.id); a.ways.add(ri); b.ways.add(ri);
       const len = V.dist(a.xy, b.xy) || 0.01, sp = r.speed / 3.6;
-      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
+      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dest:/^(destination|delivery)$/.test(r.tags?.motor_vehicle || r.tags?.vehicle || r.tags?.access || ''), z30:(r.speed || 50) <= 30, hz:/^no$/.test(r.tags?.hazmat || ''), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
       if (r.oneway >= 0) mk(a, b, false);
       if (r.oneway <= 0) mk(b, a, true);
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
     }
   });
   for (const p of W.points){ const n = N.nodes.get(p.id); if (!n) continue; if (p.k === 'traffic_signals') n.sig = true; else if (p.k === 'stop') n.stop = true; else if (p.k === 'give_way') n.give = true; else if (p.k === 'crossing') n.cross = true; else if (p.k === 'mini_roundabout') n.mini = true; }
+  // abords d'écoles, crèches, collèges, hôpitaux (à moins de 80 m) : on n'y fait pas passer une déviation si l'on peut l'éviter
+  const SENS = W.sens || []; for (const e of N.edges){ const a = N.nodes.get(e.from).xy, b = N.nodes.get(e.to).xy, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; e.near = SENS.some(q => Math.hypot(q.x - m[0], q.y - m[1]) < 80); }
+  for (const p of W.points) if (p.k === 'level_crossing'){ const n = N.nodes.get(p.id); if (n) n.lc = true; }
   for (const R of W.restr){ const k = `${R.from}|${R.via}`; if (R.only) N.only.set(k, R.to); else { (N.restr.get(k) || N.restr.set(k, new Set()).get(k)).add(R.to); } }
   // index spatial des segments (toutes voies, piétonnes comprises, pour l'accroche)
   W.roads.forEach((r, ri) => { for (let k = 0; k + 1 < r.pts.length; k++){ const a = r.pts[k], b = r.pts[k + 1];
@@ -3083,6 +3107,8 @@ const UNPAVED = /^(unpaved|gravel|fine_gravel|dirt|earth|ground|grass|sand|mud|c
 function plOk(r){
   const T = r.tags || {}, num = v => parseFloat(String(v || '').replace(',', '.'));
   if (/^(no|destination|delivery|local)$/.test(T.hgv || '') || /^(destination|private)$/.test(T.access || '')) return 0;
+  if (/no|destination|delivery/.test(T['hgv:conditional'] || '') || /no|destination/.test(T['motor_vehicle:conditional'] || '')) return 0;   // restrictions horaires locales (arrêté municipal) : non garanties pendant le chantier
+  if (T['maxweight:conditional'] || T['maxlength'] && num(T.maxlength) < 12) return 0;
   if (num(T.maxweight) > 0 && num(T.maxweight) < 19) return 0;
   if (num(T.maxheight) > 0 && num(T.maxheight) < 4) return 0;
   if (num(T.maxwidth) > 0 && num(T.maxwidth) < 2.6) return 0;
@@ -3165,6 +3191,10 @@ function route(fromId, toId, C, opt = {}){
       if (opt.lvl){   // déviation d'une route classée : rester sur le réseau de même niveau, jamais de chemin inadapté aux PL
         if (opt.strict && !e.pl) continue;
         if (e.cls >= 6 && opt.lvl < 6) continue;                  // jamais de zone de rencontre / desserte pour dévier une rue circulée
+        if (e.dest) continue;                                        // « sauf desserte / riverains » : transit interdit, donc pas de déviation
+        if (e.near) c *= 1.8;                                        // abords d'école / hôpital
+        if (e.z30 && opt.lvl <= 4) c *= 1.4;                         // zone 30 : pas de report d'un trafic de transit
+        if (opt.strict && NET.nodes.get(e.to)?.lc) c += 90;          // passage à niveau : risque d'arrêt d'un PL sur les voies
         const drop = e.cls - opt.lvl; if (drop > 0 && !e.dep) c *= drop === 1 ? 2.5 : 8;   // descendre dans la hiérarchie coûte cher (lotissements, rues résidentielles)
       }
       const nk = e.to + '|' + e.r, ng = cost + c;
@@ -3183,6 +3213,11 @@ function proposeDetours(cl, els){
   const ow = sectionOneway(ids), out = [];
   const closedEdges = []; for (let i = 0; i + 1 < ids.length; i++){ const n = NET.nodes.get(ids[i]); for (const ei of n?.out || []) if (NET.edges[ei].to === ids[i + 1]) closedEdges.push(NET.edges[ei]); for (const ei of n?.inn || []) if (NET.edges[ei].from === ids[i + 1]) closedEdges.push(NET.edges[ei]); }
   const lvl = Math.min(...closedEdges.map(e => e.cls), 8), heavy = closedEdges.some(e => e.dep) || lvl <= 4;   // route départementale / nationale ou voie principale : trafic PL à dévier
+  const ref = [...new Set(closedEdges.map(e => NET.roads[e.r].ref).filter(Boolean))].join(', ');
+  cl.rules = [heavy ? `Voie ${ref ? ref + ' ' : ''}de niveau ${['', 'autoroute / voie express', 'route principale', 'route secondaire', 'route de liaison'][lvl] || 'locale'} : déviation par un réseau équivalent, apte aux poids lourds (tonnage, hauteur, largeur, revêtement, restrictions horaires)` : 'Rue locale : déviation par les rues ouvertes à la circulation de transit',
+    'Exclus : zones de rencontre, aires piétonnes, voies de desserte, chemins non revêtus, voies « sauf riverains / desserte »',
+    'Évités si possible : abords d\'écoles et d\'hôpitaux (80 m), zones 30 pour le trafic de transit' + (heavy ? ', passages à niveau pour les PL' : '')];
+  if (WORLD?.W?.zfe) cl.rules.push(`${WORLD.W.zfe} : vérifier les vignettes Crit'Air des véhicules déviés`);
   const dirs = cl.mode === 'sens' ? [cl.dir === -1 ? [B, A] : [A, B]] : ow === 1 ? [[A, B]] : ow === -1 ? [[B, A]] : [[A, B], [B, A]];
   for (const [f, t] of dirs){
     // niveau de la voie barrée : une départementale / route principale se dévie par le même réseau, apte aux PL
@@ -5625,7 +5660,7 @@ function renderElProps(e){
   } else if (e.t === 'closure'){
     h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}${e.mode !== 'total' ? '' : `<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label>`}${e.mode === 'voie' ? '<p class="hint wide" style="margin:4px 0 0">Sens unique à deux files : la circulation est maintenue sur l\'autre file.</p>' : ''}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
-      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
+      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `<p class="eyebrow" style="margin:14px 0 4px">Règles de déviation appliquées</p><ul class="hint" style="margin:0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}${e.plWarn ? '<li><b>Aucun itinéraire PL dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></li>' : ''}</ul>` : ''}${closureVariants(e)}`;
   } else if (e.t === 'detour'){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
@@ -5899,12 +5934,12 @@ function openSiteDialog(){
   const search = async () => { const v = q.value.trim(); if (v.length < 3){ res.innerHTML = ''; return; }
     res.innerHTML = '<p class="hint">Recherche…</p>';
     try { const L = await geoSearch(v); res.innerHTML = L.length ? L.map((r, i) => `<div class="erow" data-i="${i}"><span class="ei"><i style="background:var(--accent)"></i></span><span><b>${esc(r.label)}</b><small>${esc(r.context)}</small></span><span></span></div>`).join('') : '<p class="hint">Aucun résultat : précisez la commune.</p>';
-      res.querySelectorAll('[data-i]').forEach(r => r.onclick = () => { const x = L[+r.dataset.i]; pick = {label:x.label, lat:x.lat, lon:x.lon, citycode:x.citycode, city:x.city}; res.querySelectorAll('.erow').forEach(e => e.classList.toggle('on', e === r)); ok.disabled = false; q.value = x.label; }); }
+      res.querySelectorAll('[data-i]').forEach(r => r.onclick = () => { const x = L[+r.dataset.i]; pick = {label:x.label, lat:x.lat, lon:x.lon, citycode:x.citycode, city:x.city, type:x.type}; res.querySelectorAll('.erow').forEach(e => e.classList.toggle('on', e === r)); ok.disabled = false; q.value = x.label; }); }
     catch(e){ res.innerHTML = '<p class="hint">Service d\'adresses injoignable. Vérifiez la connexion.</p>'; } };
   q.oninput = () => { clearTimeout(t); t = setTimeout(search, 320); }; q.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); search(); } };
   setTimeout(() => { q.focus(); q.select(); }, 40);
   $('#sdX').onclick = $('#sdNo').onclick = closeEngine;
-  ok.onclick = () => { if (!pick) return; const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
+  ok.onclick = async () => { if (!pick) return; if (pick.type === 'municipality' && !pick.centred){ ok.disabled = true; const c = await townCenter(pick); ok.disabled = false; if (c){ pick = {...pick, lat:c.lat, lon:c.lon, centred:true}; toast(`Commune : zone centrée sur le bourg (${c.via}).`, 4000); } } const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
     if (moved && state.els.length && !confirm('Changer de lieu : les éléments déjà placés seront repositionnés par rapport à la nouvelle adresse. Continuer ?')) return;
     closeEngine(); beginEdit(); state.site = {...pick, size}; if (state.name === 'Nouveau chantier' || !state.name) state.name = pick.label.split(',')[0]; endEdit(); $('#projName').textContent = state.name; loadSite(false); };
 }
