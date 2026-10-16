@@ -4178,6 +4178,9 @@ function sigState(n, d, t = SIGT()){
 let SIGHEADS = null;   // {heads:[{n, d}], lamps:{r,y,g:InstancedMesh}, last:''}
 const SIGCOL = {r:[0xFF2A1A, 0x3A0D0A], y:[0xFFB300, 0x3A2A06], g:[0x18E070, 0x0A2E18]};
 function buildSignals(grp){
+  // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
+  for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
+  for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
@@ -5045,6 +5048,7 @@ const LIB = [];
 const libAdd = (cat, k, name, build, x = {}) => LIB.push({cat, k, name, build, ...x});
 for (const [cat, codes] of Object.entries(SIGN_LIB)) for (const code of codes){ const S = SIGNS[code]; if (!S) continue; const perm = cat !== 'temp';
   libAdd(cat, code, S.n, p => signOn(code, p, cat), {sign:code, ref:code.replace(/_.*/, '').replace('KR', 'KC'), p:{...(S.p || {}), pole:defaultSupport(code, cat)}, h:1.6}); }
+libAdd('bal', 'FEUX', 'Carrefour à feux tricolores (à poser sur le carrefour)', () => { const g = new THREE.Group(), d = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.04, 24), new THREE.MeshBasicMaterial({color:0x1E2226, transparent:true, opacity:0.55})); d.position.y = 0.06; g.add(d); for (const [c, x] of [[0xFF2A1A, -0.5], [0xFFB300, 0], [0x18E070, 0.5]]){ const m = new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), new THREE.MeshBasicMaterial({color:c})); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.09, 0); g.add(m); } return g; }, {ref:'R11'});
 libAdd('bal', 'K5a', 'Cône de chantier', p => coneK5a(+(p?.h || 0.75)), {ref:'K5a', p:{h:'0.75'}});
 libAdd('bal', 'K5b', 'Balise d\'alignement', () => baliseK5b(), {ref:'K5b'});
 libAdd('bal', 'K5c', 'Balise de guidage', () => baliseK5c(), {ref:'K5c'});
@@ -5317,7 +5321,9 @@ function lineModules(g, pts, tpl, len, id, make){
 }
 function closureWidth(c){ let w = 0; for (let i = 0; i + 1 < (c.ids?.length || 0); i++){ const s = NET.segIdx.get(segKey(c.ids[i], c.ids[i + 1])); if (s) w = Math.max(w, NET.roads[s.ri].w); } return w || 6; }
 const OBJ_PROTO = new Map();
+let feuxKey = '';
 function rebuildProj(){
+  const fk = (state?.els || []).filter(e => e.t === 'obj' && e.k === 'FEUX' && !phOff(e)).map(e => Math.round(e.x) + ',' + Math.round(e.y)).join(';'); if (fk !== feuxKey){ feuxKey = fk; if (WORLD) buildWorld(); }   // carrefours à feux ajoutés ou retirés
   const keep = new Set();
   for (const e of state?.els || []){
     const sig = elSig(e); let c = projCache.get(e.id);

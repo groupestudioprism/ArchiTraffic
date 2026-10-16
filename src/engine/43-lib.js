@@ -4,6 +4,7 @@ const LIB = [];
 const libAdd = (cat, k, name, build, x = {}) => LIB.push({cat, k, name, build, ...x});
 for (const [cat, codes] of Object.entries(SIGN_LIB)) for (const code of codes){ const S = SIGNS[code]; if (!S) continue; const perm = cat !== 'temp';
   libAdd(cat, code, S.n, p => signOn(code, p, cat), {sign:code, ref:code.replace(/_.*/, '').replace('KR', 'KC'), p:{...(S.p || {}), pole:defaultSupport(code, cat)}, h:1.6}); }
+libAdd('bal', 'FEUX', 'Carrefour à feux tricolores (à poser sur le carrefour)', () => { const g = new THREE.Group(), d = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.04, 24), new THREE.MeshBasicMaterial({color:0x1E2226, transparent:true, opacity:0.55})); d.position.y = 0.06; g.add(d); for (const [c, x] of [[0xFF2A1A, -0.5], [0xFFB300, 0], [0x18E070, 0.5]]){ const m = new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), new THREE.MeshBasicMaterial({color:c})); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.09, 0); g.add(m); } return g; }, {ref:'R11'});
 libAdd('bal', 'K5a', 'Cône de chantier', p => coneK5a(+(p?.h || 0.75)), {ref:'K5a', p:{h:'0.75'}});
 libAdd('bal', 'K5b', 'Balise d\'alignement', () => baliseK5b(), {ref:'K5b'});
 libAdd('bal', 'K5c', 'Balise de guidage', () => baliseK5c(), {ref:'K5c'});
