@@ -3,10 +3,18 @@ const canvas = $('#c'), vpEl = $('#vp');
 const isNarrow = matchMedia('(max-width: 860px)');
 /* tablettes et téléphones : écrans à 2-3 px par point mais GPU modestes → profil « basse consommation » :
    résolution plafonnée, pas d'anticrénelage matériel, ombres simples et désactivées par défaut, moins de véhicules simulés */
-const LOWPOW = (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || /iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const renderer = new THREE.WebGLRenderer({canvas, antialias:!LOWPOW, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
-renderer.setPixelRatio(Math.min(devicePixelRatio, LOWPOW ? 1.25 : 2));
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = LOWPOW ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+const LOWPOW = (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) || (navigator.hardwareConcurrency || 8) <= 2 || (navigator.deviceMemory || 8) <= 2 || /iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/* qualité graphique réglable (Calques → Qualité graphique) ; « Auto » = Économie sur tablette/téléphone, Élevée sinon */
+const GFX_PRESETS = {
+  eco:{n:'Économie', pr:1, prLow:0.7, aa:false, shadows:false, sh:1024, soft:false, ground:2048, cap:150, fps:30},
+  std:{n:'Équilibrée', pr:1.5, prLow:0.9, aa:true, shadows:true, sh:1024, soft:false, ground:2048, cap:250, fps:60},
+  high:{n:'Élevée', pr:2, prLow:1.25, aa:true, shadows:true, sh:2048, soft:true, ground:4096, cap:360, fps:60}};
+let GFXQ = (() => { try { return JSON.parse(localStorage.getItem('at.display') || '{}').gfx || 'auto'; } catch(e){ return 'auto'; } })();
+const GFX = () => GFX_PRESETS[GFXQ === 'auto' ? (LOWPOW ? 'eco' : 'high') : GFXQ] || GFX_PRESETS.high;
+document.documentElement.classList.toggle('gfx-eco', GFX() === GFX_PRESETS.eco);
+const renderer = new THREE.WebGLRenderer({canvas, antialias:GFX().aa, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio, GFX().pr));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = GFX().soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -27,7 +35,7 @@ const ctl = () => view === '2d' ? c2 : c3;
 
 const hemi = new THREE.HemisphereLight(0xEAF2FF, 0x5B5446, 1.1); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xFFF4E2, 2.4); sun.castShadow = true;
-sun.shadow.mapSize.set(isNarrow.matches || LOWPOW ? 1024 : 2048, isNarrow.matches || LOWPOW ? 1024 : 2048);
+sun.shadow.mapSize.set(isNarrow.matches ? 1024 : GFX().sh, isNarrow.matches ? 1024 : GFX().sh);
 Object.assign(sun.shadow.camera, {left:-120, right:120, top:120, bottom:-120, near:5, far:900}); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 let pmrem = null, envTex = null;
@@ -41,7 +49,7 @@ scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 /* Réglages d'affichage, par appareil */
 const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
-if (LOWPOW && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
+if (!GFX().shadows && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';
 function saveDisplay(){ try { localStorage.setItem('at.display', JSON.stringify(DISPLAY)); } catch(e){} }

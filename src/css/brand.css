@@ -66,6 +66,11 @@
 
 /* légende sur la vue */
 .legend-box{position:absolute;right:12px;top:150px;background:color-mix(in srgb,var(--panel) 95%,transparent);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);font-size:12px;max-width:260px;max-height:46%;overflow:auto;cursor:move;user-select:none}
+.legend-box h4 .lg-n{display:none;margin-left:6px;font:600 10px var(--f-body);background:var(--line);color:var(--ink);border-radius:9px;padding:1px 6px}
+.legend-box h4 .lg-tog{float:right;margin:-3px -4px 0 10px;width:24px;height:24px;border:0;border-radius:7px;background:transparent;color:var(--mut);font:700 15px/1 var(--f-body);cursor:pointer}
+.legend-box h4 .lg-tog:hover{background:var(--line);color:var(--ink)}
+.legend-box.mini{padding:7px 10px}.legend-box.mini h4{margin:0}.legend-box.mini ul,.legend-box.mini>small{display:none}.legend-box.mini h4 .lg-n{display:inline-block}
+@media (pointer:coarse){.legend-box h4 .lg-tog{width:34px;height:34px;margin:-8px -8px -6px 8px}}
 .legend-box h4{margin:0 0 6px;font:700 12px var(--f-display);letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
 .legend-box ul{list-style:none;margin:0;padding:0;display:grid;gap:5px}
 .legend-box li{display:flex;align-items:center;gap:8px;color:var(--ink)}
@@ -217,3 +222,7 @@
 .gantt .gt-r em{font-size:11.5px;color:var(--mut);padding-left:8px;line-height:26px}
 
 .dimpal{display:inline-flex;gap:5px;align-items:center}.dimpal .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18);cursor:pointer;padding:0}.dimpal .sw.on{box-shadow:0 0 0 2px var(--ink)}
+
+/* qualité « Économie » : les flous d'arrière-plan au-dessus de la 3D forcent la tablette à recomposer toute l'image à chaque trame */
+html.gfx-eco *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px rgba(0,0,0,.18)}

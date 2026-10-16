@@ -879,6 +879,11 @@ a.ap-link{text-decoration:none}
 
 /* légende sur la vue */
 .legend-box{position:absolute;right:12px;top:150px;background:color-mix(in srgb,var(--panel) 95%,transparent);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);font-size:12px;max-width:260px;max-height:46%;overflow:auto;cursor:move;user-select:none}
+.legend-box h4 .lg-n{display:none;margin-left:6px;font:600 10px var(--f-body);background:var(--line);color:var(--ink);border-radius:9px;padding:1px 6px}
+.legend-box h4 .lg-tog{float:right;margin:-3px -4px 0 10px;width:24px;height:24px;border:0;border-radius:7px;background:transparent;color:var(--mut);font:700 15px/1 var(--f-body);cursor:pointer}
+.legend-box h4 .lg-tog:hover{background:var(--line);color:var(--ink)}
+.legend-box.mini{padding:7px 10px}.legend-box.mini h4{margin:0}.legend-box.mini ul,.legend-box.mini>small{display:none}.legend-box.mini h4 .lg-n{display:inline-block}
+@media (pointer:coarse){.legend-box h4 .lg-tog{width:34px;height:34px;margin:-8px -8px -6px 8px}}
 .legend-box h4{margin:0 0 6px;font:700 12px var(--f-display);letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
 .legend-box ul{list-style:none;margin:0;padding:0;display:grid;gap:5px}
 .legend-box li{display:flex;align-items:center;gap:8px;color:var(--ink)}
@@ -1030,6 +1035,10 @@ a.ap-link{text-decoration:none}
 .gantt .gt-r em{font-size:11.5px;color:var(--mut);padding-left:8px;line-height:26px}
 
 .dimpal{display:inline-flex;gap:5px;align-items:center}.dimpal .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18);cursor:pointer;padding:0}.dimpal .sw.on{box-shadow:0 0 0 2px var(--ink)}
+
+/* qualité « Économie » : les flous d'arrière-plan au-dessus de la 3D forcent la tablette à recomposer toute l'image à chaque trame */
+html.gfx-eco *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px rgba(0,0,0,.18)}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -3341,10 +3350,18 @@ const canvas = $('#c'), vpEl = $('#vp');
 const isNarrow = matchMedia('(max-width: 860px)');
 /* tablettes et téléphones : écrans à 2-3 px par point mais GPU modestes → profil « basse consommation » :
    résolution plafonnée, pas d'anticrénelage matériel, ombres simples et désactivées par défaut, moins de véhicules simulés */
-const LOWPOW = (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4 || /iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const renderer = new THREE.WebGLRenderer({canvas, antialias:!LOWPOW, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
-renderer.setPixelRatio(Math.min(devicePixelRatio, LOWPOW ? 1.25 : 2));
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = LOWPOW ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+const LOWPOW = (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches) || (navigator.hardwareConcurrency || 8) <= 2 || (navigator.deviceMemory || 8) <= 2 || /iPad|Android|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+/* qualité graphique réglable (Calques → Qualité graphique) ; « Auto » = Économie sur tablette/téléphone, Élevée sinon */
+const GFX_PRESETS = {
+  eco:{n:'Économie', pr:1, prLow:0.7, aa:false, shadows:false, sh:1024, soft:false, ground:2048, cap:150, fps:30},
+  std:{n:'Équilibrée', pr:1.5, prLow:0.9, aa:true, shadows:true, sh:1024, soft:false, ground:2048, cap:250, fps:60},
+  high:{n:'Élevée', pr:2, prLow:1.25, aa:true, shadows:true, sh:2048, soft:true, ground:4096, cap:360, fps:60}};
+let GFXQ = (() => { try { return JSON.parse(localStorage.getItem('at.display') || '{}').gfx || 'auto'; } catch(e){ return 'auto'; } })();
+const GFX = () => GFX_PRESETS[GFXQ === 'auto' ? (LOWPOW ? 'eco' : 'high') : GFXQ] || GFX_PRESETS.high;
+document.documentElement.classList.toggle('gfx-eco', GFX() === GFX_PRESETS.eco);
+const renderer = new THREE.WebGLRenderer({canvas, antialias:GFX().aa, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio, GFX().pr));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = GFX().soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -3365,7 +3382,7 @@ const ctl = () => view === '2d' ? c2 : c3;
 
 const hemi = new THREE.HemisphereLight(0xEAF2FF, 0x5B5446, 1.1); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xFFF4E2, 2.4); sun.castShadow = true;
-sun.shadow.mapSize.set(isNarrow.matches || LOWPOW ? 1024 : 2048, isNarrow.matches || LOWPOW ? 1024 : 2048);
+sun.shadow.mapSize.set(isNarrow.matches ? 1024 : GFX().sh, isNarrow.matches ? 1024 : GFX().sh);
 Object.assign(sun.shadow.camera, {left:-120, right:120, top:120, bottom:-120, near:5, far:900}); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 let pmrem = null, envTex = null;
@@ -3379,7 +3396,7 @@ scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 /* Réglages d'affichage, par appareil */
 const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
-if (LOWPOW && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
+if (!GFX().shadows && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';
 function saveDisplay(){ try { localStorage.setItem('at.display', JSON.stringify(DISPLAY)); } catch(e){} }
@@ -3688,7 +3705,7 @@ const GROUND_COL = {
 };
 let groundCanvas = null, groundTex = null, orthoTex = null, orthoState = '';
 function paintGround(){
-  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, LOWPOW ? 2048 : 4096, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
+  const W = WORLD.W, S = WORLD.size, PX = Math.min(renderer.capabilities.maxTextureSize, GFX().ground, Math.max(2048, Math.round(S * 4 / 1024) * 1024)), k = PX / S, plan = planLook(), C = plan ? GROUND_COL.plan : GROUND_COL.tex;
   groundCanvas ??= document.createElement('canvas'); groundCanvas.width = groundCanvas.height = PX; const g = groundCanvas.getContext('2d');
   const X = x => (x + S / 2) * k, Y = y => (S / 2 - y) * k, R = rng(7);
   g.fillStyle = C.base; g.fillRect(0, 0, PX, PX);
@@ -5468,7 +5485,7 @@ const SIM_TYPES = {
   van:{f:() => makeVan(0xffffff, 1), mix:'vul', w:1, len:5.45}, truck:{f:() => makeTruck(0xffffff, 1), mix:'pl', w:0.55, len:9.8, pl:true}, semi:{f:() => makeSemi(0xffffff, 1), mix:'pl', w:0.3, len:16.5, pl:true},
   tipper:{f:() => makeTipper(1), mix:'pl', w:0.15, len:9.3, pl:true}, bus:{f:() => makeBus(0xffffff, 1), mix:'bus', w:1, len:12, pl:true}, moto:{f:() => makeMoto(0xffffff, 1), mix:'r2', w:1, len:2.1},
 };
-const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:LOWPOW ? 200 : 360, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
+const SIM = {on:false, t:0, speed:1, agents:[], inst:null, cap:GFX().cap, entries:[], exits:[], rc:new Map(), base:new Map(), nextSpawn:new Map(), occ:new Map(), resv:new Map(), seq:0, stats:{n:0, done:0, sumT:0, sumT0:0, dev:0}, sigOff:new Map()};
 /* instances : une InstancedMesh par type et par matériau */
 function simBuildInstances(){
   if (SIM.inst) return SIM.inst;
@@ -6236,14 +6253,16 @@ function legendEntries(){
 function renderLegend(){
   const box = $('#legendBox'); if (!state) return; const L = legendEntries();
   box.hidden = !state.legend.show || !L.length;
-  box.innerHTML = `<h4>${esc(state.legend.title || 'Légende')}</h4><ul>${L.map(e => `<li><span class="lg-sym">${e.html}</span><span>${esc(e.label)}${e.n > 1 ? ` <small style="display:inline;color:var(--mut)">× ${e.n}</small>` : ''}</span></li>`).join('')}</ul><small>${esc(state.site?.label || '')}</small>`;
+  const mini = DISPLAY.legMin ?? (isNarrow.matches || LOWPOW); box.classList.toggle('mini', !!mini);
+  box.innerHTML = `<h4>${esc(state.legend.title || 'Légende')}<span class="lg-n">${L.length}</span><button type="button" class="lg-tog" title="${mini ? 'Déplier la légende' : 'Réduire la légende'}" aria-label="${mini ? 'Déplier' : 'Réduire'} la légende">${mini ? '+' : '–'}</button></h4><ul>${L.map(e => `<li><span class="lg-sym">${e.html}</span><span>${esc(e.label)}${e.n > 1 ? ` <small style="display:inline;color:var(--mut)">× ${e.n}</small>` : ''}</span></li>`).join('')}</ul><small>${esc(state.site?.label || '')}</small>`;
   const p = state.legend.pos; if (p){ box.style.left = p[0] + 'px'; box.style.top = p[1] + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; } else { box.style.left = box.style.top = ''; box.style.right = ''; box.style.bottom = ''; }
 }
 /* déplacement de la légende à la souris */
 (() => { const box = $('#legendBox'); let st = null;
-  box.addEventListener('pointerdown', e => { const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr}; box.setPointerCapture(e.pointerId); });
-  box.addEventListener('pointermove', e => { if (!st) return; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
-  box.addEventListener('pointerup', () => { if (!st) return; st = null; state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); }); })();
+  box.addEventListener('click', e => { if (!e.target.closest('.lg-tog')) return; DISPLAY.legMin = !box.classList.contains('mini'); saveDisplay(); renderLegend(); });
+  box.addEventListener('pointerdown', e => { if (e.target.closest('.lg-tog')) return; const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr, mv:false}; box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', e => { if (!st) return; st.mv = true; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
+  box.addEventListener('pointerup', () => { if (!st) return; const mv = st.mv; st = null; if (!mv) return; state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); }); })();
 function renderLegendTab(){
   const all = (() => { const keep = state.legend.hide; state.legend.hide = []; const r = legendEntries(); state.legend.hide = keep; return r; })(), hide = new Set(state.legend.hide || []);
   pb().innerHTML = `<div class="ph"><h2>Légende</h2><span class="tag">Automatique</span></div>
@@ -6451,6 +6470,7 @@ function renderViewMenu(){
   const L = DISPLAY.lay, m = $('#viewMenu');
   m.innerHTML = `<div class="lbl">Calques du site</div>${[['bld', 'Bâtiments'], ['trees', 'Arbres et espaces verts'], ['sidewalks', 'Trottoirs, bordures, caniveaux'], ['marks', 'Marquages au sol'], ['oneway', 'Sens uniques et sens interdits'], ['walls', 'Murs, haies et clôtures'], ['lamps', 'Lampadaires et feux'], ['names', 'Noms des rues'], ['pins', 'Repères des panneaux (vue éloignée)'], ['areas', 'Occupation du sol']].map(([k, n]) => `<label class="mi"><input type="checkbox" data-lay="${k}"${L[k] !== false ? ' checked' : ''}> ${n}</label>`).join('')}<label class="mi"><input type="checkbox" data-lay="nets"${L.nets ? ' checked' : ''}> Réseaux souterrains (vue en coupe)</label>
     <hr><div class="lbl">Éléments du chantier</div><label class="mi"><input type="checkbox" data-proj${projGroup.visible ? ' checked' : ''}> Afficher le chantier</label><label class="mi"><input type="checkbox" data-legend${state.legend.show ? ' checked' : ''}> Légende sur la vue</label>
+    <hr><div class="lbl">Qualité graphique</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px;flex-wrap:wrap">${[['auto', 'Auto'], ['eco', 'Économie'], ['std', 'Équilibrée'], ['high', 'Élevée']].map(([k, n]) => `<button type="button" class="btn sm${GFXQ === k ? ' primary' : ''}" data-gfx="${k}" title="${k === 'auto' ? (LOWPOW ? 'Cet appareil : Économie' : 'Cet appareil : Élevée') : ''}">${n}</button>`).join('')}</div>
     <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-night${DISPLAY.night ? ' checked' : ''}> Vue de nuit (éclairage public, feux, rétroréflexion)</label><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
     <hr><div class="lbl">Thème de l'interface</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px">${[['light', 'Clair'], ['dark', 'Sombre']].map(([k, n]) => `<button type="button" class="btn" data-thm="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'light') === k}">${n}</button>`).join('')}</div>`;
   m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); buildWorld(); annoKey = ''; renderLegend(); if (c.dataset.lay === 'nets' && c.checked) toast((state.nets || []).length ? 'Réseaux : plans importés, et réseau présumé pour les autres types.' : 'Réseaux PRÉSUMÉS (règles de pose usuelles) : à confirmer par les réponses DT/DICT. Fichier → Importer un plan de réseaux.', 6500); });
@@ -6459,6 +6479,7 @@ function renderViewMenu(){
   m.querySelector('[data-night]').onchange = e => { DISPLAY.night = e.target.checked; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; DISPLAY.shadowsUser = true; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
+  m.querySelectorAll('[data-gfx]').forEach(b => b.onclick = () => { setGfx(b.dataset.gfx); renderViewMenu(); });
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });
 }
 
@@ -6857,7 +6878,13 @@ $('#simReset').addEventListener('click', () => { const was = SIM.on; simStop(tru
 /* boucle de rendu */
 /* résolution adaptative : pendant un mouvement de caméra, rendu à résolution réduite (fluide même avec beaucoup d'éléments) ;
    dès que la vue s'arrête (200 ms), une image pleine résolution est redessinée. La réduction s'ajuste au temps réel d'une image. */
-const PR_FULL = Math.min(devicePixelRatio, LOWPOW ? 1.25 : 2); let prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, LOWPOW ? 0.85 : 1.25), frameMs = 16;
+let PR_FULL = Math.min(devicePixelRatio, GFX().pr), prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, GFX().prLow), frameMs = 16, lastRender = 0;
+/* change la qualité à chaud (seul l'anticrénelage attend le prochain chargement) */
+function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISPLAY.shadowsUser; const G = GFX();
+  DISPLAY.shadows = G.shadows; saveDisplay(); document.documentElement.classList.toggle('gfx-eco', G === GFX_PRESETS.eco); PR_FULL = Math.min(devicePixelRatio, G.pr); prLow = Math.min(PR_FULL, G.prLow); setPR(PR_FULL);
+  renderer.shadowMap.type = G.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; sun.shadow.mapSize.set(G.sh, G.sh); sun.shadow.map?.dispose(); sun.shadow.map = null;
+  if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
+  toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
 function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
 function loop(now){
   requestAnimationFrame(loop);
@@ -6865,8 +6892,9 @@ function loop(now){
   const moved = ctl().update(); if (updateSignals()) dirty = true;
   if (moved){ lastMove = now; setPR(prLow); }
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
-  if (moved || dirty){ const t = performance.now(); renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
-    if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, LOWPOW ? 0.85 : 1.25)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
+  if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
+  if (moved || dirty){ const t = performance.now(); lastRender = now; renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
+    if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, GFX().prLow)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
 }
 
 /* ---------- exemple : rue barrée en centre-ville, déviation et balisage ---------- */
