@@ -13,6 +13,7 @@ let GFXQ = (() => { try { return JSON.parse(localStorage.getItem('at.display') |
 const GFX = () => GFX_PRESETS[GFXQ === 'auto' ? (LOWPOW ? 'eco' : 'high') : GFXQ] || GFX_PRESETS.high;
 document.documentElement.classList.toggle('gfx-eco', GFX() === GFX_PRESETS.eco);
 const renderer = new THREE.WebGLRenderer({canvas, antialias:GFX().aa, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
+renderer.debug.checkShaderErrors = false;   // shaders connus : on ne bloque pas sur le journal de compilation de chaque shader (chargements plus rapides)
 renderer.setPixelRatio(Math.min(devicePixelRatio, GFX().pr));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = GFX().soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
@@ -115,13 +116,15 @@ function frameAt(x, y, r = 60){
   dirty = true;
 }
 function resize(){
-  const w = vpEl.clientWidth, h = vpEl.clientHeight; if (!w || !h) return;
+  const w = vpEl.clientWidth, h = vpEl.clientHeight; vpW = w; vpH = h; if (!w || !h) return;
   renderer.setSize(w, h, false); persp.aspect = w / h; persp.updateProjectionMatrix();
   Object.assign(ortho, {left:-w / 2, right:w / 2, top:h / 2, bottom:-h / 2}); ortho.updateProjectionMatrix();
   dirty = true;
 }
 new ResizeObserver(resize).observe(vpEl);
 const tmpV = new THREE.Vector3();
-function toScreen(v){ tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpEl.clientWidth, (1 - tmpV.y) / 2 * vpEl.clientHeight, tmpV.z]; }
+/* taille de la vue mémorisée (mise à jour au redimensionnement) : la relire à chaque point projeté forçait des recalculs */
+let vpW = 0, vpH = 0; const vpSize = () => { if (!vpW){ vpW = vpEl.clientWidth; vpH = vpEl.clientHeight; } };
+function toScreen(v){ vpSize(); tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpW, (1 - tmpV.y) / 2 * vpH, tmpV.z]; }
 /* mètres par pixel (pour régler la taille des symboles en plan) */
 function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpEl.clientHeight || 600); }

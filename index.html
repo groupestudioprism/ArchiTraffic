@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="ARCHITRAFIC · Studio Prism : routes barrées, déviations automatiques et simulation du trafic en 3D, partout en France."><meta name="theme-color" content="#0B2A6B"><link rel="icon" href="assets/emblem-64.webp"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="preconnect" href="https://firestore.googleapis.com"><link rel="preconnect" href="https://identitytoolkit.googleapis.com"><link rel="preconnect" href="https://securetoken.googleapis.com"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://data.geopf.fr" crossorigin><link rel="preconnect" href="https://overpass-api.de" crossorigin><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"><style>[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style></head><body>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="description" content="ARCHITRAFIC · Studio Prism : routes barrées, déviations automatiques et simulation du trafic en 3D, partout en France."><meta name="theme-color" content="#0B2A6B"><link rel="icon" href="assets/emblem-64.webp"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="preconnect" href="https://firestore.googleapis.com"><link rel="preconnect" href="https://identitytoolkit.googleapis.com"><link rel="preconnect" href="https://securetoken.googleapis.com"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://data.geopf.fr" crossorigin><link rel="preconnect" href="https://overpass-api.de" crossorigin><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"><style>[hidden]{display:none!important}html{overflow:hidden;overscroll-behavior:none}body{overflow:hidden;overscroll-behavior:none}*{overscroll-behavior-x:contain}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}body{margin:0}</style></head><body>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('at.theme')==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <title>ARCHITRAFIC · Studio Prism</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -481,6 +481,23 @@ body[data-mode="sec"] .vtools,body[data-mode="sec"] .hud,body[data-mode="sec"] .
 .patlib{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;padding:2px}.patg em{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--mut);letter-spacing:.04em;margin:2px 0 4px}
 .patgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px}
 .pat{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:3px 3px 4px;display:flex;flex-direction:column;gap:3px;cursor:pointer;color:var(--ink)}.pat img{width:100%;aspect-ratio:1;border-radius:5px;object-fit:cover;background:var(--line)}.pat span{font-size:10px;line-height:1.15}.pat.on{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+
+/* ---- téléphone : l'en-tête tient toujours dans la largeur de l'écran (sinon le navigateur élargit toute la page) ---- */
+#userMenu .um-narrow{display:none}
+.top{min-width:0;max-width:100%}
+@media (max-width:420px){ .top .acts{gap:4px;margin-left:auto} .modes button{padding:7px 6px} .top .ib{min-width:32px;padding:0 6px} }
+@media (max-width:400px){ .top .prism-gear:has(+ #userBtn:not([hidden])){display:none} #userMenu .um-narrow{display:flex} .top .modes + .acts{margin-left:6px} }
+@media (max-width:380px){ .modes button{padding:7px 5px;font-size:12px} .top{gap:3px;padding:6px 4px} .top .ib{min-width:31px;padding:0 5px} }
+@media (max-width:350px){ .modes button{padding:6px 4px;font-size:11.5px} .top .acts{gap:2px} .top .ib{min-width:30px;padding:0 4px} }
+/* Tactile : zones de toucher agrandies sans changer le dessin des boutons (pseudo-élément invisible) */
+#c{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+@media (pointer:coarse){
+  .tw,.te,.td,.status button,.modes button,.vgrp button,.tree-h .ib,#userMenu button,.tool{position:relative;-webkit-tap-highlight-color:transparent}
+  .tw::after{content:"";position:absolute;inset:-9px -6px}
+  .te::after,.td::after{content:"";position:absolute;inset:-6px -4px}
+  .status button::after{content:"";position:absolute;inset:-7px -1px}
+  .modes button::after,.vgrp button::after{content:"";position:absolute;inset:-5px 0}
+}
 /* intro : le symbole apparaît sur la grille du plan, la route se trace, puis ARCHI (bleu) et TRAFIC (orange) s'écrivent */
 #splash{position:fixed;inset:0;z-index:60;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding-inline:24px;transition:opacity .55s ease,visibility .55s;font-family:var(--f-body)}
 #splash.done{opacity:0;visibility:hidden}
@@ -1162,6 +1179,7 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
   <button data-um="security"><b>Code PIN et sécurité</b><span>Code PIN du compte, empreinte ou visage (facultatif)</span></button>
   <button data-um="lock" id="umLock"><b>Verrouiller</b><span>Le code PIN sera demandé pour revenir</span></button>
   <button data-um="theme"><b>Thème clair / sombre</b><span>Change l'apparence de l'interface sur cet appareil</span></button>
+  <button data-um="settings" class="um-narrow"><b>Réglages</b><span>Thème, taille de l'interface, molette, qualité graphique…</span></button>
   <hr><button data-um="logout"><b>Se déconnecter</b><span>Sur cet appareil</span></button>
   <button data-um="delete" class="danger"><b>Supprimer mon compte</b><span>Sur le site Studio Prism, avec votre mot de passe et votre code PIN</span></button>
 </div>
@@ -2783,7 +2801,7 @@ document.addEventListener('click', e => { if (!um.hidden && !um.contains(e.targe
 $a('#licBadge').addEventListener('click', () => show('licence'));
 um.addEventListener('click', e => {
   const b = e.target.closest('[data-um]'); if (!b) return; um.hidden = true;
-  ({fiche:() => openClient(true), licence:() => show('licence'), home:() => showHome(), security:() => show('security'), lock:() => show('lock', {noAuto:false}), logout:signOutAll, delete:deleteAccount, theme:() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; if (window.APTheme) window.APTheme(t); else { document.documentElement.dataset.theme = t; try { localStorage.setItem('at.theme', t); } catch(e){} } }})[b.dataset.um]();
+  ({settings:() => window.PrismSettings?.open(), fiche:() => openClient(true), licence:() => show('licence'), home:() => showHome(), security:() => show('security'), lock:() => show('lock', {noAuto:false}), logout:signOutAll, delete:deleteAccount, theme:() => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; if (window.APTheme) window.APTheme(t); else { document.documentElement.dataset.theme = t; try { localStorage.setItem('at.theme', t); } catch(e){} } }})[b.dataset.um]();
 });
 
 /* Suppression du compte : sur le site Studio Prism (même compte), avec confirmation par mot de passe puis code PIN */
@@ -2864,7 +2882,24 @@ const V = {
   rot:(a,ang)=>[a[0]*Math.cos(ang)-a[1]*Math.sin(ang), a[0]*Math.sin(ang)+a[1]*Math.cos(ang)], lerp:(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t],
 };
 let toastT;
-function toast(msg, ms = 3200){ const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+/* Appareil tactile sans souris ni pavé (téléphone, tablette) : les consignes parlent du doigt, pas de la souris ni du clavier */
+const MQ_COARSE = matchMedia('(pointer: coarse)'), MQ_FINE = matchMedia('(any-pointer: fine)');
+const touchOnly = () => MQ_COARSE.matches && !MQ_FINE.matches;
+const TOUCH_TXT = [
+  [/ <kbd>Suppr<\/kbd> l'efface\./g, ''],
+  [/ \(pas de 15° avec <kbd>Maj<\/kbd>\)/g, ''],
+  [/ ; <kbd>R<\/kbd> ou la molette \+ <kbd>Maj<\/kbd> pour le tourner\./g, ' ; l\'outil Rotation l\'oriente ensuite.'],
+  [/<kbd>Entrée<\/kbd> ou double-clic pour fermer/g, 'bouton Terminer pour fermer'],
+  [/<kbd>Entrée<\/kbd> pour terminer/g, 'bouton Terminer pour finir'],
+  [/<kbd>Échap<\/kbd> pour arrêter/g, 'changez d\'outil pour arrêter'],
+  [/la copie suit le curseur ; cliquez pour la poser/g, 'puis touchez l\'endroit où la poser'],
+  [/survolez une rue, cliquez pour/g, 'touchez une rue pour'],
+  [/([Cc])liquez sur /g, (m, c) => (c === 'C' ? 'T' : 't') + 'ouchez '],
+  [/([Cc])liquez/g, (m, c) => (c === 'C' ? 'T' : 't') + 'ouchez'],
+  [/([Ss])urvolez/g, (m, c) => (c === 'S' ? 'T' : 't') + 'ouchez'],
+];
+const forTouch = s => { if (typeof s !== 'string' || !touchOnly()) return s; for (const [a, b] of TOUCH_TXT) s = s.replace(a, b); return s; };
+function toast(msg, ms = 3200){ const t = $('#toast'); if (!t) return; t.textContent = forTouch(msg); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 function segClosest(p, a, b){ const d = V.sub(b, a), L2 = V.dot(d, d) || 1e-12; const t = clamp(V.dot(V.sub(p, a), d) / L2, 0, 1); return {pt:V.add(a, V.mul(d, t)), t}; }
 function segInter(a, b, c, d){
   const r = V.sub(b, a), s = V.sub(d, c), den = V.cross(r, s); if (Math.abs(den) < 1e-9) return null;
@@ -3473,6 +3508,7 @@ let GFXQ = (() => { try { return JSON.parse(localStorage.getItem('at.display') |
 const GFX = () => GFX_PRESETS[GFXQ === 'auto' ? (LOWPOW ? 'eco' : 'high') : GFXQ] || GFX_PRESETS.high;
 document.documentElement.classList.toggle('gfx-eco', GFX() === GFX_PRESETS.eco);
 const renderer = new THREE.WebGLRenderer({canvas, antialias:GFX().aa, powerPreference:'high-performance', preserveDrawingBuffer:false, logarithmicDepthBuffer:false});
+renderer.debug.checkShaderErrors = false;   // shaders connus : on ne bloque pas sur le journal de compilation de chaque shader (chargements plus rapides)
 renderer.setPixelRatio(Math.min(devicePixelRatio, GFX().pr));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = GFX().soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
@@ -3575,14 +3611,16 @@ function frameAt(x, y, r = 60){
   dirty = true;
 }
 function resize(){
-  const w = vpEl.clientWidth, h = vpEl.clientHeight; if (!w || !h) return;
+  const w = vpEl.clientWidth, h = vpEl.clientHeight; vpW = w; vpH = h; if (!w || !h) return;
   renderer.setSize(w, h, false); persp.aspect = w / h; persp.updateProjectionMatrix();
   Object.assign(ortho, {left:-w / 2, right:w / 2, top:h / 2, bottom:-h / 2}); ortho.updateProjectionMatrix();
   dirty = true;
 }
 new ResizeObserver(resize).observe(vpEl);
 const tmpV = new THREE.Vector3();
-function toScreen(v){ tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpEl.clientWidth, (1 - tmpV.y) / 2 * vpEl.clientHeight, tmpV.z]; }
+/* taille de la vue mémorisée (mise à jour au redimensionnement) : la relire à chaque point projeté forçait des recalculs */
+let vpW = 0, vpH = 0; const vpSize = () => { if (!vpW){ vpW = vpEl.clientWidth; vpH = vpEl.clientHeight; } };
+function toScreen(v){ vpSize(); tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpW, (1 - tmpV.y) / 2 * vpH, tmpV.z]; }
 /* mètres par pixel (pour régler la taille des symboles en plan) */
 function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpEl.clientHeight || 600); }
 
@@ -3651,7 +3689,7 @@ function frRegion(lat, lon){ if (lat > 48.45 && lat < 49.3 && lon > 1.6 && lon <
 function facadeSet(kind, seed, shop, region = 'centre'){
   const key = `facset|${kind}|${seed}|${shop ? 1 : 0}|${region}`; if (TEX[key]) return TEX[key];
   const S = 256, cC = document.createElement('canvas'), cH = document.createElement('canvas'), cM = document.createElement('canvas'); for (const c of [cC, cH, cM]){ c.width = c.height = S; }
-  const gC = cC.getContext('2d'), gH = cH.getContext('2d'), gM = cM.getContext('2d'), R = rng(hashStr(key)), RP = REGION_PAL[region] || REGION_PAL.centre, pick = a => a[Math.floor(R() * a.length)];
+  const gC = cC.getContext('2d'), gH = cH.getContext('2d', {willReadFrequently:true}), gM = cM.getContext('2d'), R = rng(hashStr(key)), RP = REGION_PAL[region] || REGION_PAL.centre, pick = a => a[Math.floor(R() * a.length)];
   const r = (x, y, w, h, col, ht, mt = 0) => { gC.fillStyle = col; gC.fillRect(x, y, w, h); if (ht != null){ gH.fillStyle = `rgb(${ht},${ht},${ht})`; gH.fillRect(x, y, w, h); } gM.fillStyle = mt === 1 ? 'rgb(255,18,210)' : mt === 2 ? 'rgb(255,90,170)' : 'rgb(255,235,0)'; gM.fillRect(x, y, w, h); };
   const noise = (base, n = 5000, a = 0.08) => { for (let i = 0; i < n; i++){ gC.globalAlpha = 0.45 * R(); gC.fillStyle = shadeHex(base, (R() - 0.5) * a); const z = 2 * (0.5 + R()); gC.fillRect(R() * S, R() * S, z, z); } gC.globalAlpha = 1; };
   const glass = (x, y, w, h, deep = 70) => { const gl = gC.createLinearGradient(0, y, 0, y + h); gl.addColorStop(0, '#2E3A45'); gl.addColorStop(0.55, '#4F5F6C'); gl.addColorStop(1, '#6C7C88'); gC.fillStyle = gl; gC.fillRect(x, y, w, h); gH.fillStyle = `rgb(${deep},${deep},${deep})`; gH.fillRect(x, y, w, h); gM.fillStyle = 'rgb(255,18,210)'; gM.fillRect(x, y, w, h);
@@ -5807,7 +5845,7 @@ function setTool(t){
   if (t === 'place' && activeTab !== 'lib' && !isNarrow.matches) setTab('lib');
   tool = t; cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
 }
-function setPrompt(extra = ''){ $('#prompt').innerHTML = extra || TOOL_HELP[tool] || ''; }
+function setPrompt(extra = ''){ $('#prompt').innerHTML = forTouch(extra || TOOL_HELP[tool] || ''); }
 function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPreview(); ctl().enabled = true; }
 /* ---------- HUD : options de l'outil courant ---------- */
 function syncHud(){
@@ -6415,7 +6453,7 @@ function buildAnnos(){
 function updateLabels(){
   const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.t === 'dim' ? JSON.stringify([e.a, e.b, e.col, e.off, e.dec, e.dz]) : '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
-  const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
+  vpSize(); const W = vpW, Hh = vpH, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
   for (const a of pins){ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
@@ -7064,7 +7102,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst}; }); }, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+window.ATDebug = {gl(){ let meshes = 0, lines = 0, inst = 0; scene.traverse(o => { if (!o.visible) return; if (o.isInstancedMesh) inst++; else if (o.isMesh) meshes++; else if (o.isLine) lines++; }); renderer.render(scene, cam()); return {...renderer.info.render, ...renderer.info.memory, programs:renderer.info.programs?.length, meshes, lines, inst, pr:renderer.getPixelRatio()}; }, camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst}; }); }, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 /* ---------- bouton Réglages (module commun Studio Prism) ---------- */

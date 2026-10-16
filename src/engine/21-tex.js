@@ -62,7 +62,7 @@ function frRegion(lat, lon){ if (lat > 48.45 && lat < 49.3 && lon > 1.6 && lon <
 function facadeSet(kind, seed, shop, region = 'centre'){
   const key = `facset|${kind}|${seed}|${shop ? 1 : 0}|${region}`; if (TEX[key]) return TEX[key];
   const S = 256, cC = document.createElement('canvas'), cH = document.createElement('canvas'), cM = document.createElement('canvas'); for (const c of [cC, cH, cM]){ c.width = c.height = S; }
-  const gC = cC.getContext('2d'), gH = cH.getContext('2d'), gM = cM.getContext('2d'), R = rng(hashStr(key)), RP = REGION_PAL[region] || REGION_PAL.centre, pick = a => a[Math.floor(R() * a.length)];
+  const gC = cC.getContext('2d'), gH = cH.getContext('2d', {willReadFrequently:true}), gM = cM.getContext('2d'), R = rng(hashStr(key)), RP = REGION_PAL[region] || REGION_PAL.centre, pick = a => a[Math.floor(R() * a.length)];
   const r = (x, y, w, h, col, ht, mt = 0) => { gC.fillStyle = col; gC.fillRect(x, y, w, h); if (ht != null){ gH.fillStyle = `rgb(${ht},${ht},${ht})`; gH.fillRect(x, y, w, h); } gM.fillStyle = mt === 1 ? 'rgb(255,18,210)' : mt === 2 ? 'rgb(255,90,170)' : 'rgb(255,235,0)'; gM.fillRect(x, y, w, h); };
   const noise = (base, n = 5000, a = 0.08) => { for (let i = 0; i < n; i++){ gC.globalAlpha = 0.45 * R(); gC.fillStyle = shadeHex(base, (R() - 0.5) * a); const z = 2 * (0.5 + R()); gC.fillRect(R() * S, R() * S, z, z); } gC.globalAlpha = 1; };
   const glass = (x, y, w, h, deep = 70) => { const gl = gC.createLinearGradient(0, y, 0, y + h); gl.addColorStop(0, '#2E3A45'); gl.addColorStop(0.55, '#4F5F6C'); gl.addColorStop(1, '#6C7C88'); gC.fillStyle = gl; gC.fillRect(x, y, w, h); gH.fillStyle = `rgb(${deep},${deep},${deep})`; gH.fillRect(x, y, w, h); gM.fillStyle = 'rgb(255,18,210)'; gM.fillRect(x, y, w, h);

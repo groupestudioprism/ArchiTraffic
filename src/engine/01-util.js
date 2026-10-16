@@ -17,7 +17,24 @@ const V = {
   rot:(a,ang)=>[a[0]*Math.cos(ang)-a[1]*Math.sin(ang), a[0]*Math.sin(ang)+a[1]*Math.cos(ang)], lerp:(a,b,t)=>[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t],
 };
 let toastT;
-function toast(msg, ms = 3200){ const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+/* Appareil tactile sans souris ni pavé (téléphone, tablette) : les consignes parlent du doigt, pas de la souris ni du clavier */
+const MQ_COARSE = matchMedia('(pointer: coarse)'), MQ_FINE = matchMedia('(any-pointer: fine)');
+const touchOnly = () => MQ_COARSE.matches && !MQ_FINE.matches;
+const TOUCH_TXT = [
+  [/ <kbd>Suppr<\/kbd> l'efface\./g, ''],
+  [/ \(pas de 15° avec <kbd>Maj<\/kbd>\)/g, ''],
+  [/ ; <kbd>R<\/kbd> ou la molette \+ <kbd>Maj<\/kbd> pour le tourner\./g, ' ; l\'outil Rotation l\'oriente ensuite.'],
+  [/<kbd>Entrée<\/kbd> ou double-clic pour fermer/g, 'bouton Terminer pour fermer'],
+  [/<kbd>Entrée<\/kbd> pour terminer/g, 'bouton Terminer pour finir'],
+  [/<kbd>Échap<\/kbd> pour arrêter/g, 'changez d\'outil pour arrêter'],
+  [/la copie suit le curseur ; cliquez pour la poser/g, 'puis touchez l\'endroit où la poser'],
+  [/survolez une rue, cliquez pour/g, 'touchez une rue pour'],
+  [/([Cc])liquez sur /g, (m, c) => (c === 'C' ? 'T' : 't') + 'ouchez '],
+  [/([Cc])liquez/g, (m, c) => (c === 'C' ? 'T' : 't') + 'ouchez'],
+  [/([Ss])urvolez/g, (m, c) => (c === 'S' ? 'T' : 't') + 'ouchez'],
+];
+const forTouch = s => { if (typeof s !== 'string' || !touchOnly()) return s; for (const [a, b] of TOUCH_TXT) s = s.replace(a, b); return s; };
+function toast(msg, ms = 3200){ const t = $('#toast'); if (!t) return; t.textContent = forTouch(msg); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 function segClosest(p, a, b){ const d = V.sub(b, a), L2 = V.dot(d, d) || 1e-12; const t = clamp(V.dot(V.sub(p, a), d) / L2, 0, 1); return {pt:V.add(a, V.mul(d, t)), t}; }
 function segInter(a, b, c, d){
   const r = V.sub(b, a), s = V.sub(d, c), den = V.cross(r, s); if (Math.abs(den) < 1e-9) return null;

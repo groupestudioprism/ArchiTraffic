@@ -68,7 +68,7 @@ function buildAnnos(){
 function updateLabels(){
   const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.t === 'dim' ? JSON.stringify([e.a, e.b, e.col, e.off, e.dec, e.dz]) : '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
-  const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
+  vpSize(); const W = vpW, Hh = vpH, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
   for (const a of pins){ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran

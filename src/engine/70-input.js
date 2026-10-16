@@ -31,7 +31,7 @@ function setTool(t){
   if (t === 'place' && activeTab !== 'lib' && !isNarrow.matches) setTab('lib');
   tool = t; cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
 }
-function setPrompt(extra = ''){ $('#prompt').innerHTML = extra || TOOL_HELP[tool] || ''; }
+function setPrompt(extra = ''){ $('#prompt').innerHTML = forTouch(extra || TOOL_HELP[tool] || ''); }
 function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPreview(); ctl().enabled = true; }
 /* ---------- HUD : options de l'outil courant ---------- */
 function syncHud(){
