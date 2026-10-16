@@ -18,8 +18,9 @@ function openSiteDialog(){
   q.oninput = () => { clearTimeout(t); t = setTimeout(search, 320); }; q.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); search(); } };
   setTimeout(() => { q.focus(); q.select(); }, 40);
   $('#sdX').onclick = $('#sdNo').onclick = closeEngine;
-  ok.onclick = async () => { if (!pick) return; if (pick.type === 'municipality' && !pick.centred){ ok.disabled = true; const c = await townCenter(pick); ok.disabled = false; if (c){ pick = {...pick, lat:c.lat, lon:c.lon, centred:true}; toast(`Commune : zone centrée sur le bourg (${c.via}).`, 4000); } } const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
-    if (moved && state.els.length && !confirm('Changer de lieu : les éléments déjà placés seront repositionnés par rapport à la nouvelle adresse. Continuer ?')) return;
+  ok.onclick = async () => { if (!pick) return; if (pick.type === 'municipality' && !pick.centred){ ok.disabled = true; loadUI(true, 'Chargement de la zone', `Recherche du centre de ${pick.city || pick.label}…`, 0.01); const c = await Promise.race([townCenter(pick), sleep(6000).then(() => null)]); ok.disabled = false; if (c){ pick = {...pick, lat:c.lat, lon:c.lon, centred:true}; toast(`Commune : zone centrée sur le bourg (${c.via}).`, 4000); } } const size = +$('#sdSize').value; const moved = !s || Math.abs(pick.lat - s.lat) > 1e-6 || Math.abs(pick.lon - s.lon) > 1e-6;
+    if (moved && state.els.length && !confirm('Changer de lieu : les éléments déjà placés seront repositionnés par rapport à la nouvelle adresse. Continuer ?')){ loadUI(false); return; }
+    loadUI(true, 'Chargement de la zone', 'Ouverture du chantier…', 0.02);
     closeEngine(); beginEdit(); state.site = {...pick, size}; if (state.name === 'Nouveau chantier' || !state.name) state.name = pick.label.split(',')[0]; endEdit(); $('#projName').textContent = state.name; loadSite(false); };
 }
 /* ---------- maquettes ARCHIPLAN (.glb) placées à leur adresse ---------- */

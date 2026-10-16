@@ -23,12 +23,30 @@ function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !
 /* ---------- chargement de la zone du chantier ---------- */
 const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
 const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
-function loadUI(on, title = '', step = '', pct = 0){ const b = $('#loadBox'); b.hidden = !on; if (!on) return; $('#loadTitle').textContent = title; $('#loadStep').textContent = step; $('#loadBar').style.width = Math.round(pct * 100) + '%'; }
+/* barre de chargement fluide : elle avance toujours un peu (progression « d'attente ») sans jamais dépasser
+   l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
+const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
+const LB_MSG = ['Rues, sens uniques et carrefours (OpenStreetMap)…', 'Bâtiments (IGN BD TOPO®)…', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 'Écoles, passages à niveau, restrictions poids lourds…', 'Les serveurs publics sont chargés, on insiste…'];
+function loadUI(on, title = '', step = '', pct = 0){
+  const b = $('#loadBox');
+  if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; } }, 260); return; }
+  if (b.hidden || LB.real >= 1){ b.hidden = false; LB.shown = 0; LB.real = 0; LB.rt = performance.now(); }
+  if (title) $('#loadTitle').textContent = title; if (step && step !== LB.step){ $('#loadStep').textContent = LB.step = step; LB.st = performance.now(); }
+  const r = Math.min(pct, 0.99); if (r > LB.real){ LB.real = r; LB.rt = performance.now(); }
+  if (!LB.raf){ LB.t = performance.now(); const tick = () => { const now = performance.now(), dt = Math.min(0.1, (now - LB.t) / 1000); LB.t = now;
+      const cap = LB.real >= 1 ? 1 : Math.min(0.95, LB.real + Math.min(0.3, 0.1 + (now - LB.rt) / 1000 * 0.008));   // l'avance d'attente grandit doucement avec le temps, plafonnée
+      if (LB.shown < LB.real - 0.004) LB.shown += (LB.real - LB.shown) * Math.min(1, dt * 6);   // rattrapage rapide
+      else if (LB.shown < cap) LB.shown += (cap - LB.shown) * dt * 0.6;                 // progression d'attente, de plus en plus lente
+      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%';
+      if (now - LB.st > 3500 && LB.real < 0.8){ LB.st = now; $('#loadStep').textContent = LB_MSG[LB.k++ % LB_MSG.length]; }   // rien de neuf depuis 3,5 s : on montre ce qui se charge
+      if (b.hidden){ clearInterval(LB.raf); LB.raf = 0; } };
+    LB.raf = setInterval(tick, 40); tick(); }
+}
 let loadToken = 0;
 async function loadSite(force = false){
   const s = state.site; if (!s?.lat){ WORLD = null; buildWorld(); rebuildProj(); return; }
   const tok = ++loadToken, size = s.size || 1000, P = makeProj(s.lat, s.lon), key = `site|${DATA_VER}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}|${size}`;
-  simStop(true);
+  simStop(true); loadUI(true, 'Chargement de la zone', 'Ouverture du chantier…', 0.02);
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
