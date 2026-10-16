@@ -3,7 +3,7 @@
    Têtes de feux R/J/V à 3 feux sur mât, allumées selon le cycle (en simulation : temps simulé ; sinon horloge),
    et repère sur la carte avec la couleur en cours. Les véhicules simulés s'arrêtent au rouge et au jaune. */
 const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge intégral) = 64 s
-const SIGT = () => (SIM.on || SIM.t > 0) ? SIM.t : performance.now() / 1000;
+const SIGT = () => SIM.on ? SIM.t : performance.now() / 1000;   // simulation en cours : temps simulé ; sinon les feux tournent en temps réel
 function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o === undefined){ o = (hashStr(String(n.id)) % 640) / 10; SIM.sigOff.set(n.id, o); } return o; }
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){

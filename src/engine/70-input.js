@@ -146,12 +146,13 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && sameStreet(e.name, sec.name) && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
     else if (a0 === s1){ ids = [...sec.ids, ...ids.slice(1)]; pts = [...sec.pts, ...pts.slice(1)]; } else { ids = [...rs, ...ids.slice(1)]; pts = [...rp, ...pts.slice(1)]; }
     Object.assign(adj, {ids, pts, len:Math.round(plLen(pts) * 10) / 10});
+    mergeChain(adj);
     let msg = `${cap(adj.name)} barrée sur ${fmtM(adj.len)} (fermeture prolongée)`;
     if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(adj.mode)){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
@@ -165,6 +166,23 @@ function makeClosure(nr){
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
+}
+/* même rue : noms identiques ou partageant un nom (« Rue A / Rue B »), ou tronçon sans nom */
+const sameStreet = (a = '', b = '') => { if (!a || !b) return true; const A = a.split(' / '), B = new Set(b.split(' / ')); return A.some(x => B.has(x)); };
+/* une fermeture prolongée peut rejoindre une autre fermeture de la même rue : on les fusionne (une seule déviation, un seul jeu de barrières) */
+function mergeChain(cl){
+  for (let guard = 0; guard < 20; guard++){
+    const a0 = cl.ids[0], a1 = cl.ids.at(-1);
+    const o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
+    if (!o) return;
+    const b0 = o.ids[0], b1 = o.ids.at(-1), ri = o.ids.slice().reverse(), rp = o.pts.slice().reverse();
+    if (a1 === b0){ cl.ids = [...cl.ids, ...o.ids.slice(1)]; cl.pts = [...cl.pts, ...o.pts.slice(1)]; }
+    else if (a1 === b1){ cl.ids = [...cl.ids, ...ri.slice(1)]; cl.pts = [...cl.pts, ...rp.slice(1)]; }
+    else if (a0 === b1){ cl.ids = [...o.ids, ...cl.ids.slice(1)]; cl.pts = [...o.pts, ...cl.pts.slice(1)]; }
+    else { cl.ids = [...ri, ...cl.ids.slice(1)]; cl.pts = [...rp, ...cl.pts.slice(1)]; }
+    cl.len = Math.round(plLen(cl.pts) * 10) / 10;
+    state.els = state.els.filter(e => e !== o && e.cl !== o.id && e.auto !== o.id);   // l'ancienne fermeture, ses déviations et ses panneaux disparaissent
+  }
 }
 /* les déviations automatiques des autres fermetures qui empruntent désormais un tronçon fermé sont recalculées */
 function refreshOtherDetours(exceptId){

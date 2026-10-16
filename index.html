@@ -993,9 +993,9 @@ a.ap-link{text-decoration:none}
 :root[data-theme="dark"] .bgload{background:rgba(30,38,54,.7);border-color:rgba(255,255,255,.14)}
 
 /* repères de panneaux, façon point d'intérêt : bulle blanche + pointe, taille constante à l'écran */
-.anno.pin{padding:3px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
+.anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.08);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;animation:pinIn .18s ease-out}
 .anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
-.anno.pin img{width:26px;height:26px;object-fit:contain;display:block}
+.anno.pin img{width:38px;height:38px;object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:34px;height:34px;border-radius:50%;background:#F4F6FA}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
@@ -3209,7 +3209,9 @@ function nearestRoad(q, maxD = 25, drive = true){
 function sectionAt(ri, k){
   const r = NET.roads[ri], A = r.nodes[k], B = r.nodes[k + 1]; if (A == null || B == null) return null;
   const walk = (prev, cur) => { const chain = [cur]; let p = prev, c = cur, guard = 0;
-    while (guard++ < 400){ const n = NET.nodes.get(c); if (!n || nodeDeg(n) !== 2) break; const nx = [...n.nb].find(x => x !== p); if (nx == null || chain.includes(nx)) break; chain.push(nx); p = c; c = nx; }
+    // on traverse les carrefours « secondaires » : entrées charretières, parkings, voies de desserte (classe ≥ 7) ne coupent pas une rue
+    const main = n => [...n.nb].filter(x => { const sg = NET.segIdx.get(segKey(n.id, x)); return !sg || NET.roads[sg.ri].cls < 7; });
+    while (guard++ < 400){ const n = NET.nodes.get(c); if (!n) break; const m = nodeDeg(n) === 2 ? [...n.nb] : main(n); if (m.length !== 2 || !m.includes(p)) break; const nx = m.find(x => x !== p); if (nx == null || chain.includes(nx)) break; chain.push(nx); p = c; c = nx; }
     return chain; };
   const fwd = walk(A, B), back = walk(B, A);
   const ids = [...back.reverse(), ...fwd];  // back se termine par A, fwd commence par B
@@ -5213,7 +5215,8 @@ function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){
   const g = new THREE.Group(); g.userData.id = e.id;
-  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const o = L.build(e.p || {}); o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
+  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); pr.traverse(m => { m.userData.shared = true; }); OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
+    o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
     if (L.sign){ // en plan : symbole du panneau vu de face, à l'échelle du plan
       const sp = new THREE.Sprite(MAT['spr|' + L.sign + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(L.sign, e.p || {}), depthTest:false})); const sh = signShape(L.sign), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
       sp.scale.set(2.2 * ar, 2.2, 1); sp.position.set(0, 3, 0); sp.renderOrder = 20; sp.userData = {planOnly:true, id:e.id}; sp.visible = view === '2d'; g.add(sp); }
@@ -5277,6 +5280,7 @@ function lineModules(g, pts, tpl, len, id, make){
     placeObj(o, a.pt[0], a.pt[1], Math.atan2(a.dir[1], a.dir[0]) + Math.PI / 2); g.add(o); i++; }
 }
 function closureWidth(c){ let w = 0; for (let i = 0; i + 1 < (c.ids?.length || 0); i++){ const s = NET.segIdx.get(segKey(c.ids[i], c.ids[i + 1])); if (s) w = Math.max(w, NET.roads[s.ri].w); } return w || 6; }
+const OBJ_PROTO = new Map();
 function rebuildProj(){
   const keep = new Set();
   for (const e of state?.els || []){
@@ -5285,7 +5289,7 @@ function rebuildProj(){
     c.grp.visible = !e.hidden && !phOff(e);
     keep.add(e.id);
   }
-  for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => o.geometry?.dispose()); projCache.delete(id); }
+  for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
   applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* sélection : contour orange */
@@ -5630,12 +5634,13 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && (e.ph || null) === (curPh() || null) && e.ids?.length && sameStreet(e.name, sec.name) && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
     else if (a0 === s1){ ids = [...sec.ids, ...ids.slice(1)]; pts = [...sec.pts, ...pts.slice(1)]; } else { ids = [...rs, ...ids.slice(1)]; pts = [...rp, ...pts.slice(1)]; }
     Object.assign(adj, {ids, pts, len:Math.round(plLen(pts) * 10) / 10});
+    mergeChain(adj);
     let msg = `${cap(adj.name)} barrée sur ${fmtM(adj.len)} (fermeture prolongée)`;
     if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(adj.mode)){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
@@ -5649,6 +5654,23 @@ function makeClosure(nr){
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
+}
+/* même rue : noms identiques ou partageant un nom (« Rue A / Rue B »), ou tronçon sans nom */
+const sameStreet = (a = '', b = '') => { if (!a || !b) return true; const A = a.split(' / '), B = new Set(b.split(' / ')); return A.some(x => B.has(x)); };
+/* une fermeture prolongée peut rejoindre une autre fermeture de la même rue : on les fusionne (une seule déviation, un seul jeu de barrières) */
+function mergeChain(cl){
+  for (let guard = 0; guard < 20; guard++){
+    const a0 = cl.ids[0], a1 = cl.ids.at(-1);
+    const o = state.els.find(e => e !== cl && e.t === 'closure' && e.mode === cl.mode && (e.dir || 1) === (cl.dir || 1) && (e.ph || null) === (cl.ph || null) && sameStreet(e.name, cl.name) && e.ids?.length && [e.ids[0], e.ids.at(-1)].some(id => id === a0 || id === a1));
+    if (!o) return;
+    const b0 = o.ids[0], b1 = o.ids.at(-1), ri = o.ids.slice().reverse(), rp = o.pts.slice().reverse();
+    if (a1 === b0){ cl.ids = [...cl.ids, ...o.ids.slice(1)]; cl.pts = [...cl.pts, ...o.pts.slice(1)]; }
+    else if (a1 === b1){ cl.ids = [...cl.ids, ...ri.slice(1)]; cl.pts = [...cl.pts, ...rp.slice(1)]; }
+    else if (a0 === b1){ cl.ids = [...o.ids, ...cl.ids.slice(1)]; cl.pts = [...o.pts, ...cl.pts.slice(1)]; }
+    else { cl.ids = [...ri, ...cl.ids.slice(1)]; cl.pts = [...rp, ...cl.pts.slice(1)]; }
+    cl.len = Math.round(plLen(cl.pts) * 10) / 10;
+    state.els = state.els.filter(e => e !== o && e.cl !== o.id && e.auto !== o.id);   // l'ancienne fermeture, ses déviations et ses panneaux disparaissent
+  }
 }
 /* les déviations automatiques des autres fermetures qui empruntent désormais un tronçon fermé sont recalculées */
 function refreshOtherDetours(exceptId){
@@ -6038,9 +6060,9 @@ function buildAnnos(){
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
-    else if (e.t === 'obj' && LIBK[e.k]?.sign && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
-      const code = LIBK[e.k].sign, key = code + JSON.stringify(e.p || {}); PIN_IMG[key] ??= signThumb(code, {...(LIBK[e.k].p || {}), ...(e.p || {})});
-      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : 0, id:e.id}); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = LIBK[e.k].n || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
+    else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
+      const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); PIN_IMG[key] ??= L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : libThumb(L);   // panneau, ou vignette de l'engin / du matériel
+      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
 }
@@ -6051,8 +6073,8 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
   for (const a of pins){ const g = WORLD ? H(a.xy[0], a.xy[1]) : 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
-    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 18;
-    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 30)},${Math.round(A[1] / 34)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+    const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 26;
+    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 44)},${Math.round(A[1] / 50)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
   for (const a of annos){
     if (a.pin){ a.d.hidden = !a.show; if (a.show){ a.d.style.left = a.sx + 'px'; a.d.style.top = a.sy + 'px'; } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ a.d.hidden = true; continue; }

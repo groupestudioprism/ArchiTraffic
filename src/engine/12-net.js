@@ -63,7 +63,9 @@ function nearestRoad(q, maxD = 25, drive = true){
 function sectionAt(ri, k){
   const r = NET.roads[ri], A = r.nodes[k], B = r.nodes[k + 1]; if (A == null || B == null) return null;
   const walk = (prev, cur) => { const chain = [cur]; let p = prev, c = cur, guard = 0;
-    while (guard++ < 400){ const n = NET.nodes.get(c); if (!n || nodeDeg(n) !== 2) break; const nx = [...n.nb].find(x => x !== p); if (nx == null || chain.includes(nx)) break; chain.push(nx); p = c; c = nx; }
+    // on traverse les carrefours « secondaires » : entrées charretières, parkings, voies de desserte (classe ≥ 7) ne coupent pas une rue
+    const main = n => [...n.nb].filter(x => { const sg = NET.segIdx.get(segKey(n.id, x)); return !sg || NET.roads[sg.ri].cls < 7; });
+    while (guard++ < 400){ const n = NET.nodes.get(c); if (!n) break; const m = nodeDeg(n) === 2 ? [...n.nb] : main(n); if (m.length !== 2 || !m.includes(p)) break; const nx = m.find(x => x !== p); if (nx == null || chain.includes(nx)) break; chain.push(nx); p = c; c = nx; }
     return chain; };
   const fwd = walk(A, B), back = walk(B, A);
   const ids = [...back.reverse(), ...fwd];  // back se termine par A, fwd commence par B

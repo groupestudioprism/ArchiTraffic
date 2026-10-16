@@ -132,7 +132,8 @@ function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){
   const g = new THREE.Group(); g.userData.id = e.id;
-  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const o = L.build(e.p || {}); o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
+  if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); pr.traverse(m => { m.userData.shared = true; }); OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
+    o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
     if (L.sign){ // en plan : symbole du panneau vu de face, à l'échelle du plan
       const sp = new THREE.Sprite(MAT['spr|' + L.sign + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(L.sign, e.p || {}), depthTest:false})); const sh = signShape(L.sign), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
       sp.scale.set(2.2 * ar, 2.2, 1); sp.position.set(0, 3, 0); sp.renderOrder = 20; sp.userData = {planOnly:true, id:e.id}; sp.visible = view === '2d'; g.add(sp); }
@@ -196,6 +197,7 @@ function lineModules(g, pts, tpl, len, id, make){
     placeObj(o, a.pt[0], a.pt[1], Math.atan2(a.dir[1], a.dir[0]) + Math.PI / 2); g.add(o); i++; }
 }
 function closureWidth(c){ let w = 0; for (let i = 0; i + 1 < (c.ids?.length || 0); i++){ const s = NET.segIdx.get(segKey(c.ids[i], c.ids[i + 1])); if (s) w = Math.max(w, NET.roads[s.ri].w); } return w || 6; }
+const OBJ_PROTO = new Map();
 function rebuildProj(){
   const keep = new Set();
   for (const e of state?.els || []){
@@ -204,7 +206,7 @@ function rebuildProj(){
     c.grp.visible = !e.hidden && !phOff(e);
     keep.add(e.id);
   }
-  for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => o.geometry?.dispose()); projCache.delete(id); }
+  for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
   applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* sélection : contour orange */
