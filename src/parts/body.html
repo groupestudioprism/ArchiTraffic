@@ -92,7 +92,7 @@
   <button data-act="home"><b>Accueil</b><span>Mes chantiers et dossiers dans le cloud</span></button>
   <button data-act="new"><b>Nouveau chantier</b><span>Enregistré automatiquement dans le cloud</span></button>
   <button data-act="open"><b>Importer un projet…</b><span>Fichier ARCHITRAFIC .json</span></button>
-  <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button><button data-act="netin"><b>Importer un plan de réseaux…</b><span>GeoJSON (WGS84 ou Lambert-93) : réponses DT/DICT, SIG</span></button>
+  <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button><button data-act="netin"><b>Importer un plan de réseaux…</b><span>DXF ou GeoJSON (Lambert-93, CC42 à CC50, WGS84) : réponses DT/DICT, SIG</span></button>
   <button data-act="sample"><b>Charger l'exemple</b><span>Rue barrée avec déviation, en centre-ville</span></button>
 </div>
 <div class="menu" id="exportMenu" hidden><div class="lbl">Exporter <span class="lock" hidden>· licence requise</span></div>
@@ -149,4 +149,4 @@
 <div id="engDlg" hidden role="dialog" aria-modal="true"><div class="edlg-card"></div></div>
 <div id="toast" hidden></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
-<input type="file" id="glbIn" accept=".glb,model/gltf-binary" hidden><input type="file" id="netIn" accept=".geojson,.json,application/geo+json" hidden>
+<input type="file" id="glbIn" accept=".glb,model/gltf-binary" hidden><input type="file" id="netIn" accept=".geojson,.json,.dxf,.dwg,application/geo+json" hidden>

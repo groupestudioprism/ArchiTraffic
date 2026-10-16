@@ -30,6 +30,61 @@ function l93ToLL(X, Y){
   let phi = 2 * Math.atan(Math.exp(L)) - Math.PI / 2; for (let i = 0; i < 8; i++){ const es = e * Math.sin(phi); phi = 2 * Math.atan(Math.pow((1 + es) / (1 - es), e / 2) * Math.exp(L)) - Math.PI / 2; }
   return [(lon0 + g / n) * 180 / Math.PI, phi * 180 / Math.PI];
 }
+/* Lambert conique conforme (GRS80) inverse : Lambert-93 et coniques conformes 9 zones CC42…CC50 → longitude / latitude */
+function lccToLL(X, Y, lat0, lat1, lat2, lon0, x0, y0){
+  const a = 6378137, e = 0.0818191910428158, r = Math.PI / 180, m = p => Math.cos(p) / Math.sqrt(1 - e * e * Math.sin(p) ** 2), t = p => Math.tan(Math.PI / 4 - p / 2) / Math.pow((1 - e * Math.sin(p)) / (1 + e * Math.sin(p)), e / 2);
+  const p1 = lat1 * r, p2 = lat2 * r, p0 = lat0 * r, n = (Math.log(m(p1)) - Math.log(m(p2))) / (Math.log(t(p1)) - Math.log(t(p2))), F = m(p1) / (n * Math.pow(t(p1), n)), r0 = a * F * Math.pow(t(p0), n);
+  const dx = X - x0, dy = r0 - (Y - y0), rr = Math.sign(n) * Math.hypot(dx, dy), tt = Math.pow(rr / (a * F), 1 / n), th = Math.atan2(dx, dy);
+  let phi = Math.PI / 2 - 2 * Math.atan(tt); for (let i = 0; i < 10; i++){ const es = e * Math.sin(phi); phi = Math.PI / 2 - 2 * Math.atan(tt * Math.pow((1 - es) / (1 + es), e / 2)); }
+  return [th / n / r + lon0, phi / r];
+}
+/* reconnaît le système d'un plan : Lambert-93 (EPSG:2154), CC42…CC50 (EPSG:3942…3950) ou déjà en degrés */
+function frProj(X, Y){
+  if (Math.abs(X) <= 180 && Math.abs(Y) <= 90) return c => c;
+  if (X > 50000 && X < 1300000 && Y > 6000000 && Y < 7200000) return c => l93ToLL(c[0], c[1]);
+  if (X > 1000000 && X < 2500000 && Y > 1000000 && Y < 9400000){ const z = Math.round((Y - 200000) / 1e6) + 41; if (z >= 42 && z <= 50) return c => lccToLL(c[0], c[1], z, z - 0.75, z + 0.75, 3, 1700000, (z - 41) * 1e6 + 200000); }
+  return null;
+}
+/* lecture DXF (format texte) : LINE, LWPOLYLINE, POLYLINE/VERTEX, avec le calque de chaque entité */
+function parseDXF(text){
+  const L = text.split(/\r?\n/), out = []; let i = 0, inEnt = false;
+  const pairs = []; for (let k = 0; k + 1 < L.length; k += 2) pairs.push([L[k].trim(), L[k + 1].trim()]);
+  let cur = null, poly = null;
+  const flush = () => { if (cur && cur.pts.length >= 2) out.push(cur); cur = null; };
+  for (const [c, v] of pairs){
+    if (c === '2' && v === 'ENTITIES'){ inEnt = true; continue; } if (!inEnt) continue;
+    if (c === '0'){
+      if (v === 'VERTEX' && poly){ cur = null; poly.vx = {}; continue; }
+      if (poly && poly.vx && v !== 'VERTEX'){ /* fin des sommets */ }
+      if (v === 'SEQEND'){ if (poly && poly.pts.length >= 2) out.push(poly); poly = null; continue; }
+      flush(); if (poly && v !== 'VERTEX'){ if (poly.pts.length >= 2) out.push(poly); poly = null; }
+      if (v === 'ENDSEC') break;
+      if (v === 'LINE') cur = {kind:'line', layer:'', pts:[], t:{}};
+      else if (v === 'LWPOLYLINE') cur = {kind:'lw', layer:'', pts:[], t:{}};
+      else if (v === 'POLYLINE'){ poly = {kind:'poly', layer:'', pts:[]}; }
+      continue;
+    }
+    if (poly && poly.vx){ if (c === '10') poly.vx.x = +v; else if (c === '20'){ poly.pts.push([poly.vx.x, +v]); } else if (c === '8' && !poly.layer) poly.layer = v; continue; }
+    if (poly && c === '8'){ poly.layer = v; continue; }
+    if (!cur) continue;
+    if (c === '8') cur.layer = v;
+    else if (cur.kind === 'line'){ if (c === '10') cur.t.x1 = +v; else if (c === '20') cur.pts[0] = [cur.t.x1, +v]; else if (c === '11') cur.t.x2 = +v; else if (c === '21') cur.pts[1] = [cur.t.x2, +v]; }
+    else if (cur.kind === 'lw'){ if (c === '10') cur.t.x = +v; else if (c === '20') cur.pts.push([cur.t.x, +v]); }
+  }
+  flush(); if (poly && poly.pts.length >= 2) out.push(poly);
+  return out.filter(e => e.pts.every(p => Number.isFinite(p[0]) && Number.isFinite(p[1])));
+}
+function importDXF(text, fname){
+  const ents = parseDXF(text); if (!ents.length){ toast('Aucune ligne lue dans ce DXF (enregistrez-le en DXF ASCII, version 2000 ou plus récente).', 6000); return; }
+  const c0 = ents[0].pts[0], conv = frProj(c0[0], c0[1]);
+  if (!conv){ toast('Ce DXF est en coordonnées locales : il faut un plan géoréférencé (Lambert-93 ou CC42 à CC50) pour le placer automatiquement.', 7000); return; }
+  // le nom du calque désigne le réseau (ex. « EU_Collecteur », « AEP », « GAZ_BP », « FT », « ECL ») ; diamètre lu s'il y figure (DN150, Ø200)
+  const lines = ents.map(e => { const dn = /(?:DN|Ø|D)\s?(\d{2,4})/i.exec(e.layer); return {type:netTypeOf({layer:e.layer.replace(/[_-]/g, ' ')}), ll:e.pts.map(conv), depth:null, r:dn ? +dn[1] / 2000 : null, name:e.layer}; });
+  edit(() => { state.nets = [...(state.nets || []), ...lines]; });
+  DISPLAY.lay.nets = true; saveDisplay(); buildWorld(); renderLegend();
+  const by = {}; for (const l of lines) by[NET_TYPES[l.type].n] = (by[NET_TYPES[l.type].n] || 0) + 1;
+  toast(`${lines.length} tronçons importés depuis ${fname} : ${Object.entries(by).map(([k, n]) => `${k} (${n})`).join(', ')}. Les calques non reconnus sont classés « Autre réseau ».`, 8000);
+}
 /* import d'un plan de réseaux (GeoJSON) : lignes → canalisations ; profondeur lue si renseignée */
 function importNetworks(text, fname){
   let gj; try { gj = JSON.parse(text); } catch(e){ toast('Fichier non reconnu : choisissez un plan de réseaux au format GeoJSON.'); return; }
@@ -85,4 +140,5 @@ function buildUtilities(grp){
   const im = new THREE.InstancedMesh(hydrantGeo, matCol(0xC62828, {rough:0.45, metal:0.3}), hyd.length), m4 = new THREE.Matrix4();
   hyd.forEach((u, i) => { m4.makeTranslation(u.x, H(u.x, u.y) + 0.15, -u.y); im.setMatrixAt(i, m4); }); im.castShadow = true; im.name = 'Poteaux incendie'; grp.add(im);
 }
-$('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier.'); return; } const r = new FileReader(); r.onload = () => importNetworks(r.result, f.name); r.readAsText(f); });
+$('#netIn')?.addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier.'); return; } const r = new FileReader(); if (/\.dwg$/i.test(f.name)){ toast('Le DWG est un format fermé : enregistrez le plan en DXF depuis votre logiciel de DAO (ou avec le convertisseur gratuit ODA File Converter), puis importez le DXF.', 9000); return; }
+  r.onload = () => /\.dxf$/i.test(f.name) ? importDXF(r.result, f.name) : importNetworks(r.result, f.name); r.readAsText(f); });
