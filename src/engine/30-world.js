@@ -3,8 +3,9 @@
 let WORLD = null;   // {size, P, z0, elev:{N, z}, W, net, labels}
 /* altitude du terrain (m, relative à l'origine NGF z0) au point (x, y) */
 function H(x, y){
-  const E = WORLD?.elev; if (!E) return 0;
-  const N = E.N, S = WORLD.size, st = S / (N - 1); let fi = (x + S / 2) / st, fj = (y + S / 2) / st;
+  let E = WORLD?.elev; if (!E) return 0; let S = WORLD.size;
+  const E2 = WORLD.elev2; if (E2 && Math.abs(x) < E2.S / 2 && Math.abs(y) < E2.S / 2){ E = E2; S = E2.S; }   // relief fin au cœur de zone
+  const N = E.N, st = S / (N - 1); let fi = (x + S / 2) / st, fj = (y + S / 2) / st;
   fi = clamp(fi, 0, N - 1.0001); fj = clamp(fj, 0, N - 1.0001);
   const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j, z = (a, b) => E.z[b * N + a];
   return ((z(i, j) * (1 - u) + z(i + 1, j) * u) * (1 - v) + (z(i, j + 1) * (1 - u) + z(i + 1, j + 1) * u) * v) - WORLD.z0;
@@ -141,6 +142,7 @@ function buildRoads(grp){
       const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
+    if (r.lite){ bandGB(gRoad, r.pts, -r.w / 2, r.w / 2, 0.05); continue; }   // réseau routier de grande zone : chaussée seule
     if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = r.oneway ? 0.6 : 1.2; if (nearReal(q.pt[0], q.pt[1])) continue; deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }

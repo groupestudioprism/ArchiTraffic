@@ -79,7 +79,7 @@ function fillNaN(z, N){ // trous (hors couverture) : moyenne des voisins, puis v
   return z;
 }
 async function loadElevation(P, size, onStep){
-  const N = clamp(Math.round(size / 4) + 1, 81, 257), B = areaBounds(P, size);
+  const N = clamp(Math.round(size / 4) + 1, 81, size > 2400 ? 513 : 257), B = areaBounds(P, size);
   let z, src = 'IGN RGE ALTI® 1 m (WMS)';
   try { z = await elevBIL(B, N); }
   catch(e){ const n2 = clamp(Math.round(size / 10) + 1, 41, 81); src = 'IGN RGE ALTI® (calcul altimétrique)'; z = await elevREST(P, size, n2, onStep); return {N:n2, z:fillNaN(z, n2), src}; }
@@ -97,19 +97,26 @@ async function overpass(q){
   throw err || new Error('overpass');
 }
 /* deux requêtes en parallèle (sur deux serveurs) : la voirie arrive vite, le reste (bâtiments OSM, occupation du sol) ensuite */
-async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ...OVERPASS.slice(0, first)]; let err;
-  for (const url of order){ const c = new AbortController(), t = setTimeout(() => c.abort(), 70000);
+async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slice(first % OVERPASS.length), ...OVERPASS.slice(0, first % OVERPASS.length)]; let err;
+  for (const url of order){ const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
     try { const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal}); if (!r.ok) throw new Error('overpass ' + r.status); return await r.json(); }
     catch(e){ err = e; } finally { clearTimeout(t); } }
   throw err || new Error('overpass'); }
-async function loadOSM(B, withBuildings = true){
+async function loadOSM(B, withBuildings = true, Bbig = null, size = 0){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
   const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
-  const [a, b] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]}))]);
-  return {elements:[...(a.elements || []), ...(b.elements || [])]};
+  // grande zone : réseau routier circulé seul au-delà du cœur (rues résidentielles jusqu'à 10 km, réseau structurant au-delà)
+  let qBig = null;
+  if (Bbig){ const B2 = `(${Bbig.s},${Bbig.w},${Bbig.n},${Bbig.e})`, hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
+    qBig = `[out:json][timeout:180][maxsize:536870912];(way["highway"~"^(${hw})$"]${B2};relation["type"="restriction"]${B2};node["railway"="level_crossing"]${B2};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${B2};);out body geom qt;`; }
+  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 2, 200000) : null]);
+  if (qBig && !c) throw new Error('overpass big');
+  const seen = new Set(), all = [];
+  for (const e of [...(a.elements || []), ...(b.elements || []), ...(c?.elements || [])]){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
+  return {elements:all};
 }
 
 /* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
@@ -140,7 +147,7 @@ const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'be
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
   const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], sens:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
-  const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
+  const core = size > CORE ? CORE / 2 + 60 : 0, half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
   for (const e of osm){
@@ -170,7 +177,7 @@ function parseWorld(raw, P, size){
           oneway:T.oneway === 'yes' || T.oneway === '1' || T.oneway === 'true' ? 1 : T.oneway === '-1' ? -1 : (T.junction === 'roundabout' || T.junction === 'circular' || hw === 'motorway') && T.oneway !== 'no' ? 1 : 0,
           speed:parseMaxspeed(T.maxspeed, hw), cls:ROAD_CLASS[hw] || 8, lanes:+T.lanes || 0, round:T.junction === 'roundabout' || T.junction === 'circular', bridge:T.bridge === 'yes' || T.bridge === 'viaduct', tunnel, layer,
           sidewalk:T.sidewalk || T['sidewalk:both'] || '', surface:T.surface || '', psv:hw === 'busway' || T.access === 'psv', bus:T['oneway:bus'] === 'no' || T['busway'] === 'opposite_lane',
-          cycle:T.cycleway || T['cycleway:right'] || T['cycleway:left'] || '', parking:T['parking:lane:both'] || T['parking:both'] || T['parking:lane:right'] || T['parking:right'] || '', tags:T});
+          lite:!!(core && pts.every(q => Math.abs(q[0]) > core || Math.abs(q[1]) > core)), cycle:T.cycleway || T['cycleway:right'] || T['cycleway:left'] || '', parking:T['parking:lane:both'] || T['parking:both'] || T['parking:lane:right'] || T['parking:right'] || '', tags:T});
       }
       else if (T.building || T['building:part']){
         if (T.building === 'roof' || T['building:part'] === 'roof') { /* auvents : ignorés */ }

@@ -10,6 +10,8 @@ const scene = new THREE.Scene();
 const persp = new THREE.PerspectiveCamera(45, 1, 0.3, 6000);
 const ortho = new THREE.OrthographicCamera(-100, 100, 100, -100, -2000, 3000);
 persp.position.set(-160, 170, 220); ortho.position.set(0, 1500, 0); ortho.up.set(0, 0, -1);
+function camRange(size){ const f = Math.max(6000, size * 1.8); persp.far = f; persp.updateProjectionMatrix(); ortho.near = -Math.max(2000, size); ortho.far = Math.max(3000, size * 1.5); ortho.updateProjectionMatrix(); c3.maxDistance = Math.max(3500, size * 1.3); FOGR = [Math.max(900, size * 0.45), Math.max(2600, size * 1.4)]; if (scene.fog){ scene.fog.near = FOGR[0]; scene.fog.far = FOGR[1]; } }
+let FOGR = [900, 2600];
 const c3 = new OrbitControls(persp, canvas); c3.enableDamping = true; c3.dampingFactor = 0.12; c3.maxPolarAngle = Math.PI * 0.497; c3.minDistance = 2; c3.maxDistance = 3500;
 c3.touches = {ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN}; c3.mouseButtons = {LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c3.zoomToCursor = true;
 const c2 = new OrbitControls(ortho, canvas); c2.enableRotate = false; c2.screenSpacePanning = true; c2.zoomToCursor = true; c2.minZoom = 0.05; c2.maxZoom = 60; c2.enabled = false;
@@ -55,7 +57,7 @@ function applyThemeToScene(){
     if (!pmrem){ pmrem = new THREE.PMREMGenerator(renderer); envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture; }
     scene.environment = real ? envTex : null;
   } else scene.environment = null;
-  if (view !== '2d' && !plan){ skyTex ??= skyTexture(); scene.background = skyTex; scene.fog = new THREE.Fog(isDarkUI() && !real ? 0x1A2130 : 0xDCE6EE, 900, 2600); }
+  if (view !== '2d' && !plan){ skyTex ??= skyTexture(); scene.background = skyTex; scene.fog = new THREE.Fog(isDarkUI() && !real ? 0x1A2130 : 0xDCE6EE, FOGR[0], FOGR[1]); }
   else { scene.background = new THREE.Color(bgColor()); scene.fog = null; }
   renderer.toneMapping = plan ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = real ? 1.05 : 1.0;
   renderer.shadowMap.enabled = DISPLAY.shadows && !plan && view !== '2d';

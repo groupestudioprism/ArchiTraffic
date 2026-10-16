@@ -2908,7 +2908,7 @@ function fillNaN(z, N){ // trous (hors couverture) : moyenne des voisins, puis v
   return z;
 }
 async function loadElevation(P, size, onStep){
-  const N = clamp(Math.round(size / 4) + 1, 81, 257), B = areaBounds(P, size);
+  const N = clamp(Math.round(size / 4) + 1, 81, size > 2400 ? 513 : 257), B = areaBounds(P, size);
   let z, src = 'IGN RGE ALTI® 1 m (WMS)';
   try { z = await elevBIL(B, N); }
   catch(e){ const n2 = clamp(Math.round(size / 10) + 1, 41, 81); src = 'IGN RGE ALTI® (calcul altimétrique)'; z = await elevREST(P, size, n2, onStep); return {N:n2, z:fillNaN(z, n2), src}; }
@@ -2926,19 +2926,26 @@ async function overpass(q){
   throw err || new Error('overpass');
 }
 /* deux requêtes en parallèle (sur deux serveurs) : la voirie arrive vite, le reste (bâtiments OSM, occupation du sol) ensuite */
-async function overpassOn(q, first){ const order = [...OVERPASS.slice(first), ...OVERPASS.slice(0, first)]; let err;
-  for (const url of order){ const c = new AbortController(), t = setTimeout(() => c.abort(), 70000);
+async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slice(first % OVERPASS.length), ...OVERPASS.slice(0, first % OVERPASS.length)]; let err;
+  for (const url of order){ const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
     try { const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal}); if (!r.ok) throw new Error('overpass ' + r.status); return await r.json(); }
     catch(e){ err = e; } finally { clearTimeout(t); } }
   throw err || new Error('overpass'); }
-async function loadOSM(B, withBuildings = true){
+async function loadOSM(B, withBuildings = true, Bbig = null, size = 0){
   const bb = `(${B.s},${B.w},${B.n},${B.e})`;
   const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
   const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
 way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
 way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
-  const [a, b] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]}))]);
-  return {elements:[...(a.elements || []), ...(b.elements || [])]};
+  // grande zone : réseau routier circulé seul au-delà du cœur (rues résidentielles jusqu'à 10 km, réseau structurant au-delà)
+  let qBig = null;
+  if (Bbig){ const B2 = `(${Bbig.s},${Bbig.w},${Bbig.n},${Bbig.e})`, hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
+    qBig = `[out:json][timeout:180][maxsize:536870912];(way["highway"~"^(${hw})$"]${B2};relation["type"="restriction"]${B2};node["railway"="level_crossing"]${B2};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${B2};);out body geom qt;`; }
+  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 2, 200000) : null]);
+  if (qBig && !c) throw new Error('overpass big');
+  const seen = new Set(), all = [];
+  for (const e of [...(a.elements || []), ...(b.elements || []), ...(c?.elements || [])]){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
+  return {elements:all};
 }
 
 /* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
@@ -2969,7 +2976,7 @@ const BDT_ROOF = {'00':'', '01':'tuiles', '02':'ardoises', '03':'zinc', '04':'be
 function simplifyRing(p, d = 0.25){ const o = p.filter((q, i) => i === 0 || V.dist(q, p[i - 1]) > d); if (o.length > 3 && V.dist(o[0], o[o.length - 1]) < 0.05) o.pop(); return o; }
 function parseWorld(raw, P, size){
   const W = {size, roads:[], bld:[], areas:[], trees:[], points:[], utils:[], sens:[], restr:[], rails:[], water:[], walls:[], nodes:new Map(), src:raw.src || {}};
-  const half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
+  const core = size > CORE ? CORE / 2 + 60 : 0, half = size / 2 + 60, inside = q => Math.abs(q[0]) < half && Math.abs(q[1]) < half;
   const osm = raw.osm?.elements || [];
   const byId = new Map();
   for (const e of osm){
@@ -2999,7 +3006,7 @@ function parseWorld(raw, P, size){
           oneway:T.oneway === 'yes' || T.oneway === '1' || T.oneway === 'true' ? 1 : T.oneway === '-1' ? -1 : (T.junction === 'roundabout' || T.junction === 'circular' || hw === 'motorway') && T.oneway !== 'no' ? 1 : 0,
           speed:parseMaxspeed(T.maxspeed, hw), cls:ROAD_CLASS[hw] || 8, lanes:+T.lanes || 0, round:T.junction === 'roundabout' || T.junction === 'circular', bridge:T.bridge === 'yes' || T.bridge === 'viaduct', tunnel, layer,
           sidewalk:T.sidewalk || T['sidewalk:both'] || '', surface:T.surface || '', psv:hw === 'busway' || T.access === 'psv', bus:T['oneway:bus'] === 'no' || T['busway'] === 'opposite_lane',
-          cycle:T.cycleway || T['cycleway:right'] || T['cycleway:left'] || '', parking:T['parking:lane:both'] || T['parking:both'] || T['parking:lane:right'] || T['parking:right'] || '', tags:T});
+          lite:!!(core && pts.every(q => Math.abs(q[0]) > core || Math.abs(q[1]) > core)), cycle:T.cycleway || T['cycleway:right'] || T['cycleway:left'] || '', parking:T['parking:lane:both'] || T['parking:both'] || T['parking:lane:right'] || T['parking:right'] || '', tags:T});
       }
       else if (T.building || T['building:part']){
         if (T.building === 'roof' || T['building:part'] === 'roof') { /* auvents : ignorés */ }
@@ -3255,6 +3262,8 @@ const scene = new THREE.Scene();
 const persp = new THREE.PerspectiveCamera(45, 1, 0.3, 6000);
 const ortho = new THREE.OrthographicCamera(-100, 100, 100, -100, -2000, 3000);
 persp.position.set(-160, 170, 220); ortho.position.set(0, 1500, 0); ortho.up.set(0, 0, -1);
+function camRange(size){ const f = Math.max(6000, size * 1.8); persp.far = f; persp.updateProjectionMatrix(); ortho.near = -Math.max(2000, size); ortho.far = Math.max(3000, size * 1.5); ortho.updateProjectionMatrix(); c3.maxDistance = Math.max(3500, size * 1.3); FOGR = [Math.max(900, size * 0.45), Math.max(2600, size * 1.4)]; if (scene.fog){ scene.fog.near = FOGR[0]; scene.fog.far = FOGR[1]; } }
+let FOGR = [900, 2600];
 const c3 = new OrbitControls(persp, canvas); c3.enableDamping = true; c3.dampingFactor = 0.12; c3.maxPolarAngle = Math.PI * 0.497; c3.minDistance = 2; c3.maxDistance = 3500;
 c3.touches = {ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN}; c3.mouseButtons = {LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c3.zoomToCursor = true;
 const c2 = new OrbitControls(ortho, canvas); c2.enableRotate = false; c2.screenSpacePanning = true; c2.zoomToCursor = true; c2.minZoom = 0.05; c2.maxZoom = 60; c2.enabled = false;
@@ -3300,7 +3309,7 @@ function applyThemeToScene(){
     if (!pmrem){ pmrem = new THREE.PMREMGenerator(renderer); envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture; }
     scene.environment = real ? envTex : null;
   } else scene.environment = null;
-  if (view !== '2d' && !plan){ skyTex ??= skyTexture(); scene.background = skyTex; scene.fog = new THREE.Fog(isDarkUI() && !real ? 0x1A2130 : 0xDCE6EE, 900, 2600); }
+  if (view !== '2d' && !plan){ skyTex ??= skyTexture(); scene.background = skyTex; scene.fog = new THREE.Fog(isDarkUI() && !real ? 0x1A2130 : 0xDCE6EE, FOGR[0], FOGR[1]); }
   else { scene.background = new THREE.Color(bgColor()); scene.fog = null; }
   renderer.toneMapping = plan ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = real ? 1.05 : 1.0;
   renderer.shadowMap.enabled = DISPLAY.shadows && !plan && view !== '2d';
@@ -3520,8 +3529,9 @@ function matCol(color, opts = {}){
 let WORLD = null;   // {size, P, z0, elev:{N, z}, W, net, labels}
 /* altitude du terrain (m, relative à l'origine NGF z0) au point (x, y) */
 function H(x, y){
-  const E = WORLD?.elev; if (!E) return 0;
-  const N = E.N, S = WORLD.size, st = S / (N - 1); let fi = (x + S / 2) / st, fj = (y + S / 2) / st;
+  let E = WORLD?.elev; if (!E) return 0; let S = WORLD.size;
+  const E2 = WORLD.elev2; if (E2 && Math.abs(x) < E2.S / 2 && Math.abs(y) < E2.S / 2){ E = E2; S = E2.S; }   // relief fin au cœur de zone
+  const N = E.N, st = S / (N - 1); let fi = (x + S / 2) / st, fj = (y + S / 2) / st;
   fi = clamp(fi, 0, N - 1.0001); fj = clamp(fj, 0, N - 1.0001);
   const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j, z = (a, b) => E.z[b * N + a];
   return ((z(i, j) * (1 - u) + z(i + 1, j) * u) * (1 - v) + (z(i, j + 1) * (1 - u) + z(i + 1, j + 1) * u) * v) - WORLD.z0;
@@ -3658,6 +3668,7 @@ function buildRoads(grp){
       const surf = r.surface, gb = r.hw === 'cycleway' ? gCyc : /gravel|dirt|ground|compacted|fine_gravel|grass|unpaved/.test(surf) || r.hw === 'track' || r.hw === 'path' ? gPath : /sett|cobblestone|unhewn/.test(surf) ? gSett : gFoot;
       bandGB(gb, r.pts, -r.w / 2, r.w / 2, r.hw === 'pedestrian' ? 0.025 : 0.035); continue;
     }
+    if (r.lite){ bandGB(gRoad, r.pts, -r.w / 2, r.w / 2, 0.05); continue; }   // réseau routier de grande zone : chaussée seule
     if (!plan && r.cls <= 6 && r.w >= 4.5){ const L0 = plLen(r.pts), off = (hashStr(String(r.id)) % 1000) / 1000 * 30; for (let x = 12 + off; x < L0 - 8; x += 45){ const q = plAt(r.pts, x), nn = V.perp(q.dir), lat = r.oneway ? 0.6 : 1.2; if (nearReal(q.pt[0], q.pt[1])) continue; deco.push({k:'regard', x:q.pt[0] + nn[0] * lat, y:q.pt[1] + nn[1] * lat, a:Math.atan2(q.dir[1], q.dir[0]), z:0.058}); } }
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
@@ -3992,7 +4003,7 @@ function importNetworks(text, fname){
 /* réseau présumé, d'après la voirie : une ligne par réseau, décalée de l'axe selon les usages de pose */
 function presumedNetworks(){
   const W = WORLD.W, out = [], urb = urbanIndex(W);
-  for (const r of W.roads){ if (!r.drive || r.cls > 6 || r.tunnel || r.pts.length < 2) continue; const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (urb(mid[0], mid[1]) < 2 && r.cls > 3) continue;
+  for (const r of W.roads){ if (r.lite || !r.drive || r.cls > 6 || r.tunnel || r.pts.length < 2) continue; const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (urb(mid[0], mid[1]) < 2 && r.cls > 3) continue;
     const e = r.w / 2, swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6;
     const lay = [['eu', r.oneway ? 0.6 : 1.2], ['ep', r.oneway ? -0.8 : -1.2], ['aep', e + 0.45 + swW * 0.35], ['tel', e + 0.45 + swW * 0.62], ['gaz', -(e + 0.45 + swW * 0.4)], ['elec', -(e + 0.45 + swW * 0.7)], ['ecl', -(e + 0.6)]];
     for (const [type, off] of lay) out.push({type, pts:plOffset(densify(r.pts, 4), off), presumed:true}); }
@@ -4924,7 +4935,8 @@ function restore(js){ const o = JSON.parse(js); state.els = o.els; state.legend 
 function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !redoS.length; }
 
 /* ---------- chargement de la zone du chantier ---------- */
-const AREA_SIZES = [500, 1000, 1600, 2400];
+const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
+const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
 function loadUI(on, title = '', step = '', pct = 0){ const b = $('#loadBox'); b.hidden = !on; if (!on) return; $('#loadTitle').textContent = title; $('#loadStep').textContent = step; $('#loadBar').style.width = Math.round(pct * 100) + '%'; }
 let loadToken = 0;
 async function loadSite(force = false){
@@ -4937,11 +4949,13 @@ async function loadSite(force = false){
     if (!raw){
       const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
       loadUI(true, 'Chargement de la zone', 'Rues, sens uniques et carrefours (OpenStreetMap)…', 0.08);
-      const osmP = loadOSM(B).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
-      const bdtP = loadBDTopo(areaBounds(P, size + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
+      const big = size > CORE, core = Math.min(size, CORE);
+      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      const bdtP = loadBDTopo(areaBounds(P, core + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
       loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18);
       const el = await loadElevation(P, size, p => { if (tok === loadToken) loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18 + p * 0.3); });
       raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src;
+      if (big){ loadUI(true, 'Chargement de la zone', 'Relief fin du cœur de zone…', 0.5); try { const e2 = await loadElevation(P, core); raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; } catch(e){} }
       if (tok !== loadToken) return;
       loadUI(true, 'Chargement de la zone', 'Bâtiments (IGN BD TOPO®) et voirie (OpenStreetMap)…', 0.55);
       await Promise.all([osmP, bdtP]);
@@ -4951,8 +4965,9 @@ async function loadSite(force = false){
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
-    WORLD = {size, P, z0, elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    buildNet(W); orthoTex = null; orthoState = '';
+    const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
+    WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
+    camRange(size); buildNet(W); orthoTex = null; orthoState = '';
     buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
     loadUI(false); toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(z0, 2)} m au point d'origine.`, 5200);
   } catch(e){
@@ -5614,7 +5629,7 @@ function renderProps(){
     const W = WORLD, src = W?.src || {};
     h += `<div class="ph"><h2>${esc(state.name)}</h2><span class="tag">Chantier</span></div>
       <div class="grp"><h3>Lieu</h3><p class="hint" style="margin:0 0 8px">${esc(s.label || '')}</p>
-      <dl class="kv"><dt>Zone chargée</dt><dd>${s.size || 1000} × ${s.size || 1000} m</dd>${W ? `<dt>Altitude NGF à l'origine</dt><dd class="big">${nf(W.z0, 2)} m</dd><dt>Voies circulées</dt><dd>${n0(W.W.roads.filter(r => r.drive).length)}</dd><dt>Bâtiments</dt><dd>${n0(W.W.bld.length)}</dd>` : '<dt>État</dt><dd>non chargée</dd>'}</dl>
+      <dl class="kv"><dt>Zone chargée</dt><dd>${(s.size || 1000) >= 5000 ? `${s.size / 1000} × ${s.size / 1000} km` : `${s.size || 1000} × ${s.size || 1000} m`}</dd>${W ? `<dt>Altitude NGF à l'origine</dt><dd class="big">${nf(W.z0, 2)} m</dd><dt>Voies circulées</dt><dd>${n0(W.W.roads.filter(r => r.drive).length)}</dd><dt>Bâtiments</dt><dd>${n0(W.W.bld.length)}</dd>` : '<dt>État</dt><dd>non chargée</dd>'}</dl>
       <div class="btns"><button class="btn" id="pSite">Changer de lieu</button><button class="btn" id="pReload" title="Télécharger à nouveau les rues, les bâtiments et le relief">Mettre à jour les données</button></div>
       ${W ? `<p class="src">Sources : relief ${esc(src.elev || 'IGN')} (NGF-IGN69) · bâtiments ${esc(src.bld || '')} · voirie, sens uniques et arbres © contributeurs OpenStreetMap (ODbL)${src.ortho ? ' · photo aérienne IGN BD ORTHO®' : ''} · textures Poly Haven (CC0). Données du ${new Date(src.at || Date.now()).toLocaleDateString('fr-FR')}.</p>` : ''}</div>`;
     const groups = [['closure', 'Routes barrées'], ['detour', 'Déviations'], ['zone', 'Emprises'], ['obj', 'Signalisation, balisage, véhicules'], ['line', 'Balisage en ligne'], ['swept', 'Épures de giration'], ['note', 'Annotations'], ['arrow', 'Flèches'], ['dim', 'Cotes'], ['model', 'Maquettes ARCHIPLAN']];
@@ -5926,7 +5941,7 @@ function openSiteDialog(){
     <div class="ed-body" style="display:block">
       <div class="lsearch"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="sdQ" placeholder="Adresse, rue, place, commune…" value="${esc(s?.label || '')}" autocomplete="off"></div>
       <div id="sdRes" class="elist" style="margin-top:8px"></div>
-      <div class="fields" style="margin-top:12px"><label class="f wide"><span>Taille de la zone chargée autour de l'adresse</span><span class="in"><select id="sdSize">${AREA_SIZES.map(v => `<option value="${v}"${(s?.size || 1000) === v ? ' selected' : ''}>${v} × ${v} m${v === 1000 ? ' (conseillé)' : v >= 1600 ? ' (grands itinéraires, plus long à charger)' : ''}</option>`).join('')}</select></span></label></div>
+      <div class="fields" style="margin-top:12px"><label class="f wide"><span>Taille de la zone chargée autour de l'adresse</span><span class="in"><select id="sdSize">${AREA_SIZES.map(v => `<option value="${v}"${(s?.size || 1000) === v ? ' selected' : ''}>${v >= 5000 ? `${v / 1000} × ${v / 1000} km (cœur détaillé 2,4 km + réseau routier)` : `${v} × ${v} m`}${v === 1000 ? ' (conseillé)' : v === 20000 ? ' — très long à charger' : v >= 1600 && v < 5000 ? ' (grands itinéraires, plus long à charger)' : ''}</option>`).join('')}</select></span></label></div>
       <p class="hint">Données chargées : rues et sens de circulation (OpenStreetMap), bâtiments et hauteurs (IGN BD TOPO®), relief en altitudes NGF (IGN RGE ALTI®). Mises en cache sur cet appareil pendant 30 jours.</p>
       <div class="btns"><button class="btn primary" id="sdOk" ${s ? '' : 'disabled'}>Charger la zone</button><button class="btn" id="sdNo">Annuler</button></div></div>`, 'mid');
   let pick = s ? {...s} : null, t = 0;
@@ -6125,7 +6140,7 @@ window.__apReady = true;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
 window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
-  toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
+  toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>
 </body></html>

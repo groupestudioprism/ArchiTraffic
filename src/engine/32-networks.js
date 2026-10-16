@@ -49,7 +49,7 @@ function importNetworks(text, fname){
 /* réseau présumé, d'après la voirie : une ligne par réseau, décalée de l'axe selon les usages de pose */
 function presumedNetworks(){
   const W = WORLD.W, out = [], urb = urbanIndex(W);
-  for (const r of W.roads){ if (!r.drive || r.cls > 6 || r.tunnel || r.pts.length < 2) continue; const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (urb(mid[0], mid[1]) < 2 && r.cls > 3) continue;
+  for (const r of W.roads){ if (r.lite || !r.drive || r.cls > 6 || r.tunnel || r.pts.length < 2) continue; const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (urb(mid[0], mid[1]) < 2 && r.cls > 3) continue;
     const e = r.w / 2, swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6;
     const lay = [['eu', r.oneway ? 0.6 : 1.2], ['ep', r.oneway ? -0.8 : -1.2], ['aep', e + 0.45 + swW * 0.35], ['tel', e + 0.45 + swW * 0.62], ['gaz', -(e + 0.45 + swW * 0.4)], ['elec', -(e + 0.45 + swW * 0.7)], ['ecl', -(e + 0.6)]];
     for (const [type, off] of lay) out.push({type, pts:plOffset(densify(r.pts, 4), off), presumed:true}); }

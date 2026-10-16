@@ -21,7 +21,8 @@ function restore(js){ const o = JSON.parse(js); state.els = o.els; state.legend 
 function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !redoS.length; }
 
 /* ---------- chargement de la zone du chantier ---------- */
-const AREA_SIZES = [500, 1000, 1600, 2400];
+const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
+const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
 function loadUI(on, title = '', step = '', pct = 0){ const b = $('#loadBox'); b.hidden = !on; if (!on) return; $('#loadTitle').textContent = title; $('#loadStep').textContent = step; $('#loadBar').style.width = Math.round(pct * 100) + '%'; }
 let loadToken = 0;
 async function loadSite(force = false){
@@ -34,11 +35,13 @@ async function loadSite(force = false){
     if (!raw){
       const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
       loadUI(true, 'Chargement de la zone', 'Rues, sens uniques et carrefours (OpenStreetMap)…', 0.08);
-      const osmP = loadOSM(B).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
-      const bdtP = loadBDTopo(areaBounds(P, size + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
+      const big = size > CORE, core = Math.min(size, CORE);
+      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      const bdtP = loadBDTopo(areaBounds(P, core + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
       loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18);
       const el = await loadElevation(P, size, p => { if (tok === loadToken) loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18 + p * 0.3); });
       raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src;
+      if (big){ loadUI(true, 'Chargement de la zone', 'Relief fin du cœur de zone…', 0.5); try { const e2 = await loadElevation(P, core); raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; } catch(e){} }
       if (tok !== loadToken) return;
       loadUI(true, 'Chargement de la zone', 'Bâtiments (IGN BD TOPO®) et voirie (OpenStreetMap)…', 0.55);
       await Promise.all([osmP, bdtP]);
@@ -48,8 +51,9 @@ async function loadSite(force = false){
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
-    WORLD = {size, P, z0, elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    buildNet(W); orthoTex = null; orthoState = '';
+    const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
+    WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
+    camRange(size); buildNet(W); orthoTex = null; orthoState = '';
     buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
     loadUI(false); toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(z0, 2)} m au point d'origine.`, 5200);
   } catch(e){
