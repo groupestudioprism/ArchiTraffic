@@ -102,25 +102,19 @@ async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slic
     try { const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal}); if (!r.ok) throw new Error('overpass ' + r.status); return await r.json(); }
     catch(e){ err = e; } finally { clearTimeout(t); } }
   throw err || new Error('overpass'); }
-async function loadOSM(B, withBuildings = true, Bbig = null, size = 0){
-  const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
-  const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
-way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
-way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
-  // grande zone : réseau routier circulé seul au-delà du cœur (rues résidentielles jusqu'à 10 km, réseau structurant au-delà)
-  let qBig = null;
-  if (Bbig){ const B2 = `(${Bbig.s},${Bbig.w},${Bbig.n},${Bbig.e})`, hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
-    qBig = `[out:json][timeout:180][maxsize:536870912];(way["highway"~"^(${hw})$"]${B2};relation["type"="restriction"]${B2};node["railway"="level_crossing"]${B2};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${B2};);out body geom qt;`; }
-  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 2, 200000) : null]);
-  if (qBig && !c) throw new Error('overpass big');
-  const seen = new Set(), all = [];
-  for (const e of [...(a.elements || []), ...(b.elements || []), ...(c?.elements || [])]){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
-  return {elements:all};
+async function loadOSM(B, withBuildings = true, Bbig = null, size = 0, prog = {total:0, done:0, tick(){}}){
+  // voirie et points de circulation (équipements du sous-sol : chargés à la demande, calque Réseaux)
+  const qRoads = bb => `[out:json][timeout:50];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : ''}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
+  // grande zone : réseau routier seul au-delà du cœur (résidentiel jusqu'à 10 km, structurant au-delà)
+  const hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
+  const qBig = bb => `[out:json][timeout:60];(way["highway"~"^(${hw})$"]${bb};relation["type"="restriction"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};);out body geom qt;`;
+  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 800, qRest, prog)];
+  if (Bbig) jobs.push(overpassTiled('big' + (size > 10000 ? 'M' : 'R'), Bbig, size > 10000 ? 5000 : 3000, qBig, prog));
+  const res = await Promise.all(jobs), seen = new Set(), all = [];
+  for (const r of res) for (const e of r.elements){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
+  return {elements:all, lost:{roads:res[0].lost, rest:res[1].lost, big:res[2]?.lost || 0}};
 }
-
-/* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
-const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
 async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
   const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
   const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });

@@ -2931,25 +2931,19 @@ async function overpassOn(q, first, ms = 70000){ const order = [...OVERPASS.slic
     try { const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal}); if (!r.ok) throw new Error('overpass ' + r.status); return await r.json(); }
     catch(e){ err = e; } finally { clearTimeout(t); } }
   throw err || new Error('overpass'); }
-async function loadOSM(B, withBuildings = true, Bbig = null, size = 0){
-  const bb = `(${B.s},${B.w},${B.n},${B.e})`;
-  const qRoads = `[out:json][timeout:60];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["emergency"="fire_hydrant"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
-  const qRest = `[out:json][timeout:60];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : `way["building"]["roof:shape"]${bb};way["building"]["building:colour"]${bb};way["building"]["roof:colour"]${bb};`}
-way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};
-way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
-  // grande zone : réseau routier circulé seul au-delà du cœur (rues résidentielles jusqu'à 10 km, réseau structurant au-delà)
-  let qBig = null;
-  if (Bbig){ const B2 = `(${Bbig.s},${Bbig.w},${Bbig.n},${Bbig.e})`, hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
-    qBig = `[out:json][timeout:180][maxsize:536870912];(way["highway"~"^(${hw})$"]${B2};relation["type"="restriction"]${B2};node["railway"="level_crossing"]${B2};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${B2};);out body geom qt;`; }
-  const [a, b, c] = await Promise.all([overpassOn(qRoads, 0), overpassOn(qRest, 1).catch(() => ({elements:[]})), qBig ? overpassOn(qBig, 2, 200000) : null]);
-  if (qBig && !c) throw new Error('overpass big');
-  const seen = new Set(), all = [];
-  for (const e of [...(a.elements || []), ...(b.elements || []), ...(c?.elements || [])]){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
-  return {elements:all};
+async function loadOSM(B, withBuildings = true, Bbig = null, size = 0, prog = {total:0, done:0, tick(){}}){
+  // voirie et points de circulation (équipements du sous-sol : chargés à la demande, calque Réseaux)
+  const qRoads = bb => `[out:json][timeout:50];(way["highway"]${bb};node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp|bus_stop|mini_roundabout)$"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};nwr["boundary"="low_emission_zone"]${bb};relation["type"="restriction"]${bb};way["railway"~"^(rail|tram|light_rail)$"]${bb};);out body geom qt;`;
+  const qRest = bb => `[out:json][timeout:50];(${withBuildings ? `way["building"]${bb};way["building:part"]${bb};relation["type"="multipolygon"]["building"]${bb};` : ''}way["landuse"]${bb};way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"]${bb};way["natural"~"^(wood|scrub|water|grassland|heath|wetland)$"]${bb};way["amenity"~"^(parking|school|place_of_worship)$"]${bb};way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|retaining_wall)$"]${bb};node["natural"="tree"]${bb};node["amenity"~"^(bench|waste_basket|bicycle_parking)$"]${bb};);out body geom qt;`;
+  // grande zone : réseau routier seul au-delà du cœur (résidentiel jusqu'à 10 km, structurant au-delà)
+  const hw = size > 10000 ? 'motorway|trunk|primary|secondary|tertiary|unclassified|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link' : 'motorway|trunk|primary|secondary|tertiary|unclassified|residential|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|road';
+  const qBig = bb => `[out:json][timeout:60];(way["highway"~"^(${hw})$"]${bb};relation["type"="restriction"]${bb};node["railway"="level_crossing"]${bb};nwr["amenity"~"^(school|kindergarten|college|hospital)$"]${bb};);out body geom qt;`;
+  const jobs = [overpassTiled('roads', B, 1000, qRoads, prog), overpassTiled('rest', B, 800, qRest, prog)];
+  if (Bbig) jobs.push(overpassTiled('big' + (size > 10000 ? 'M' : 'R'), Bbig, size > 10000 ? 5000 : 3000, qBig, prog));
+  const res = await Promise.all(jobs), seen = new Set(), all = [];
+  for (const r of res) for (const e of r.elements){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); }
+  return {elements:all, lost:{roads:res[0].lost, rest:res[1].lost, big:res[2]?.lost || 0}};
 }
-
-/* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
-const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
 async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
   const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
   const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });
@@ -3072,6 +3066,100 @@ function parseWorld(raw, P, size){
     if (!b.lv) b.lv = Math.max(1, Math.round((b.h - 1) / 3));
   }
   return W;
+}
+
+/* ==== 11-load.js ==== */
+/* ============ Chargement robuste, tuile par tuile ============
+   Les gros services publics (Overpass, Géoplateforme) coupent les requêtes trop lourdes (délai, mémoire, quotas) :
+   une grande zone en une seule requête échoue souvent, même avec une très bonne connexion.
+   La zone est donc découpée en tuiles chargées 2 par 2, chacune :
+   - réessayée jusqu'à 5 fois en alternant les serveurs, avec une attente croissante (429 / 504 / coupure) ;
+   - redécoupée en 4 si le serveur la juge trop lourde ;
+   - mise en cache dès réception : une reprise ne recharge que ce qui manque.
+   Une tuile définitivement perdue n'empêche jamais l'ouverture du chantier : on affiche ce qui est chargé et on le signale. */
+const tileKey = (kind, b) => `tile|${DATA_VER}|${kind}|${b.s.toFixed(5)}|${b.w.toFixed(5)}|${b.n.toFixed(5)}|${b.e.toFixed(5)}`;
+function splitBounds(B, m){
+  const lat0 = (B.s + B.n) / 2, dLat = m / 110540, dLon = m / (111320 * Math.cos(lat0 * Math.PI / 180));
+  const ny = Math.max(1, Math.ceil((B.n - B.s) / dLat)), nx = Math.max(1, Math.ceil((B.e - B.w) / dLon)), out = [];
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+    const s = B.s + (B.n - B.s) * j / ny, n = B.s + (B.n - B.s) * (j + 1) / ny, w = B.w + (B.e - B.w) * i / nx, e = B.w + (B.e - B.w) * (i + 1) / nx;
+    out.push({s, w, n, e, cx:(w + e) / 2, cy:(s + n) / 2});
+  }
+  // les tuiles centrales d'abord : le chantier s'affiche correctement même si la périphérie traîne
+  const cx = (B.w + B.e) / 2, cy = (B.s + B.n) / 2; return out.sort((a, b) => Math.hypot(a.cx - cx, a.cy - cy) - Math.hypot(b.cx - cx, b.cy - cy));
+}
+const quarter = b => { const ms = (b.s + b.n) / 2, mw = (b.w + b.e) / 2; return [{s:b.s, w:b.w, n:ms, e:mw}, {s:b.s, w:mw, n:ms, e:b.e}, {s:ms, w:b.w, n:b.n, e:mw}, {s:ms, w:mw, n:b.n, e:b.e}]; };
+let opSlot = 0;
+async function overpassTile(q){
+  let wait = 1500;
+  for (let a = 0; a < 6; a++){
+    const url = OVERPASS[(opSlot++) % OVERPASS.length], c = new AbortController(), t = setTimeout(() => c.abort(), 60000);
+    try {
+      const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:c.signal});
+      if (r.status === 400) throw Object.assign(new Error('bad'), {fatal:true});
+      if (!r.ok) throw new Error('http ' + r.status);
+      const j = await r.json();
+      if (/runtime error|out of memory|timed out|Timeout/i.test(j.remark || '')) throw Object.assign(new Error('heavy'), {heavy:true});
+      return j;
+    } catch(e){ if (e.fatal || e.heavy && a >= 1) throw e; }
+    finally { clearTimeout(t); }
+    await sleep(wait + Math.random() * 800); wait = Math.min(wait * 2, 15000);
+  }
+  throw new Error('overpass injoignable');
+}
+/* q(bb) : texte de requête pour une emprise « (s,w,n,e) » ; renvoie {elements, lost} */
+async function overpassTiled(kind, B, tileM, q, prog, depth = 0){
+  const tiles = depth ? [B] : splitBounds(B, tileM), all = [], seen = new Set(); let lost = 0;
+  if (!depth) prog.total += tiles.length;
+  const take = els => { for (const e of els){ const k = e.type + e.id; if (seen.has(k)) continue; seen.add(k); all.push(e); } };
+  const one = async b => {
+    const key = tileKey(kind, b), hit = await IDB.get(key);
+    if (hit && Date.now() - hit.at < 30 * 864e5){ take(hit.el); return; }
+    try { const j = await overpassTile(q(`(${b.s},${b.w},${b.n},${b.e})`)); take(j.elements || []); IDB.set(key, {at:Date.now(), el:j.elements || []}); }
+    catch(e){
+      if (depth < 2 && !e.fatal){ for (const s of quarter(b)){ const r = await overpassTiled(kind, s, 0, q, prog, depth + 1); take(r.elements); lost += r.lost; } }
+      else lost++;
+    }
+  };
+  let i = 0; const worker = async () => { while (i < tiles.length){ const b = tiles[i++]; await one(b); if (!depth){ prog.done++; prog.tick(); } } };
+  await Promise.all([worker(), worker()]);
+  return {elements:all, lost};
+}
+/* BD TOPO par tuiles de 1 km (≈ 1 000 à 5 000 bâtiments en ville) */
+async function bdtopoTiled(B, prog){
+  const tiles = splitBounds(B, 1000), out = [], seen = new Set(); let lost = 0, i = 0; prog.total += tiles.length;
+  const one = async b => {
+    const key = tileKey('bdt', b), hit = await IDB.get(key);
+    let f = hit && Date.now() - hit.at < 30 * 864e5 ? hit.f : null;
+    for (let a = 0; !f && a < 4; a++){ try { f = await loadBDTopo(b); IDB.set(key, {at:Date.now(), f}); } catch(e){ await sleep(1200 * (a + 1)); } }
+    if (!f){ lost++; return; }
+    for (const x of f){ const id = x.id || x.properties?.cleabs; if (id && seen.has(id)) continue; if (id) seen.add(id); out.push(x); }
+  };
+  const worker = async () => { while (i < tiles.length){ await one(tiles[i++]); prog.done++; prog.tick(); } };
+  await Promise.all([worker(), worker(), worker()]);
+  return {f:out, lost};
+}
+/* relief : 3 essais du WMS, puis le service ponctuel, puis terrain plat (jamais bloquant) */
+async function elevRobust(P, size, onStep){
+  for (let a = 0; a < 3; a++){ try { return await loadElevation(P, size, onStep); } catch(e){ await sleep(1000 * (a + 1)); } }
+  const N = 41; return {N, z:new Float32Array(N * N).fill(0), src:'relief indisponible (terrain plat provisoire)', flat:true};
+}
+/* équipements du sous-sol (regards, armoires, poteaux incendie) : chargés seulement quand on active le calque Réseaux */
+let utilsLoading = null;
+async function ensureUtilities(){
+  if (!WORLD || WORLD.W.utilsLoaded || utilsLoading) return utilsLoading;
+  const P = WORLD.P, S = Math.min(WORLD.size, CORE), B = areaBounds(P, S + 40), prog = {total:0, done:0, tick:() => loadUI(true, 'Calque réseaux souterrains', `Regards, bouches à clé, armoires, poteaux incendie… ${prog.done}/${prog.total}`, prog.total ? prog.done / prog.total : 0)};
+  loadUI(true, 'Calque réseaux souterrains', 'Équipements cartographiés (OpenStreetMap)…', 0.02);
+  utilsLoading = overpassTiled('utils', B, 1200, bb => `[out:json][timeout:50];(node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["manhole"]${bb};node["emergency"="fire_hydrant"]${bb};);out body qt;`, prog)
+    .then(r => { const W = WORLD.W; W.utils = []; for (const e of r.elements){ const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
+        if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
+        else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T.street_cabinet || ''), tags:T});
+        else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T}); }
+      W.utilsLoaded = true; loadUI(false); buildWorld(); renderLegend?.();
+      if (r.lost) toast(`Réseaux : ${r.lost} secteur(s) non chargé(s), le reste est affiché.`, 5000); })
+    .catch(() => { loadUI(false); toast('Équipements du sous-sol indisponibles pour le moment : le réseau présumé est affiché.', 5000); })
+    .finally(() => { utilsLoading = null; });
+  return utilsLoading;
 }
 
 /* ==== 12-net.js ==== */
@@ -3944,7 +4032,7 @@ function buildWorld(){
   if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
   if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
   if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
-  if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
+  if (DISPLAY.lay.nets){ if (!WORLD.W.utilsLoaded) ensureUtilities(); buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
   worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
@@ -4946,33 +5034,34 @@ async function loadSite(force = false){
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
+    let partial = '';
     if (!raw){
       const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
-      loadUI(true, 'Chargement de la zone', 'Rues, sens uniques et carrefours (OpenStreetMap)…', 0.08);
       const big = size > CORE, core = Math.min(size, CORE);
-      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
-      const bdtP = loadBDTopo(areaBounds(P, core + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
-      loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18);
-      const el = await loadElevation(P, size, p => { if (tok === loadToken) loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18 + p * 0.3); });
-      raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src;
-      if (big){ loadUI(true, 'Chargement de la zone', 'Relief fin du cœur de zone…', 0.5); try { const e2 = await loadElevation(P, core); raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; } catch(e){} }
+      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement de la zone', `Voirie, bâtiments et relief, secteur par secteur : ${prog.done} / ${prog.total}`, 0.04 + 0.72 * (prog.total ? prog.done / prog.total : 0)); }};
+      loadUI(true, 'Chargement de la zone', 'Préparation des secteurs…', 0.03);
+      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      const bdtP = bdtopoTiled(areaBounds(P, core + 40), prog).then(r => { raw.bdt = r.f; raw.bdtLost = r.lost; });
+      prog.total++; const elP = elevRobust(P, size).then(el => { raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src; raw.flat = !!el.flat; prog.done++; prog.tick(); });
+      const el2P = big ? (prog.total++, elevRobust(P, core).then(e2 => { if (!e2.flat) raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; prog.done++; prog.tick(); })) : null;
+      await Promise.all([osmP, bdtP, elP, el2P]);
       if (tok !== loadToken) return;
-      loadUI(true, 'Chargement de la zone', 'Bâtiments (IGN BD TOPO®) et voirie (OpenStreetMap)…', 0.55);
-      await Promise.all([osmP, bdtP]);
-      if (tok !== loadToken) return;
-      IDB.set(key, raw);
+      const L = raw.osm.lost, miss = [];
+      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (L.big) miss.push(`${L.big} secteur(s) du réseau éloigné`); if (raw.flat) miss.push('le relief');
+      partial = miss.join(', ');
+      if (!partial) IDB.set(key, raw);   // zone complète : mise en cache ; sinon les secteurs reçus sont déjà en cache et « Mettre à jour » ne recharge que le reste
     }
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
     const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
     WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    camRange(size); buildNet(W); orthoTex = null; orthoState = '';
+    camRange(size); buildNet(W); orthoTex = null; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50); orthoState = '';
     buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
-    loadUI(false); toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(z0, 2)} m au point d'origine.`, 5200);
+    loadUI(false); if (partial) toast(`Zone ouverte. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000); else toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.`, 5200);
   } catch(e){
     console.error(e); loadUI(false);
-    if (tok === loadToken){ toast('Impossible de charger la zone : vérifiez la connexion, puis réessayez (onglet Projet → Mettre à jour).', 7000); WORLD = WORLD || null; refreshPanel(); }
+    if (tok === loadToken){ toast('Chargement interrompu : les serveurs de cartographie ne répondent pas. Les secteurs déjà reçus sont gardés ; relancez « Mettre à jour les données » dans quelques instants.', 8000); WORLD = WORLD || null; refreshPanel(); }
   }
 }
 /* routes barrées : les nœuds OSM peuvent changer entre deux mises à jour → on les retrouve par leur position */

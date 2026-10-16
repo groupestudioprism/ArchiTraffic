@@ -32,33 +32,34 @@ async function loadSite(force = false){
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
+    let partial = '';
     if (!raw){
       const B = areaBounds(P, size + 120); raw = {at:Date.now(), src:{}};
-      loadUI(true, 'Chargement de la zone', 'Rues, sens uniques et carrefours (OpenStreetMap)…', 0.08);
       const big = size > CORE, core = Math.min(size, CORE);
-      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
-      const bdtP = loadBDTopo(areaBounds(P, core + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
-      loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18);
-      const el = await loadElevation(P, size, p => { if (tok === loadToken) loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18 + p * 0.3); });
-      raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src;
-      if (big){ loadUI(true, 'Chargement de la zone', 'Relief fin du cœur de zone…', 0.5); try { const e2 = await loadElevation(P, core); raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; } catch(e){} }
+      const prog = {total:0, done:0, tick(){ if (tok === loadToken) loadUI(true, 'Chargement de la zone', `Voirie, bâtiments et relief, secteur par secteur : ${prog.done} / ${prog.total}`, 0.04 + 0.72 * (prog.total ? prog.done / prog.total : 0)); }};
+      loadUI(true, 'Chargement de la zone', 'Préparation des secteurs…', 0.03);
+      const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size, prog).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
+      const bdtP = bdtopoTiled(areaBounds(P, core + 40), prog).then(r => { raw.bdt = r.f; raw.bdtLost = r.lost; });
+      prog.total++; const elP = elevRobust(P, size).then(el => { raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src; raw.flat = !!el.flat; prog.done++; prog.tick(); });
+      const el2P = big ? (prog.total++, elevRobust(P, core).then(e2 => { if (!e2.flat) raw.elev2 = {N:e2.N, S:core, z:Array.from(e2.z, v => Math.round(v * 100) / 100)}; prog.done++; prog.tick(); })) : null;
+      await Promise.all([osmP, bdtP, elP, el2P]);
       if (tok !== loadToken) return;
-      loadUI(true, 'Chargement de la zone', 'Bâtiments (IGN BD TOPO®) et voirie (OpenStreetMap)…', 0.55);
-      await Promise.all([osmP, bdtP]);
-      if (tok !== loadToken) return;
-      IDB.set(key, raw);
+      const L = raw.osm.lost, miss = [];
+      if (L.roads) miss.push(`${L.roads} secteur(s) de voirie`); if (L.rest + (raw.bdtLost || 0)) miss.push(`${L.rest + (raw.bdtLost || 0)} secteur(s) de bâtiments`); if (L.big) miss.push(`${L.big} secteur(s) du réseau éloigné`); if (raw.flat) miss.push('le relief');
+      partial = miss.join(', ');
+      if (!partial) IDB.set(key, raw);   // zone complète : mise en cache ; sinon les secteurs reçus sont déjà en cache et « Mettre à jour » ne recharge que le reste
     }
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
     const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
     WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    camRange(size); buildNet(W); orthoTex = null; orthoState = '';
+    camRange(size); buildNet(W); orthoTex = null; if (DISPLAY.lay.nets) setTimeout(ensureUtilities, 50); orthoState = '';
     buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
-    loadUI(false); toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(z0, 2)} m au point d'origine.`, 5200);
+    loadUI(false); if (partial) toast(`Zone ouverte. Non reçu pour l'instant : ${partial} (serveurs publics saturés). Projet → « Mettre à jour les données » complétera seulement ce qui manque.`, 9000); else toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(WORLD.z0, 2)} m au point d'origine.`, 5200);
   } catch(e){
     console.error(e); loadUI(false);
-    if (tok === loadToken){ toast('Impossible de charger la zone : vérifiez la connexion, puis réessayez (onglet Projet → Mettre à jour).', 7000); WORLD = WORLD || null; refreshPanel(); }
+    if (tok === loadToken){ toast('Chargement interrompu : les serveurs de cartographie ne répondent pas. Les secteurs déjà reçus sont gardés ; relancez « Mettre à jour les données » dans quelques instants.', 8000); WORLD = WORLD || null; refreshPanel(); }
   }
 }
 /* routes barrées : les nœuds OSM peuvent changer entre deux mises à jour → on les retrouve par leur position */
