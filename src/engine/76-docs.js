@@ -13,7 +13,8 @@ function siteChecks(){
     const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, apD = agglo ? 50 : 150, name = c.name || 'Rue', L = c.len || plLen(c.pts);
     const ends = [c.pts[0], c.pts[c.pts.length - 1]];
     if (c.mode === 'total'){
-      ends.forEach((q, i) => { const lbl = `${name}, extrémité ${i ? 'B' : 'A'}`;
+      const ow = sectionOneway(c.ids);
+      ends.forEach((q, i) => { if (ow !== 0 && (ow === 1) === (i === 1)) return; const lbl = `${name}, ${ow ? 'entrée (sens unique)' : `extrémité ${i ? 'B' : 'A'}`}`;
         if (!near(/^(K2|KR_ROUTE|KC1|barr|K8)/i, q, 15).length) add('err', `${lbl} : pas de barrage (K2 ou KC1) à l'entrée`, q); else add('ok', `${lbl} : barrage en place`, q);
         const ak = near(/^AK5$/, q, apD * 2.2); if (!ak.length) add('err', `${lbl} : présignalisation AK5 manquante (≈ ${apD} m en amont)`, q);
         else { const d = Math.min(...ak.map(o => Math.hypot(o.x - q[0], o.y - q[1]))); if (d < apD * 0.6) add('warn', `${lbl} : AK5 trop proche (${Math.round(d)} m, viser ≈ ${apD} m)`, q); else add('ok', `${lbl} : AK5 à ${Math.round(d)} m`, q); } });

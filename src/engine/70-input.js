@@ -219,7 +219,7 @@ function addDetoursFor(cl){
     // l'itinéraire du sens 1 est-il praticable en sens inverse (sens uniques, fermetures) et pas plus long de 30 % que le meilleur sens 2 ?
     const C = closedSets(state.els), rev = routes[0].ids.slice().reverse(); let ok2 = true, len2 = 0;
     for (let k = 0; k + 1 < rev.length && ok2; k++){ const n = NET.nodes.get(rev[k]), e = n.out.map(i => NET.edges[i]).find(e => e.to === rev[k + 1]); if (!e || C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)) ok2 = false; else len2 += e.len; }
-    if (common / Math.max(routes[0].ids.length, routes[1].ids.length) > 0.6 || ok2 && len2 <= plLen(routes[1].pts) * 1.3 + 30){ routes = [routes[0]]; both = true; }
+    if (ok2 && (common / Math.max(routes[0].ids.length, routes[1].ids.length) > 0.6 || len2 <= plLen(routes[1].pts) * 1.3 + 30)){ routes = [routes[0]]; both = true; }   // « deux sens » seulement si l'itinéraire est réellement praticable dans l'autre sens
   }
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
@@ -235,7 +235,8 @@ function autoSigns(cl){
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
   const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
-    if (lane && ((cl.dir === -1) === (i === 0))) return;        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
+    if (lane && ((cl.dir === -1) === (i === 0))) return;
+    const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
     const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), sd), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
     const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
     if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), face, {on:'red'}); add('AK3', right(back(40)), face); return; }
@@ -250,7 +251,9 @@ function autoSigns(cl){
     if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
-  for (const dt0 of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)) for (const dt of dt0.both ? [dt0, {...dt0, ids:dt0.ids.slice().reverse(), inDir0:dt0.inDirEnd}] : [dt0]){
+  // un parcours n'est jalonné que s'il est praticable dans ce sens (sens uniques, interdictions, fermetures)
+  const Cs = closedSets(state.els), drivable = ids => ids.every((id, k) => !k || (NET.nodes.get(ids[k - 1])?.out || []).some(ei => { const e = NET.edges[ei]; return e.to === id && !Cs.both.has(e.key) && !Cs.dir.has(`${e.from}>${e.to}`); }));
+  for (const dt0 of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)) for (const dt of (dt0.both ? [dt0, {...dt0, ids:dt0.ids.slice().reverse(), inDir0:dt0.inDirEnd}] : [dt0]).filter(d => drivable(d.ids))){
     // sens de marche voulu au départ de la déviation : celui du tronçon barré, depuis l'extrémité où elle commence
     const i0 = cl.ids.indexOf(dt.ids[0]), nxt = i0 === 0 ? cl.pts[1] : i0 === cl.ids.length - 1 ? cl.pts[cl.pts.length - 2] : null, startDir = dt.inDir0 || (nxt ? V.norm(V.sub(nxt, NET.nodes.get(dt.ids[0]).xy)) : null);
     const turns = routeTurns(dt.ids, startDir); let straight = 0;
