@@ -145,8 +145,8 @@ function dimBuild(e, g){
   }
   if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), matCol(col, {po:-12, side:THREE.DoubleSide})); add(m); }
 }
-function dimText(e){ const o = dimOpt(e), L = V.dist(e.a, e.b), f = v => v.toFixed(o.dec).replace('.', ','); let t = `${f(L)} m`;
-  if (o.dz && WORLD){ const dz = H(e.b[0], e.b[1]) - H(e.a[0], e.a[1]); t += `\nΔ ${dz >= 0 ? '+' : '−'}${f(Math.abs(dz))} m · ${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %`; } return t; }
+function dimText(e){ const o = dimOpt(e), L = V.dist(e.a, e.b), cm = DISPLAY.dimUnit === 'cm', f = v => (cm ? v * 100 : v).toFixed(cm ? Math.max(0, o.dec - 2) : o.dec).replace('.', ',') + (cm ? ' cm' : ' m'); let t = f(L);
+  if (o.dz && WORLD){ const dz = H(e.b[0], e.b[1]) - H(e.a[0], e.a[1]); t += `\nΔ ${dz >= 0 ? '+' : '−'}${f(Math.abs(dz))} · ${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %`; } return t; }
 function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz, -y); grp.rotation.y = a; return grp; }
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){

@@ -70,5 +70,5 @@ function renderViewMenu(){
   m.querySelector('[data-shadow]').onchange = e => { DISPLAY.shadows = e.target.checked; DISPLAY.shadowsUser = true; saveDisplay(); applyThemeToScene(); };
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-gfx]').forEach(b => b.onclick = () => { setGfx(b.dataset.gfx); renderViewMenu(); });
-  m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); renderViewMenu(); });
+  m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); window.PrismSettings?.themeChanged(); renderViewMenu(); });
 }

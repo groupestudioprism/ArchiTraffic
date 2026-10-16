@@ -69,5 +69,6 @@ const IDB = {
   db:null,
   open(){ return this.db ??= new Promise((res, rej) => { try { const r = indexedDB.open('architrafic', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch(e){ rej(e); } }); },
   async get(k){ try { const db = await this.open(); return await new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); } catch(e){ return undefined; } },
+  async clearPrefix(pre){ const db = await this.open(); await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'), st = t.objectStore('kv'), q = st.openCursor(); q.onsuccess = () => { const c = q.result; if (!c) return; if (String(c.key).startsWith(pre)) c.delete(); c.continue(); }; t.oncomplete = res; t.onerror = () => rej(t.error); }); },
   async set(k, v){ try { const db = await this.open(); await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); } catch(e){} },
 };
