@@ -7,7 +7,7 @@ function openPanelMobile(){ if (isNarrow.matches){ $('#panel').classList.add('op
 $('#panelBtn').addEventListener('click', () => { const p = $('#panel'); const o = !p.classList.contains('open'); p.classList.toggle('open', o); $('#scrim').classList.toggle('on', o); });
 $('#scrim').addEventListener('click', () => { $('#panel').classList.remove('open'); $('#scrim').classList.remove('on'); });
 let panelT = 0;
-function refreshPanel(){ clearTimeout(panelT); panelT = setTimeout(renderPanel, 16); }
+function refreshPanel(){ if (panelT) return; panelT = setTimeout(() => { panelT = 0; renderPanel(); }, 16); }   // jamais repoussé indéfiniment par des appels répétés
 function renderPanel(){ if (!state) return; ({props:renderProps, lib:renderLib, traffic:renderTraffic, legend:renderLegendTab})[activeTab]?.(); }
 const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
 function elLabel(e){
