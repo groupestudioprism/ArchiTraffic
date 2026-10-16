@@ -13,7 +13,7 @@ function buildNet(W){
       const a = node(r.nodes[k]), b = node(r.nodes[k + 1]); if (!a || !b || a === b) continue;
       a.nb.add(b.id); b.nb.add(a.id); a.ways.add(ri); b.ways.add(ri);
       const len = V.dist(a.xy, b.xy) || 0.01, sp = r.speed / 3.6;
-      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id)}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
+      const mk = (f, t, rev) => { const e = {i:N.edges.length, from:f.id, to:t.id, r:ri, k, rev, len, sp, cls:r.cls, key:segKey(f.id, t.id), pl:plOk(r), dep:/^[DNM]\s?\d/i.test(r.ref || '')}; N.edges.push(e); f.out.push(e.i); t.inn.push(e.i); return e; };
       if (r.oneway >= 0) mk(a, b, false);
       if (r.oneway <= 0) mk(b, a, true);
       const sk = segKey(a.id, b.id); if (!N.segIdx.has(sk)) N.segIdx.set(sk, {ri, k, a:a.id, b:b.id});
@@ -27,6 +27,20 @@ function buildNet(W){
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++){ const key = x + ',' + y; (N.grid.get(key) || N.grid.set(key, []).get(key)).push([ri, k]); } } });
   Object.assign(NET, N);
   return NET;
+}
+/* aptitude poids lourds d'une voie (guide SETRA « déviations » : l'itinéraire doit avoir gabarit, tonnage et largeur compatibles
+   avec le trafic dévié). 0 = interdit / inadapté aux PL, 1 = possible. */
+const UNPAVED = /^(unpaved|gravel|fine_gravel|dirt|earth|ground|grass|sand|mud|compacted|pebblestone|woodchips|grass_paver)$/;
+function plOk(r){
+  const T = r.tags || {}, num = v => parseFloat(String(v || '').replace(',', '.'));
+  if (/^(no|destination|delivery|local)$/.test(T.hgv || '') || /^(destination|private)$/.test(T.access || '')) return 0;
+  if (num(T.maxweight) > 0 && num(T.maxweight) < 19) return 0;
+  if (num(T.maxheight) > 0 && num(T.maxheight) < 4) return 0;
+  if (num(T.maxwidth) > 0 && num(T.maxwidth) < 2.6) return 0;
+  if (UNPAVED.test(T.surface || '') || T.highway === 'track') return 0;
+  if (r.cls >= 6) return 0;                                       // aire piétonne, zone de rencontre, voie de desserte
+  if (r.w < (r.oneway ? 3.5 : 5.5) && r.cls >= 5) return 0;       // chemin ou rue trop étroits pour croiser un PL
+  return 1;
 }
 const nodeDeg = n => n ? n.nb.size : 0;
 /* voie la plus proche d'un point (drive : voies circulées seulement) */
@@ -99,6 +113,11 @@ function route(fromId, toId, C, opt = {}){
       let c = e.len / (e.sp * (C.slow.get(e.key) || 1)) * (pen[e.cls] || 2);
       if (inEdge >= 0){ const pe = NET.edges[inEdge], a = NET.nodes.get(pe.from).xy, d1 = V.norm(V.sub(n.xy, a)), d2 = V.norm(V.sub(NET.nodes.get(e.to).xy, n.xy)), turn = Math.acos(clamp(V.dot(d1, d2), -1, 1)); if (turn > 0.6) c += opt.detour ? 6 : 4; }
       if (opt.vtype === 'pl' && (e.cls >= 6)) c *= 3;
+      if (opt.lvl){   // déviation d'une route classée : rester sur le réseau de même niveau, jamais de chemin inadapté aux PL
+        if (opt.strict && !e.pl) continue;
+        if (e.cls >= 6 && opt.lvl < 6) continue;                  // jamais de zone de rencontre / desserte pour dévier une rue circulée
+        const drop = e.cls - opt.lvl; if (drop > 0 && !e.dep) c *= drop === 1 ? 2.5 : 8;   // descendre dans la hiérarchie coûte cher (lotissements, rues résidentielles)
+      }
       const nk = e.to + '|' + e.r, ng = cost + c;
       if (ng < (g.get(nk) ?? Infinity)){ g.set(nk, ng); prev.set(nk, [sk, ei]); push([ng + h(NET.nodes.get(e.to)), ng, e.to, e.r, ei]); }
     }
@@ -113,11 +132,17 @@ function route(fromId, toId, C, opt = {}){
 function proposeDetours(cl, els){
   const C = closedSets(els.filter(e => e !== cl).concat([{...cl, off:false}])), ids = cl.ids, A = ids[0], B = ids[ids.length - 1];
   const ow = sectionOneway(ids), out = [];
+  const closedEdges = []; for (let i = 0; i + 1 < ids.length; i++){ const n = NET.nodes.get(ids[i]); for (const ei of n?.out || []) if (NET.edges[ei].to === ids[i + 1]) closedEdges.push(NET.edges[ei]); for (const ei of n?.inn || []) if (NET.edges[ei].from === ids[i + 1]) closedEdges.push(NET.edges[ei]); }
+  const lvl = Math.min(...closedEdges.map(e => e.cls), 8), heavy = closedEdges.some(e => e.dep) || lvl <= 4;   // route départementale / nationale ou voie principale : trafic PL à dévier
   const dirs = cl.mode === 'sens' ? [cl.dir === -1 ? [B, A] : [A, B]] : ow === 1 ? [[A, B]] : ow === -1 ? [[B, A]] : [[A, B], [B, A]];
   for (const [f, t] of dirs){
-    const r = route(f, t, C, {detour:true}); if (!r) { out.push({from:f, to:t, fail:true}); continue; }
+    // niveau de la voie barrée : une départementale / route principale se dévie par le même réseau, apte aux PL
+    let r = route(f, t, C, {detour:true, lvl, strict:heavy}), vl = false;
+    if (!r && heavy){ r = route(f, t, C, {detour:true, lvl}); vl = !!r; }   // aucun itinéraire PL : déviation VL seulement, à signaler
+    if (!r) { out.push({from:f, to:t, fail:true}); continue; }
+    if (r && !heavy && r.edges.some(ei => !NET.edges[ei].pl) && closedEdges.every(e => e.pl)) vl = true;
     const base = route(f, t, closedSets([]), {});
-    out.push({from:f, to:t, ...r, extra:base ? r.len - base.len : 0, extraT:base ? r.time - base.time : 0});
+    out.push({from:f, to:t, ...r, vl, extra:base ? r.len - base.len : 0, extraT:base ? r.time - base.time : 0});
   }
   return out;
 }

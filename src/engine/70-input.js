@@ -161,7 +161,7 @@ function makeClosure(nr){
   if (mode === 'sens' && ow !== 0){ cl.side = MO.dir; cl.dir = ow; if (closureWidth(cl) >= 5.5) cl.mode = 'voie'; }
   beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
-  if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
+  if (TOOLOPT.autoDetour && !['alternat', 'voie'].includes(cl.mode)){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; if (cl.plWarn) msg += ' · ⚠ aucun itinéraire adapté aux poids lourds dans la zone : déviation VL, PL à dévier en amont (panneau B8 posé)'; }
   if (TOOLOPT.autoSigns) autoSigns(cl);
   refreshOtherDetours(cl.id);
   endEdit(); sel = cl.id; rebuildProj(); refreshPanel(); toast(msg, 5200);
@@ -194,7 +194,8 @@ function addDetoursFor(cl){
   }
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
-    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
+    state.els.push({id:uid8(), t:'detour', cl:cl.id, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
+  cl.plWarn = list.some(r => r.vl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
@@ -216,6 +217,7 @@ function autoSigns(cl){
       const nc = Math.max(4, Math.round(taper / 3)); for (let k = 0; k <= nc; k++){ const t = k / nc; add('K5a', V.add(V.sub(base, V.mul(d, taper * (1 - t))), V.mul(n, -w / 2 + 0.3 + (w / 2 - 0.3) * t)), face); }
       add('AK3', right(back(apD)), face); add('K8', V.add(base, V.mul(n, -w / 4)), face);   // K8 sur barrière : ferme la file neutralisée
     } else add('AK5', right(back(apD)), face);
+    if (cl.plWarn && !lane) add('B8', V.add(right(back(apD)), V.mul(d, 12)), face);   // interdiction PL : la déviation locale ne leur convient pas
     if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
