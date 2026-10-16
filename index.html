@@ -890,12 +890,6 @@ a.ap-link{text-decoration:none}
 .legend-box small{display:block;margin-top:8px;color:var(--mut);font-size:10px}
 
 /* chargement de la zone */
-.loadbox{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px;box-shadow:var(--shadow);min-width:300px;max-width:90%}
-.loadbox b{display:block;font:700 14px var(--f-display);color:var(--ink)}
-.loadbox span{display:block;font-size:12.5px;color:var(--mut);margin-top:3px}
-.lb-bar{display:block;height:5px;border-radius:3px;background:var(--chip);margin-top:9px;overflow:hidden}
-.lb-bar i{display:block;height:100%;width:0;background:var(--grad);transition:width .3s}
-.loadbox .ap-spin{width:28px;height:28px;border:3px solid var(--chip);border-top-color:var(--orange);border-radius:50%;animation:apSpin .9s linear infinite;flex:none}
 @keyframes apSpin{to{transform:rotate(360deg)}}
 
 /* pied : NGF */
@@ -959,6 +953,39 @@ a.ap-link{text-decoration:none}
   .legend-box{right:12px;bottom:60px;max-width:200px;font-size:11px}
 }
 @media (max-width:560px){.sb-sel:last-of-type{display:none}.sb-info{display:none}}
+
+/* ---- chargement : voile « verre liquide » qui bloque l'interface ---- */
+.loadveil{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;overflow:hidden;cursor:progress;
+  background:color-mix(in srgb,var(--bg,#f4f6fa) 28%,transparent);-webkit-backdrop-filter:blur(18px) saturate(1.7);backdrop-filter:blur(18px) saturate(1.7);animation:lvIn .28s ease-out}
+.loadveil[hidden]{display:none}
+.lv-blob{position:absolute;width:46vmax;height:46vmax;border-radius:50%;filter:blur(60px);opacity:.42;mix-blend-mode:plus-lighter;pointer-events:none;animation:lvFloat 14s ease-in-out infinite alternate}
+.lv-blob.b1{background:radial-gradient(circle,#2F6BFF 0,transparent 68%);left:-12vmax;top:-14vmax}
+.lv-blob.b2{background:radial-gradient(circle,#FF8A1F 0,transparent 68%);right:-14vmax;bottom:-16vmax;animation-duration:17s;animation-delay:-5s}
+.lv-blob.b3{background:radial-gradient(circle,#9B5CFF 0,transparent 66%);left:30%;top:40%;width:30vmax;height:30vmax;opacity:.28;animation-duration:20s;animation-delay:-9s}
+.loadveil .loadbox{position:relative;display:flex;gap:16px;align-items:center;min-width:min(420px,calc(100vw - 32px));max-width:calc(100vw - 32px);padding:20px 22px;border-radius:24px;cursor:default;
+  background:linear-gradient(145deg,rgba(255,255,255,.62),rgba(255,255,255,.28));-webkit-backdrop-filter:blur(28px) saturate(1.9);backdrop-filter:blur(28px) saturate(1.9);
+  border:1px solid rgba(255,255,255,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(255,255,255,.25),0 24px 60px -18px rgba(20,30,60,.38),0 2px 8px rgba(20,30,60,.08);animation:lvPop .42s cubic-bezier(.2,1.3,.4,1)}
+.loadveil .loadbox::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,.55) 0,rgba(255,255,255,0) 32%,rgba(255,255,255,0) 68%,rgba(255,255,255,.22) 100%);mix-blend-mode:soft-light}
+.lb-txt{flex:1;min-width:0}
+.loadbox b{display:block;font:700 15px var(--f-display);color:var(--ink)}
+.loadbox span{display:block;font-size:12.5px;color:var(--mut);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .25s}
+.loadbox em{display:block;font:600 11px/1 var(--f-mono,ui-monospace,monospace);font-style:normal;color:var(--mut);margin-top:6px;font-variant-numeric:tabular-nums}
+.lb-bar{display:block;height:7px;border-radius:99px;background:rgba(120,130,160,.18);margin-top:10px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
+.lb-bar i{position:relative;display:block;height:100%;width:0;border-radius:inherit;background:var(--grad);overflow:hidden}
+.lb-bar i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);transform:translateX(-100%);animation:lbShine 1.6s ease-in-out infinite}
+.loadbox .ap-spin{width:30px;height:30px;border:3px solid rgba(120,130,160,.22);border-top-color:var(--orange);border-radius:50%;animation:apSpin .9s linear infinite;flex:none}
+.lb-stop{flex:none;align-self:center;border:1px solid rgba(255,255,255,.75);background:rgba(255,255,255,.45);color:var(--ink);font:600 13px var(--f-ui,inherit);padding:9px 14px;border-radius:99px;cursor:pointer;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 2px 6px rgba(20,30,60,.1);transition:background .15s,transform .15s}
+.lb-stop:hover{background:rgba(255,255,255,.75)}.lb-stop:active{transform:scale(.96)}
+.lb-stop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@keyframes lvIn{from{opacity:0;-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0)}}
+@keyframes lvPop{from{opacity:0;transform:translateY(10px) scale(.96)}}
+@keyframes lvFloat{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+@keyframes lbShine{to{transform:translateX(100%)}}
+@media (max-width:520px){.loadveil .loadbox{flex-wrap:wrap}.lb-stop{width:100%}}
+@media (prefers-reduced-motion:reduce){.lv-blob,.lb-bar i::after,.loadveil,.loadveil .loadbox{animation:none}}
+:root[data-theme="dark"] .loadveil,.dark .loadveil{background:rgba(10,14,24,.45)}
+:root[data-theme="dark"] .loadveil .loadbox,.dark .loadveil .loadbox{background:linear-gradient(145deg,rgba(40,48,66,.72),rgba(24,30,44,.5));border-color:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 24px 60px -18px rgba(0,0,0,.6)}
+:root[data-theme="dark"] .lb-stop,.dark .lb-stop{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -1028,7 +1055,11 @@ a.ap-link{text-decoration:none}
     <div class="legend-box" id="legendBox" hidden></div>
     <div class="badge" id="coords">x 0,00 · y 0,00</div>
     <div class="compass" aria-hidden="true"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="20"/><g id="cmpG"><path class="nn" d="M22 9l4.5 13h-9z"/><path class="ns" d="M22 35l4.5-13h-9z"/><text x="22" y="8.2" text-anchor="middle">N</text></g></svg></div>
-    <div class="loadbox" id="loadBox" hidden><div class="ap-spin" aria-hidden="true"></div><div><b id="loadTitle">Chargement</b><span id="loadStep"></span><i class="lb-bar"><i id="loadBar"></i></i></div></div>
+    <div class="loadveil" id="loadBox" hidden role="dialog" aria-modal="true" aria-labelledby="loadTitle">
+      <i class="lv-blob b1" aria-hidden="true"></i><i class="lv-blob b2" aria-hidden="true"></i><i class="lv-blob b3" aria-hidden="true"></i>
+      <div class="loadbox"><div class="ap-spin" aria-hidden="true"></div><div class="lb-txt"><b id="loadTitle">Chargement</b><span id="loadStep"></span><i class="lb-bar"><i id="loadBar"></i></i><em id="loadPct">0 %</em></div>
+        <button class="lb-stop" id="loadStop" type="button">Arrêter</button></div>
+    </div>
   </main>
   <footer class="cmd">
     <div id="prompt" aria-live="polite"></div>
@@ -3150,8 +3181,9 @@ async function ensureUtilities(){
   if (!WORLD || WORLD.W.utilsLoaded || utilsLoading) return utilsLoading;
   const P = WORLD.P, S = Math.min(WORLD.size, CORE), B = areaBounds(P, S + 40), prog = {total:0, done:0, tick:() => loadUI(true, 'Calque réseaux souterrains', `Regards, bouches à clé, armoires, poteaux incendie… ${prog.done}/${prog.total}`, prog.total ? prog.done / prog.total : 0)};
   loadUI(true, 'Calque réseaux souterrains', 'Équipements cartographiés (OpenStreetMap)…', 0.02);
+  let stopped = false; LOAD_STOP = () => { stopped = true; DISPLAY.lay.nets = false; saveDisplay(); buildWorld(); toast('Calque réseaux annulé.', 3000); };
   utilsLoading = overpassTiled('utils', B, 1200, bb => `[out:json][timeout:50];(node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["manhole"]${bb};node["emergency"="fire_hydrant"]${bb};);out body qt;`, prog)
-    .then(r => { const W = WORLD.W; W.utils = []; for (const e of r.elements){ const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
+    .then(r => { if (stopped) return; const W = WORLD.W; W.utils = []; for (const e of r.elements){ const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
         if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
         else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T.street_cabinet || ''), tags:T});
         else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T}); }
@@ -5029,17 +5061,27 @@ const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobil
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
 const LB_MSG = ['Rues, sens uniques et carrefours (OpenStreetMap)…', 'Bâtiments (IGN BD TOPO®)…', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 'Écoles, passages à niveau, restrictions poids lourds…', 'Les serveurs publics sont chargés, on insiste…'];
+let LOAD_STOP = null;   // action du bouton « Arrêter » pour le chargement en cours
+(() => { const b = $('#loadBox'); if (b && b.parentElement !== document.body) document.body.appendChild(b);   // voile au-dessus de toute l'application
+  // pendant le chargement : plus aucun raccourci ni clic sur l'interface, sauf Arrêter (Échap = Arrêter)
+  const block = e => { if (!b || b.hidden) return; if (e.type === 'keydown' && e.key === 'Escape'){ e.preventDefault(); $('#loadStop').click(); }
+    const key = e.type.startsWith('key');
+    if (key ? e.target?.id === 'loadStop' && /^(Enter| |Tab)$/.test(e.key) : e.target?.id === 'loadStop') return;   // seul le bouton Arrêter reste actif
+    if (key || !b.contains(e.target) || e.target === b || !e.target.closest?.('.lb-stop')){ e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); } };
+  for (const t of ['keydown', 'keyup', 'keypress', 'wheel', 'pointerdown', 'mousedown', 'touchstart', 'contextmenu', 'dblclick', 'click']) window.addEventListener(t, block, {capture:true, passive:false});
+  $('#loadStop')?.addEventListener('click', () => { const f = LOAD_STOP; LOAD_STOP = null; LB.real = 1; b.hidden = true; clearInterval(LB.raf); LB.raf = 0; $('#app')?.removeAttribute('inert'); f?.(); });
+})();
 function loadUI(on, title = '', step = '', pct = 0){
-  const b = $('#loadBox');
-  if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; } }, 260); return; }
-  if (b.hidden || LB.real >= 1){ b.hidden = false; LB.shown = 0; LB.real = 0; LB.rt = performance.now(); }
+  const b = $('#loadBox'), app = $('#app');
+  if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; app?.removeAttribute('inert'); LOAD_STOP = null; } }, 260); return; }
+  if (b.hidden || LB.real >= 1){ b.hidden = false; app?.setAttribute('inert', ''); setTimeout(() => $('#loadStop')?.focus(), 30); LB.shown = 0; LB.real = 0; LB.rt = performance.now(); }
   if (title) $('#loadTitle').textContent = title; if (step && step !== LB.step){ $('#loadStep').textContent = LB.step = step; LB.st = performance.now(); }
   const r = Math.min(pct, 0.99); if (r > LB.real){ LB.real = r; LB.rt = performance.now(); }
   if (!LB.raf){ LB.t = performance.now(); const tick = () => { const now = performance.now(), dt = Math.min(0.1, (now - LB.t) / 1000); LB.t = now;
       const cap = LB.real >= 1 ? 1 : Math.min(0.95, LB.real + Math.min(0.3, 0.1 + (now - LB.rt) / 1000 * 0.008));   // l'avance d'attente grandit doucement avec le temps, plafonnée
       if (LB.shown < LB.real - 0.004) LB.shown += (LB.real - LB.shown) * Math.min(1, dt * 6);   // rattrapage rapide
       else if (LB.shown < cap) LB.shown += (cap - LB.shown) * dt * 0.6;                 // progression d'attente, de plus en plus lente
-      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%';
+      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
       if (now - LB.st > 3500 && LB.real < 0.8){ LB.st = now; $('#loadStep').textContent = LB_MSG[LB.k++ % LB_MSG.length]; }   // rien de neuf depuis 3,5 s : on montre ce qui se charge
       if (b.hidden){ clearInterval(LB.raf); LB.raf = 0; } };
     LB.raf = setInterval(tick, 40); tick(); }
@@ -5049,6 +5091,7 @@ async function loadSite(force = false){
   const s = state.site; if (!s?.lat){ WORLD = null; buildWorld(); rebuildProj(); return; }
   const tok = ++loadToken, size = s.size || 1000, P = makeProj(s.lat, s.lon), key = `site|${DATA_VER}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}|${size}`;
   simStop(true); loadUI(true, 'Chargement de la zone', 'Ouverture du chantier…', 0.02);
+  LOAD_STOP = () => { loadToken++; toast(WORLD ? 'Chargement arrêté : la zone précédente reste affichée. Les secteurs déjà reçus sont gardés pour la prochaine fois.' : 'Chargement arrêté. Les secteurs déjà reçus sont gardés : relancez quand vous voulez (Projet → Mettre à jour les données).', 6000); };
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {

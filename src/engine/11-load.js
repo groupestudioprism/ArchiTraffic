@@ -79,8 +79,9 @@ async function ensureUtilities(){
   if (!WORLD || WORLD.W.utilsLoaded || utilsLoading) return utilsLoading;
   const P = WORLD.P, S = Math.min(WORLD.size, CORE), B = areaBounds(P, S + 40), prog = {total:0, done:0, tick:() => loadUI(true, 'Calque réseaux souterrains', `Regards, bouches à clé, armoires, poteaux incendie… ${prog.done}/${prog.total}`, prog.total ? prog.done / prog.total : 0)};
   loadUI(true, 'Calque réseaux souterrains', 'Équipements cartographiés (OpenStreetMap)…', 0.02);
+  let stopped = false; LOAD_STOP = () => { stopped = true; DISPLAY.lay.nets = false; saveDisplay(); buildWorld(); toast('Calque réseaux annulé.', 3000); };
   utilsLoading = overpassTiled('utils', B, 1200, bb => `[out:json][timeout:50];(node["man_made"~"^(manhole|street_cabinet)$"]${bb};node["manhole"]${bb};node["emergency"="fire_hydrant"]${bb};);out body qt;`, prog)
-    .then(r => { const W = WORLD.W; W.utils = []; for (const e of r.elements){ const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
+    .then(r => { if (stopped) return; const W = WORLD.W; W.utils = []; for (const e of r.elements){ const xy = P.toXY(e.lon, e.lat), T = e.tags || {};
         if (T.man_made === 'manhole' || T.manhole) W.utils.push({x:xy[0], y:xy[1], k:'manhole', sub:String(T.manhole || T.utility || ''), tags:T});
         else if (T.man_made === 'street_cabinet') W.utils.push({x:xy[0], y:xy[1], k:'cabinet', sub:String(T.utility || T.street_cabinet || ''), tags:T});
         else if (T.emergency === 'fire_hydrant') W.utils.push({x:xy[0], y:xy[1], k:'hydrant', tags:T}); }

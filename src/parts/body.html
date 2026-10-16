@@ -66,7 +66,11 @@
     <div class="legend-box" id="legendBox" hidden></div>
     <div class="badge" id="coords">x 0,00 · y 0,00</div>
     <div class="compass" aria-hidden="true"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="20"/><g id="cmpG"><path class="nn" d="M22 9l4.5 13h-9z"/><path class="ns" d="M22 35l4.5-13h-9z"/><text x="22" y="8.2" text-anchor="middle">N</text></g></svg></div>
-    <div class="loadbox" id="loadBox" hidden><div class="ap-spin" aria-hidden="true"></div><div><b id="loadTitle">Chargement</b><span id="loadStep"></span><i class="lb-bar"><i id="loadBar"></i></i></div></div>
+    <div class="loadveil" id="loadBox" hidden role="dialog" aria-modal="true" aria-labelledby="loadTitle">
+      <i class="lv-blob b1" aria-hidden="true"></i><i class="lv-blob b2" aria-hidden="true"></i><i class="lv-blob b3" aria-hidden="true"></i>
+      <div class="loadbox"><div class="ap-spin" aria-hidden="true"></div><div class="lb-txt"><b id="loadTitle">Chargement</b><span id="loadStep"></span><i class="lb-bar"><i id="loadBar"></i></i><em id="loadPct">0 %</em></div>
+        <button class="lb-stop" id="loadStop" type="button">Arrêter</button></div>
+    </div>
   </main>
   <footer class="cmd">
     <div id="prompt" aria-live="polite"></div>

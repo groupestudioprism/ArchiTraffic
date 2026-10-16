@@ -27,17 +27,27 @@ const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobil
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
 const LB_MSG = ['Rues, sens uniques et carrefours (OpenStreetMap)…', 'Bâtiments (IGN BD TOPO®)…', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 'Écoles, passages à niveau, restrictions poids lourds…', 'Les serveurs publics sont chargés, on insiste…'];
+let LOAD_STOP = null;   // action du bouton « Arrêter » pour le chargement en cours
+(() => { const b = $('#loadBox'); if (b && b.parentElement !== document.body) document.body.appendChild(b);   // voile au-dessus de toute l'application
+  // pendant le chargement : plus aucun raccourci ni clic sur l'interface, sauf Arrêter (Échap = Arrêter)
+  const block = e => { if (!b || b.hidden) return; if (e.type === 'keydown' && e.key === 'Escape'){ e.preventDefault(); $('#loadStop').click(); }
+    const key = e.type.startsWith('key');
+    if (key ? e.target?.id === 'loadStop' && /^(Enter| |Tab)$/.test(e.key) : e.target?.id === 'loadStop') return;   // seul le bouton Arrêter reste actif
+    if (key || !b.contains(e.target) || e.target === b || !e.target.closest?.('.lb-stop')){ e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); } };
+  for (const t of ['keydown', 'keyup', 'keypress', 'wheel', 'pointerdown', 'mousedown', 'touchstart', 'contextmenu', 'dblclick', 'click']) window.addEventListener(t, block, {capture:true, passive:false});
+  $('#loadStop')?.addEventListener('click', () => { const f = LOAD_STOP; LOAD_STOP = null; LB.real = 1; b.hidden = true; clearInterval(LB.raf); LB.raf = 0; $('#app')?.removeAttribute('inert'); f?.(); });
+})();
 function loadUI(on, title = '', step = '', pct = 0){
-  const b = $('#loadBox');
-  if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; } }, 260); return; }
-  if (b.hidden || LB.real >= 1){ b.hidden = false; LB.shown = 0; LB.real = 0; LB.rt = performance.now(); }
+  const b = $('#loadBox'), app = $('#app');
+  if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; app?.removeAttribute('inert'); LOAD_STOP = null; } }, 260); return; }
+  if (b.hidden || LB.real >= 1){ b.hidden = false; app?.setAttribute('inert', ''); setTimeout(() => $('#loadStop')?.focus(), 30); LB.shown = 0; LB.real = 0; LB.rt = performance.now(); }
   if (title) $('#loadTitle').textContent = title; if (step && step !== LB.step){ $('#loadStep').textContent = LB.step = step; LB.st = performance.now(); }
   const r = Math.min(pct, 0.99); if (r > LB.real){ LB.real = r; LB.rt = performance.now(); }
   if (!LB.raf){ LB.t = performance.now(); const tick = () => { const now = performance.now(), dt = Math.min(0.1, (now - LB.t) / 1000); LB.t = now;
       const cap = LB.real >= 1 ? 1 : Math.min(0.95, LB.real + Math.min(0.3, 0.1 + (now - LB.rt) / 1000 * 0.008));   // l'avance d'attente grandit doucement avec le temps, plafonnée
       if (LB.shown < LB.real - 0.004) LB.shown += (LB.real - LB.shown) * Math.min(1, dt * 6);   // rattrapage rapide
       else if (LB.shown < cap) LB.shown += (cap - LB.shown) * dt * 0.6;                 // progression d'attente, de plus en plus lente
-      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%';
+      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
       if (now - LB.st > 3500 && LB.real < 0.8){ LB.st = now; $('#loadStep').textContent = LB_MSG[LB.k++ % LB_MSG.length]; }   // rien de neuf depuis 3,5 s : on montre ce qui se charge
       if (b.hidden){ clearInterval(LB.raf); LB.raf = 0; } };
     LB.raf = setInterval(tick, 40); tick(); }
@@ -47,6 +57,7 @@ async function loadSite(force = false){
   const s = state.site; if (!s?.lat){ WORLD = null; buildWorld(); rebuildProj(); return; }
   const tok = ++loadToken, size = s.size || 1000, P = makeProj(s.lat, s.lon), key = `site|${DATA_VER}|${s.lat.toFixed(5)}|${s.lon.toFixed(5)}|${size}`;
   simStop(true); loadUI(true, 'Chargement de la zone', 'Ouverture du chantier…', 0.02);
+  LOAD_STOP = () => { loadToken++; toast(WORLD ? 'Chargement arrêté : la zone précédente reste affichée. Les secteurs déjà reçus sont gardés pour la prochaine fois.' : 'Chargement arrêté. Les secteurs déjà reçus sont gardés : relancez quand vous voulez (Projet → Mettre à jour les données).', 6000); };
   let raw = force ? null : await IDB.get(key);
   if (raw && Date.now() - raw.at > 30 * 864e5) raw = null;   // plus de 30 jours : on remet à jour
   try {
