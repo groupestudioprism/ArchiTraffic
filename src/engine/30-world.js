@@ -112,7 +112,7 @@ function buildTerrain(grp){
   const m = planLook() ? new THREE.MeshBasicMaterial({map:groundTex}) : new THREE.MeshStandardMaterial({map:aerial ? orthoTex : groundTex, roughness:1, metalness:0});
   const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.name = 'Terrain'; mesh.userData.terrain = true; grp.add(mesh);
   // jupe autour du terrain (épaisseur du sol, coupe propre en bord de zone)
-  const sk = new GB(), zb = Math.min(...WORLD.elev.z) - WORLD.z0 - 4, edge = [];
+  const sk = new GB(), zb = WORLD.elev.z.reduce((m, v) => v < m ? v : m, Infinity) - WORLD.z0 - 4, edge = [];
   for (let i = 0; i < n; i++) edge.push([-S / 2 + i * st, -S / 2]); for (let j = 1; j < n; j++) edge.push([S / 2, -S / 2 + j * st]); for (let i = n - 2; i >= 0; i--) edge.push([-S / 2 + i * st, S / 2]); for (let j = n - 2; j > 0; j--) edge.push([-S / 2, -S / 2 + j * st]); edge.push(edge[0]);
   for (let k = 0; k + 1 < edge.length; k++){ const a = edge[k], b = edge[k + 1]; sk.quad(P3(a[0], a[1], zb), P3(b[0], b[1], zb), P3(b[0], b[1], H(b[0], b[1]) - 0.02), P3(a[0], a[1], H(a[0], a[1]) - 0.02), [0, 0], [1, 0], [1, 1], [0, 1]); }
   const skin = new THREE.Mesh(sk.geo(), matCol(planLook() ? 0xD9D4C9 : 0x6B5A45, {rough:1, side:THREE.DoubleSide})); skin.name = 'Coupe du sol'; grp.add(skin);
