@@ -231,6 +231,9 @@ function autoSigns(cl){
       const nr = nearestRoad(q0, 15), hw = nr ? nr.r.w / 2 : 3, q = V.add(q0, V.mul(V.perp(t.inDir), -(hw + 0.8)));
       add(t.turn === 'gauche' ? 'KD22a' : t.turn === 'droite' ? 'KD22b' : 'KD22c', q, Math.atan2(-t.inDir[1], -t.inDir[0]));
     }
+    // fin de déviation (KD69) au retour sur l'itinéraire normal, à droite, face aux usagers
+    if (dt.ids.length > 1){ const E = NET.nodes.get(dt.ids.at(-1)).xy, Pv = NET.nodes.get(dt.ids.at(-2)).xy, d = V.norm(V.sub(E, Pv)), nr = nearestRoad(E, 15), hw = nr ? nr.r.w / 2 : 3;
+      const q = V.add(V.add(E, V.mul(d, 12)), V.mul(V.perp(d), -(hw + 0.8))); add('KD69', q, Math.atan2(-d[1], -d[0])); }
   }
 }
 function askNote(q, e){

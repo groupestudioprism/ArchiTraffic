@@ -205,3 +205,6 @@
 .phinfo[hidden]{display:none}.ph-w{display:block;color:#B3261E;margin-top:3px}
 :root[data-theme="dark"] .phbar,:root[data-theme="dark"] .phinfo{background:rgba(30,38,54,.75);border-color:rgba(255,255,255,.12)}
 @media (max-width:760px){.phbar,.phinfo{max-width:calc(100% - 24px)}}
+.chk{display:flex;gap:10px;align-items:flex-start;padding:7px 9px;border-radius:9px;font-size:13px}.chk[data-i]{cursor:pointer}.chk[data-i]:hover{background:rgba(0,0,0,.04)}
+.chk b{width:18px;flex:none;text-align:center}.chk.ok b{color:#1B8A3A}.chk.warn b{color:#C77700}.chk.err b{color:#C62828}.chk.info b{color:var(--accent)}
+.chk.ok span{color:var(--mut)}

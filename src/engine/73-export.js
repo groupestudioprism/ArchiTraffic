@@ -1,13 +1,20 @@
 /* ============ Exports : plan PNG avec cartouche et légende, maquette GLB, matériel CSV, itinéraires GeoJSON, projet ============ */
 function canExport(){ const a = window.SPAccess; if (a && a.level !== 'pending' && !a.canExport){ window.SPLicense?.prompt('export'); return false; } window.SPLicense?.usage?.(); return true; }   // rappel d'usage (non commercial) une fois par session
-async function exportPNG(k = 2){
+async function exportPNG(k = 2, asCanvas = false){
   const w = vpEl.clientWidth, h = vpEl.clientHeight, pr = renderer.getPixelRatio(), s = Math.min(k, 4096 / Math.max(w, h));
   markGroup.visible = previewGroup.visible = false; renderer.setPixelRatio(s); renderer.setSize(w, h, false); renderer.render(scene, cam());
   const src = renderer.domElement, cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height; const g = cv.getContext('2d'); g.drawImage(src, 0, 0);
   renderer.setPixelRatio(pr); renderer.setSize(w, h, false); markGroup.visible = previewGroup.visible = true; dirty = true;
   const S = cv.width / w;
   // étiquettes
-  for (const a of annos){ if (a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), cs = getComputedStyle(a.d);
+  // repères de panneaux (images) : bulle blanche + panneau
+  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), x = (r.left - vr.left) * S, y = (r.top - vr.top) * S, ww = r.width * S, hh = r.height * S;
+    g.save(); g.fillStyle = a.sig ? '#1E2226' : '#fff'; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, ww, hh, 9 * S) : g.rect(x, y, ww, hh); g.fill();
+    g.beginPath(); g.moveTo(x + ww / 2 - 5 * S, y + hh); g.lineTo(x + ww / 2, y + hh + 6 * S); g.lineTo(x + ww / 2 + 5 * S, y + hh); g.fill(); g.shadowBlur = 0;
+    const im = a.d.querySelector('img'); if (im?.complete) g.drawImage(im, x + 3 * S, y + 3 * S, ww - 6 * S, hh - 6 * S);
+    else if (a.sig){ const st = a.d.dataset.s; ['r', 'y', 'g'].forEach((k, i) => { g.fillStyle = st === k ? ({r:'#FF2A1A', y:'#FFB300', g:'#18E070'})[k] : '#3a3f45'; g.beginPath(); g.arc(x + ww / 2, y + (6 + i * 10) * S, 4 * S, 0, 7); g.fill(); }); }
+    g.restore(); }
+  for (const a of annos){ if (a.d.hidden || a.pin) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), cs = getComputedStyle(a.d);
     const x = (r.left - vr.left) * S, y = (r.top - vr.top) * S, ww = r.width * S, hh = r.height * S;
     g.save(); if (a.street && view === '2d'){ const t = a.d.style.transform.match(/rotate\(([-\d.]+)deg\)/); g.translate(x + ww / 2, y + hh / 2); if (t) g.rotate(+t[1] * Math.PI / 180); g.translate(-(x + ww / 2), -(y + hh / 2)); }
     if (!a.street){ g.fillStyle = cs.backgroundColor; g.strokeStyle = cs.borderColor; g.lineWidth = 1.5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, ww, hh, 6 * S) : g.rect(x, y, ww, hh); g.fill(); if (cs.borderStyle !== 'none' && parseFloat(cs.borderWidth)) g.stroke(); }
@@ -17,6 +24,7 @@ async function exportPNG(k = 2){
   const box = $('#legendBox'); if (!box.hidden){ const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); await drawLegendTo(g, (r.left - vr.left) * S, (r.top - vr.top) * S, S); }
   // cartouche
   drawCartouche(g, cv.width, cv.height, S);
+  if (asCanvas) return cv;
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
   downloadBlob(blob, `${safeName(state.name)}-${view === '2d' ? 'plan' : 'vue'}-${new Date().toISOString().slice(0, 10)}.png`); toast('Image enregistrée');
 }

@@ -86,6 +86,7 @@ Object.assign(SIGNS, {
   KC1_accesM:{n:'Accès chantier', s:'rect', ak:1, ar:1.6, p:{t:'ACCÈS|CHANTIER'}, base:'KC1'},
   KC1_commerces:{n:'Commerces ouverts', s:'rect', ak:1, ar:1.6, p:{t:'COMMERCES|OUVERTS'}, base:'KC1'},
   KC1_impasse:{n:'Impasse sauf riverains', s:'rect', ak:1, ar:1.6, p:{t:'IMPASSE|SAUF RIVERAINS'}, base:'KC1'},
+  KD69:{n:'Fin de déviation (KD69)', s:'rect', ak:1, ar:2.0, p:{t:'FIN DE|DÉVIATION'}, base:'KD8'},
   KD9:{n:'Itinéraire de déviation (présignalisation)', s:'rect', ak:1, ar:1.3, p:{t:'DÉVIATION|Centre-ville'}, base:'KD8'},
   KD10:{n:'Direction de déviation (flèche)', s:'rect', ak:1, ar:3.0, p:{t:'Centre-ville'}, bg:(g, w, h) => { g.beginPath(); g.moveTo(4, 4); g.lineTo(w - h * 0.45, 4); g.lineTo(w - 4, h / 2); g.lineTo(w - h * 0.45, h - 4); g.lineTo(4, h - 4); g.closePath(); g.fillStyle = SC.yel; g.fill(); g.strokeStyle = SC.blk; g.lineWidth = h * 0.05; g.stroke(); },
     draw:(g, p, w, h) => { g.fillStyle = SC.blk; g.textAlign = 'left'; g.textBaseline = 'middle'; textFit(g, String(p?.t || 'Centre-ville'), h * 0.22, h / 2, w - h * 0.85, Math.round(h * 0.4), '800'); }},
@@ -99,7 +100,7 @@ Object.assign(SIGNS, {
 });
 /* catégories de la bibliothèque (ordre d'affichage) */
 const SIGN_LIB = {
-  temp:['AK5', 'AK3', 'AK3a', 'AK3b', 'AK1', 'AK2', 'AK4', 'AK14', 'AK15', 'AK17', 'AK21', 'AK22', 'AK30', 'AK31', 'AK32', 'K8', 'K10', 'KC1', 'KR_ROUTE', 'KC1_chantier', 'KC1_camions', 'KC1_fin', 'KC1_trottoir', 'KC1_gravillons', 'KC1_vitesse', 'KC1_accesM', 'KC1_commerces', 'KC1_impasse', 'KD8', 'KD9', 'KD10', 'KD22a', 'KD22b', 'KD22c', 'KD42', 'KM1', 'KM2', 'KM9', 'KM9z'],
+  temp:['AK5', 'AK3', 'AK3a', 'AK3b', 'AK1', 'AK2', 'AK4', 'AK14', 'AK15', 'AK17', 'AK21', 'AK22', 'AK30', 'AK31', 'AK32', 'K8', 'K10', 'KC1', 'KR_ROUTE', 'KC1_chantier', 'KC1_camions', 'KC1_fin', 'KC1_trottoir', 'KC1_gravillons', 'KC1_vitesse', 'KC1_accesM', 'KC1_commerces', 'KC1_impasse', 'KD8', 'KD9', 'KD10', 'KD69', 'KD22a', 'KD22b', 'KD22c', 'KD42', 'KM1', 'KM2', 'KM9', 'KM9z'],
   dang:['A1a', 'A1b', 'A1c', 'A1d', 'A2b', 'A3', 'A3a', 'A3b', 'A4', 'A13a', 'A13b', 'A14', 'A17', 'A18', 'A19', 'A21', 'AB1', 'AB2', 'AB3a', 'AB4', 'AB6', 'AB7', 'AB25'],
   reg:['B0', 'B1', 'B2a', 'B2b', 'B3', 'B4', 'B6a1', 'B6d', 'B7b', 'B8', 'B9a', 'B9b', 'B9g', 'B10a', 'B11', 'B12', 'B13', 'B14', 'B15', 'B16', 'B18c', 'B19', 'B21_1', 'B21_2', 'B21c1', 'B21c2', 'B21d1', 'B21e', 'B22a', 'B22b', 'B27a', 'B30', 'B31', 'B33', 'B34', 'B45a', 'B52', 'B54'],
   ind:['C1a', 'C4a', 'C12', 'C13a', 'C18', 'C20a', 'C27', 'C107', 'C113', 'CE15a', 'EB10', 'EB20', 'D21a', 'M1', 'M2', 'M9z'],
