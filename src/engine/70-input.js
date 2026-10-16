@@ -2,7 +2,8 @@
 const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
 const modeOf = m => m === 'droite' ? {mode:'sens', dir:1} : m === 'gauche' ? {mode:'sens', dir:-1} : m === 'sens' ? {mode:'sens', dir:1} : {mode:m};
 const modeKey = e => e.mode === 'voie' ? (e.side === -1 ? 'gauche' : 'droite') : e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
-let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi'};
+let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi', dim:{col:'#0B57D0', style:'fleches', off:0, dz:false, w:0.3, dec:2}};
+const DIM_COLS = ['#0B57D0', '#D32F2F', '#F28A1A', '#1B8A3A', '#7B1FA2', '#111827'], DIM_STYLES = [['fleches', 'Flèches'], ['traits', 'Traits obliques'], ['points', 'Points']];
 try { Object.assign(TOOLOPT, JSON.parse(localStorage.getItem('at.toolopt') || '{}')); } catch(e){}
 const saveToolOpt = () => { try { localStorage.setItem('at.toolopt', JSON.stringify(TOOLOPT)); } catch(e){} };
 const SNAP = {road:true, obj:true, ortho:false};
@@ -40,10 +41,13 @@ function syncHud(){
     <label class="pill"><input type="checkbox" id="hAutoDet"${TOOLOPT.autoDetour ? ' checked' : ''} style="width:auto"><span>Déviation auto</span></label><label class="pill"><input type="checkbox" id="hAutoSig"${TOOLOPT.autoSigns ? ' checked' : ''} style="width:auto"><span>Panneaux auto</span></label>`;
   else if (tool === 'line') html = `<label class="pill tool-pill"><span>Type</span>${sel_('hLine', Object.entries(LINE_TYPES).map(([k, T]) => [k, T.n]), TOOLOPT.line)}</label>${LINE_TYPES[TOOLOPT.line]?.item ? `<label class="pill"><span>Espacement</span><input id="hLineSp" type="number" min="1" max="30" step="0.5" value="${TOOLOPT.lineSp || LINE_TYPES[TOOLOPT.line].sp}"><em>m</em></label>` : ''}`;
   else if (tool === 'place'){ const L = LIBK[PLACE.k]; html = `<span class="pill tool-pill">${L?.sign ? `<img class="sg" src="${libThumb(L)}" alt="">` : ''}<b>${esc(L?.name || 'Élément')}</b><button type="button" id="hRot">↻ 15°</button><button type="button" id="hLib">Changer</button></span>`; }
+  else if (tool === 'measure'){ const o = TOOLOPT.dim = {...DIM_DEF, ...(TOOLOPT.dim || {})}; html = `<span class="pill tool-pill dimpal">${DIM_COLS.map(c => `<button type="button" class="sw${c === o.col ? ' on' : ''}" data-dcol="${c}" style="background:${c}" aria-label="Couleur ${c}"></button>`).join('')}</span><label class="pill"><span>Extrémités</span>${sel_('hDimSt', DIM_STYLES, o.style)}</label><label class="pill"><span>Décalage</span>${sel_('hDimOff', [[0, '0 m'], [1, '1 m'], [2, '2 m'], [3, '3 m'], [-1, '−1 m'], [-2, '−2 m']], o.off)}</label><label class="pill"><span>Trait</span>${sel_('hDimW', [[0.15, 'Fin'], [0.3, 'Moyen'], [0.5, 'Épais']], o.w)}</label><label class="pill"><input type="checkbox" id="hDimDz"${o.dz ? ' checked' : ''} style="width:auto"><span>Dénivelé NGF et pente</span></label>`; }
   else if (tool === 'swept') html = `<label class="pill tool-pill"><span>Véhicule</span>${sel_('hVeh', Object.entries(SWEPT_VEH).map(([k, v]) => [k, v.n]), TOOLOPT.veh)}</label>`;
   if (POLY_TOOLS.has(tool) && draw.pts.length) html += `<span class="pill"><button type="button" id="hEnd">Terminer ↵</button><button type="button" id="hUndoPt">Retirer le point</button></span>`;
   h.innerHTML = html;
   const on = (id, ev, f) => { const el = $('#' + id); if (el) el.addEventListener(ev, f); };
+  h.querySelectorAll('[data-dcol]').forEach(b => b.onclick = () => { TOOLOPT.dim.col = b.dataset.dcol; saveToolOpt(); syncHud(); updatePolyPreview?.(); });
+  on('hDimSt', 'change', e => { TOOLOPT.dim.style = e.target.value; saveToolOpt(); }); on('hDimOff', 'change', e => { TOOLOPT.dim.off = +e.target.value; saveToolOpt(); }); on('hDimW', 'change', e => { TOOLOPT.dim.w = +e.target.value; saveToolOpt(); }); on('hDimDz', 'change', e => { TOOLOPT.dim.dz = e.target.checked; saveToolOpt(); });
   on('hCloseMode', 'change', e => { TOOLOPT.closeMode = e.target.value; saveToolOpt(); });
   on('hAutoDet', 'change', e => { TOOLOPT.autoDetour = e.target.checked; saveToolOpt(); }); on('hAutoSig', 'change', e => { TOOLOPT.autoSigns = e.target.checked; saveToolOpt(); });
   on('hLine', 'change', e => { TOOLOPT.line = e.target.value; TOOLOPT.lineSp = ''; saveToolOpt(); syncHud(); }); on('hLineSp', 'change', e => { TOOLOPT.lineSp = e.target.value; saveToolOpt(); });
@@ -60,7 +64,27 @@ function groundAt(ev){
   if (terr){ const h = ray.intersectObject(terr, false)[0]; if (h) return [h.point.x, -h.point.z]; }
   const p = new THREE.Vector3(); plane0.constant = -(WORLD ? H(c3.target.x, -c3.target.z) : 0); if (ray.ray.intersectPlane(plane0, p)) return [p.x, -p.z]; return null;
 }
+/* forme « cliquable » d'un élément : sa ligne ou son point, pas un rectangle englobant */
+function elShape(e){
+  if (e.t === 'dim' && e.a && e.b){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))); return {lines:[[V.add(e.a, V.mul(n, o.off)), V.add(e.b, V.mul(n, o.off))]], w:o.w}; }
+  if (e.t === 'zone' && e.pts?.length > 2) return {lines:[[...e.pts, e.pts[0]]], area:e.pts, w:0.3};
+  if (e.t === 'swept' && e.env) return {lines:[e.env.l, e.env.r], area:[...e.env.l, ...e.env.r.slice().reverse()], w:0.3};
+  if (e.pts?.length > 1) return {lines:[e.pts], w:e.t === 'closure' ? closureWidth(e) : e.t === 'detour' ? (e.w || 1.2) : (e.w || 0.6)};
+  if (e.x != null) return {pt:[e.x, e.y], r:e.t === 'obj' ? Math.max(0.8, (LIBK[e.k]?.r || 1)) : 1.2};
+  return null;
+}
+/* sélection au clic : distance réelle à la forme (+ une marge à l'écran pour attraper facilement), les petits éléments passent devant les grands */
+function pickShape(q){
+  const tol = Math.max(0.6, mPerPx() * 9); let best = null, bd = Infinity;
+  for (const e of state.els){ if (e.hidden || phOff(e)) continue; const S = elShape(e); if (!S) continue; let d = Infinity;
+    if (S.pt) d = Math.max(0, V.dist(S.pt, q) - S.r) * 0.8 - 0.05;
+    else { for (const l of S.lines) for (let k = 0; k + 1 < l.length; k++){ const dd = V.dist(segClosest(q, l[k], l[k + 1]).pt, q) - S.w / 2; if (dd < d) d = dd; }
+      if (S.area && inPoly(q[0], q[1], S.area)) d = Math.min(d, tol * 0.9); d = Math.max(0, d) + (e.t === 'closure' || e.t === 'zone' ? 0.2 : 0); }
+    if (d < tol && d < bd){ bd = d; best = e.id; } }
+  return best;
+}
 function pickEl(ev){
+  const q = groundAt(ev); if (q){ const id = pickShape(q); if (id) return id; }
   setNdc(ev); const hits = ray.intersectObjects(projGroup.children, true);
   for (const h of hits){ let o = h.object; while (o && !o.userData.id) o = o.parent; if (o?.userData.id && byId(o.userData.id)) return o.userData.id; }
   return null;
@@ -95,7 +119,7 @@ function updatePolyPreview(){
   if (tool === 'detour' && draw.pts.length){ const r = detourPath([...draw.pts, ...(draw.cursor ? [draw.cursor] : [])]); if (r?.pts.length > 1){ const b = bandPreview(r.pts, 1.4, 0xF28A1A); if (b) previewGroup.add(b); } }
   else if (pts.length > 1) previewGroup.add(lineObj(pts, prevMat, 0.35, tool === 'zone'));
   if (tool === 'swept' && pts.length > 1){ const env = sweptCompute(pts, TOOLOPT.veh); if (env){ previewGroup.add(lineObj(env.l, new THREE.LineBasicMaterial({color:0x7B1FA2, depthTest:false}), 0.35)); previewGroup.add(lineObj(env.r, new THREE.LineBasicMaterial({color:0x7B1FA2, depthTest:false}), 0.35)); } }
-  if (tool === 'measure' && draw.pts.length && draw.cursor){ previewGroup.add(lineObj([draw.pts[0], draw.cursor])); setPrompt(`<b>Cote</b> : ${fmtM(V.dist(draw.pts[0], draw.cursor))}`); }
+  if (tool === 'measure' && draw.pts.length && draw.cursor && V.dist(draw.pts[0], draw.cursor) > 0.05){ const tmp = {id:'__dim', t:'dim', a:draw.pts[0], b:draw.cursor, ...TOOLOPT.dim}, g = new THREE.Group(); dimBuild(tmp, g); g.traverse(m => { if (m.material){ m.material = m.material.clone(); m.material.depthTest = false; m.material.transparent = true; m.material.opacity = 0.85; m.renderOrder = 9; } }); previewGroup.add(g); setPrompt(`<b>Cote</b> : ${dimText(tmp).replace('\n', ' · ')} — cliquez le second point`); }
   for (const q of draw.pts){ const s = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshBasicMaterial({color:0xF28A1A, depthTest:false})); s.position.set(q[0], H(q[0], q[1]) + 0.4, -q[1]); s.renderOrder = 11; previewGroup.add(s); }
   if (ghost) previewGroup.add(ghost);
   dirty = true;
@@ -123,7 +147,7 @@ function onClick(ev, q){
   if (tool === 'close'){ const nr = nearestRoad(q, 10); if (!nr){ toast('Cliquez sur une rue circulée.'); return; } makeClosure(nr); return; }
   if (tool === 'place'){ const e = {id:uid8(), t:'obj', k:PLACE.k, x:q[0], y:q[1], a:draw.ghostA ?? PLACE.a}; const L = LIBK[PLACE.k]; if (L?.p) e.p = {...L.p, ...(PLACE.p || {})}; addEl(e, false); toast(`${L?.name || 'Élément'} posé`); return; }
   if (tool === 'note'){ askNote(q); return; }
-  if (tool === 'measure'){ if (!draw.pts.length){ draw.pts = [q]; return; } addEl({id:uid8(), t:'dim', a:draw.pts[0], b:q}); draw.pts = []; clearPreview(); setPrompt(); return; }
+  if (tool === 'measure'){ if (!draw.pts.length){ draw.pts = [q]; return; } addEl({id:uid8(), t:'dim', a:draw.pts[0], b:q, ...TOOLOPT.dim}); draw.pts = []; clearPreview(); setPrompt(); return; }
   if (POLY_TOOLS.has(tool)){
     if (tool === 'zone' && draw.pts.length > 2 && V.dist(q, draw.pts[0]) < Math.max(1.5, mPerPx() * 12)) return finishPoly();
     draw.pts.push(q); updatePolyPreview(); syncHud();

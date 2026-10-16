@@ -941,7 +941,7 @@ a.ap-link{text-decoration:none}
 /* annotations à l'écran (texte des notes) */
 .anno{position:absolute;left:0;top:0;will-change:translate;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
 .anno.big{font-size:16px}
-.anno.dimtxt{border:0;background:#FFFFFFD9;font:600 12px var(--f-mono);padding:1px 5px;border-radius:4px}
+.anno.dimtxt{border:0;color:#fff;font:700 12.5px var(--f-mono);padding:3px 8px;border-radius:7px;white-space:pre;text-align:center;line-height:1.25;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .anno.street{border:0;background:transparent;box-shadow:none;font:600 11px var(--f-body);color:#3B4556;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;letter-spacing:.02em}
 :root[data-theme="dark"] .anno.street{color:#C9D3E3;text-shadow:0 0 3px #000,0 0 3px #000}
 .anno.closed{color:#fff;background:var(--closed);border-color:var(--closed);font-size:11.5px}
@@ -1027,6 +1027,8 @@ a.ap-link{text-decoration:none}
 .gantt .gt-r i{position:relative;height:26px;background:rgba(120,130,160,.1);border-radius:7px;display:block}
 .gantt .gt-r b{position:absolute;top:2px;bottom:2px;border-radius:6px;background:var(--grad);color:#fff;font:600 11px var(--f-body);display:flex;align-items:center;padding:0 6px;white-space:nowrap;overflow:hidden}
 .gantt .gt-r em{font-size:11.5px;color:var(--mut);padding-left:8px;line-height:26px}
+
+.dimpal{display:inline-flex;gap:5px;align-items:center}.dimpal .sw{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18);cursor:pointer;padding:0}.dimpal .sw.on{box-shadow:0 0 0 2px var(--ink)}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -5262,6 +5264,25 @@ function ribbonMesh(pts, w, mat, dz = 0.12, off = 0){
   const gb = new GB(); bandGB(gb, off ? plOffset(pts, off) : pts, -w / 2, w / 2, dz); if (gb.empty) return null;
   const g = gb.geo(), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + 0); const m = new THREE.Mesh(g, mat); m.renderOrder = 2; return m;
 }
+/* cote : ligne de cote (décalable), lignes d'attache, extrémités flèches / traits obliques / points, couleur et épaisseur au choix */
+const DIM_DEF = {col:'#0B57D0', w:0.3, style:'fleches', off:0, dec:2, dz:false};
+const dimOpt = e => ({...DIM_DEF, ...e});
+function dimBuild(e, g){
+  const o = dimOpt(e), col = new THREE.Color(o.col).getHex(), mat = matCol(col, {po:-12, rough:0.6}), d = V.norm(V.sub(e.b, e.a)), n = V.perp(d), A = V.add(e.a, V.mul(n, o.off)), B = V.add(e.b, V.mul(n, o.off)), w = o.w, L = V.dist(A, B);
+  const add = m => { if (m){ m.userData.id = e.id; g.add(m); } };
+  const tip = Math.min(L * 0.3, Math.max(1.4, w * 6));
+  add(ribbonMesh(o.style === 'fleches' ? [V.add(A, V.mul(d, tip * 0.9)), V.sub(B, V.mul(d, tip * 0.9))] : [A, B], w, mat, 0.22));
+  if (Math.abs(o.off) > 0.05) for (const [p, q] of [[e.a, A], [e.b, B]]) add(ribbonMesh([V.add(p, V.mul(n, Math.sign(o.off) * 0.3)), V.add(q, V.mul(n, Math.sign(o.off) * 0.6))], w * 0.45, mat, 0.22));
+  const z = q => H(q[0], q[1]) + 0.225, gb = new GB();
+  for (const [P, dir] of [[A, d], [B, V.mul(d, -1)]]){
+    if (o.style === 'fleches'){ const b0 = V.add(P, V.mul(dir, tip)), l = V.add(b0, V.mul(V.perp(dir), tip * 0.38)), r = V.sub(b0, V.mul(V.perp(dir), tip * 0.38)); gb.tri(P3(r[0], r[1], z(r)), P3(P[0], P[1], z(P)), P3(l[0], l[1], z(l)), [0, 0], [1, 0], [0, 1]); }
+    else if (o.style === 'traits'){ const t = V.norm(V.add(dir, V.perp(dir))); add(ribbonMesh([V.sub(P, V.mul(t, tip * 0.45)), V.add(P, V.mul(t, tip * 0.45))], w * 1.3, mat, 0.225)); }
+    else { const m = new THREE.Mesh(new THREE.CircleGeometry(Math.max(0.45, w * 1.8), 18), mat); m.rotation.x = -Math.PI / 2; m.position.set(P[0], z(P), -P[1]); add(m); }
+  }
+  if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), matCol(col, {po:-12, side:THREE.DoubleSide})); add(m); }
+}
+function dimText(e){ const o = dimOpt(e), L = V.dist(e.a, e.b), f = v => v.toFixed(o.dec).replace('.', ','); let t = `${f(L)} m`;
+  if (o.dz && WORLD){ const dz = H(e.b[0], e.b[1]) - H(e.a[0], e.a[1]); t += `\nΔ ${dz >= 0 ? '+' : '−'}${f(Math.abs(dz))} m · ${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %`; } return t; }
 function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz, -y); grp.rotation.y = a; return grp; }
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){
@@ -5310,10 +5331,7 @@ function buildEl(e){
     const end = plAt(e.pts, L), base = V.sub(end.pt, V.mul(end.dir, head)), n = V.perp(end.dir), gb = new GB(), A = V.add(base, V.mul(n, w * 1.4)), B = V.sub(base, V.mul(n, w * 1.4)), z = q => H(q[0], q[1]) + 0.185;
     gb.tri(P3(B[0], B[1], z(B)), P3(end.pt[0], end.pt[1], z(end.pt)), P3(A[0], A[1], z(A)), [0, 0], [1, 0], [0, 1]); const hm = new THREE.Mesh(gb.geo(), matCol(new THREE.Color(col).getHex(), {po:-9, rough:0.7, side:THREE.DoubleSide})); hm.userData.id = e.id; g.add(hm); return g;
   }
-  if (e.t === 'dim' && e.a && e.b){
-    const m = ribbonMesh([e.a, e.b], 0.12, matCol(0x111827, {po:-9}), 0.2); if (m){ m.userData.id = e.id; g.add(m); }
-    const d = V.norm(V.sub(e.b, e.a)), n = V.perp(d); for (const q of [e.a, e.b]){ const t = ribbonMesh([V.add(q, V.mul(n, -0.9)), V.add(q, V.mul(n, 0.9))], 0.12, matCol(0x111827, {po:-9}), 0.2); if (t){ t.userData.id = e.id; g.add(t); } } return g;
-  }
+  if (e.t === 'dim' && e.a && e.b){ dimBuild(e, g); return g; }
   if (e.t === 'swept' && e.env){
     const gb = new GB(); try { polyGB(gb, [...e.env.l, ...e.env.r.slice().reverse()], [], 0.17); } catch(err){}
     if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), matCol(0x7B1FA2, {opacity:0.28, depthWrite:false, po:-9})); m.userData.id = e.id; g.add(m); }
@@ -5349,10 +5367,21 @@ function rebuildProj(){
 }
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
+let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A, transparent:true, opacity:0.32, depthTest:false}), selLine = new THREE.LineBasicMaterial({color:0xF28A1A, depthTest:false});
 function applySel(){
-  const c = sel && projCache.get(sel); if (!c){ selBox.visible = false; dirty = true; return; }
-  const b = new THREE.Box3().setFromObject(c.grp); if (b.isEmpty()){ selBox.visible = false; return; }
-  b.expandByScalar(0.25); selBox.box.copy(b); selBox.visible = true; dirty = true;
+  if (selShape){ markGroup.remove(selShape); selShape.traverse(o => o.geometry?.dispose()); selShape = null; } selBox.visible = false;
+  const c = sel && projCache.get(sel), e = sel && byId(sel); if (!c || !e){ dirty = true; return; }
+  const S = elShape(e);
+  if (S?.lines){ // éléments linéaires : bandeau orange le long de la forme
+    const g = new THREE.Group(); for (const l of S.lines){ const m = ribbonMesh(l, S.w + 1.2, selMat, 0.3); if (m){ m.renderOrder = 8; g.add(m); } } selShape = g; markGroup.add(g); dirty = true; return; }
+  // objets : boîte orientée comme l'objet (et non un rectangle aligné sur les axes)
+  const grp = c.grp, keep = [grp.position.clone(), grp.rotation.y]; grp.position.set(0, 0, 0); grp.rotation.y = 0; grp.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(grp); grp.position.copy(keep[0]); grp.rotation.y = keep[1]; grp.updateMatrixWorld(true);
+  if (b.isEmpty()){ dirty = true; return; } b.expandByScalar(0.2);
+  const h = new THREE.Box3Helper(b, 0xF28A1A); h.material.depthTest = false; h.renderOrder = 8; const w = new THREE.Group(); w.add(h);
+  // inner group children may carry their own rotation (placeObj on child) : on reprend la transformation du premier enfant si le groupe n'en a pas
+  const src = grp.rotation.y || grp.position.lengthSq() ? grp : grp.children[0]; if (src){ w.position.copy(src.position); w.rotation.y = src.rotation.y; }
+  selShape = w; markGroup.add(w); dirty = true;
 }
 
 /* ==== 55-swept.js ==== */
@@ -5578,7 +5607,8 @@ function congQueues(n = 4){
 const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
 const modeOf = m => m === 'droite' ? {mode:'sens', dir:1} : m === 'gauche' ? {mode:'sens', dir:-1} : m === 'sens' ? {mode:'sens', dir:1} : {mode:m};
 const modeKey = e => e.mode === 'voie' ? (e.side === -1 ? 'gauche' : 'droite') : e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
-let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi'};
+let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi', dim:{col:'#0B57D0', style:'fleches', off:0, dz:false, w:0.3, dec:2}};
+const DIM_COLS = ['#0B57D0', '#D32F2F', '#F28A1A', '#1B8A3A', '#7B1FA2', '#111827'], DIM_STYLES = [['fleches', 'Flèches'], ['traits', 'Traits obliques'], ['points', 'Points']];
 try { Object.assign(TOOLOPT, JSON.parse(localStorage.getItem('at.toolopt') || '{}')); } catch(e){}
 const saveToolOpt = () => { try { localStorage.setItem('at.toolopt', JSON.stringify(TOOLOPT)); } catch(e){} };
 const SNAP = {road:true, obj:true, ortho:false};
@@ -5616,10 +5646,13 @@ function syncHud(){
     <label class="pill"><input type="checkbox" id="hAutoDet"${TOOLOPT.autoDetour ? ' checked' : ''} style="width:auto"><span>Déviation auto</span></label><label class="pill"><input type="checkbox" id="hAutoSig"${TOOLOPT.autoSigns ? ' checked' : ''} style="width:auto"><span>Panneaux auto</span></label>`;
   else if (tool === 'line') html = `<label class="pill tool-pill"><span>Type</span>${sel_('hLine', Object.entries(LINE_TYPES).map(([k, T]) => [k, T.n]), TOOLOPT.line)}</label>${LINE_TYPES[TOOLOPT.line]?.item ? `<label class="pill"><span>Espacement</span><input id="hLineSp" type="number" min="1" max="30" step="0.5" value="${TOOLOPT.lineSp || LINE_TYPES[TOOLOPT.line].sp}"><em>m</em></label>` : ''}`;
   else if (tool === 'place'){ const L = LIBK[PLACE.k]; html = `<span class="pill tool-pill">${L?.sign ? `<img class="sg" src="${libThumb(L)}" alt="">` : ''}<b>${esc(L?.name || 'Élément')}</b><button type="button" id="hRot">↻ 15°</button><button type="button" id="hLib">Changer</button></span>`; }
+  else if (tool === 'measure'){ const o = TOOLOPT.dim = {...DIM_DEF, ...(TOOLOPT.dim || {})}; html = `<span class="pill tool-pill dimpal">${DIM_COLS.map(c => `<button type="button" class="sw${c === o.col ? ' on' : ''}" data-dcol="${c}" style="background:${c}" aria-label="Couleur ${c}"></button>`).join('')}</span><label class="pill"><span>Extrémités</span>${sel_('hDimSt', DIM_STYLES, o.style)}</label><label class="pill"><span>Décalage</span>${sel_('hDimOff', [[0, '0 m'], [1, '1 m'], [2, '2 m'], [3, '3 m'], [-1, '−1 m'], [-2, '−2 m']], o.off)}</label><label class="pill"><span>Trait</span>${sel_('hDimW', [[0.15, 'Fin'], [0.3, 'Moyen'], [0.5, 'Épais']], o.w)}</label><label class="pill"><input type="checkbox" id="hDimDz"${o.dz ? ' checked' : ''} style="width:auto"><span>Dénivelé NGF et pente</span></label>`; }
   else if (tool === 'swept') html = `<label class="pill tool-pill"><span>Véhicule</span>${sel_('hVeh', Object.entries(SWEPT_VEH).map(([k, v]) => [k, v.n]), TOOLOPT.veh)}</label>`;
   if (POLY_TOOLS.has(tool) && draw.pts.length) html += `<span class="pill"><button type="button" id="hEnd">Terminer ↵</button><button type="button" id="hUndoPt">Retirer le point</button></span>`;
   h.innerHTML = html;
   const on = (id, ev, f) => { const el = $('#' + id); if (el) el.addEventListener(ev, f); };
+  h.querySelectorAll('[data-dcol]').forEach(b => b.onclick = () => { TOOLOPT.dim.col = b.dataset.dcol; saveToolOpt(); syncHud(); updatePolyPreview?.(); });
+  on('hDimSt', 'change', e => { TOOLOPT.dim.style = e.target.value; saveToolOpt(); }); on('hDimOff', 'change', e => { TOOLOPT.dim.off = +e.target.value; saveToolOpt(); }); on('hDimW', 'change', e => { TOOLOPT.dim.w = +e.target.value; saveToolOpt(); }); on('hDimDz', 'change', e => { TOOLOPT.dim.dz = e.target.checked; saveToolOpt(); });
   on('hCloseMode', 'change', e => { TOOLOPT.closeMode = e.target.value; saveToolOpt(); });
   on('hAutoDet', 'change', e => { TOOLOPT.autoDetour = e.target.checked; saveToolOpt(); }); on('hAutoSig', 'change', e => { TOOLOPT.autoSigns = e.target.checked; saveToolOpt(); });
   on('hLine', 'change', e => { TOOLOPT.line = e.target.value; TOOLOPT.lineSp = ''; saveToolOpt(); syncHud(); }); on('hLineSp', 'change', e => { TOOLOPT.lineSp = e.target.value; saveToolOpt(); });
@@ -5636,7 +5669,27 @@ function groundAt(ev){
   if (terr){ const h = ray.intersectObject(terr, false)[0]; if (h) return [h.point.x, -h.point.z]; }
   const p = new THREE.Vector3(); plane0.constant = -(WORLD ? H(c3.target.x, -c3.target.z) : 0); if (ray.ray.intersectPlane(plane0, p)) return [p.x, -p.z]; return null;
 }
+/* forme « cliquable » d'un élément : sa ligne ou son point, pas un rectangle englobant */
+function elShape(e){
+  if (e.t === 'dim' && e.a && e.b){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))); return {lines:[[V.add(e.a, V.mul(n, o.off)), V.add(e.b, V.mul(n, o.off))]], w:o.w}; }
+  if (e.t === 'zone' && e.pts?.length > 2) return {lines:[[...e.pts, e.pts[0]]], area:e.pts, w:0.3};
+  if (e.t === 'swept' && e.env) return {lines:[e.env.l, e.env.r], area:[...e.env.l, ...e.env.r.slice().reverse()], w:0.3};
+  if (e.pts?.length > 1) return {lines:[e.pts], w:e.t === 'closure' ? closureWidth(e) : e.t === 'detour' ? (e.w || 1.2) : (e.w || 0.6)};
+  if (e.x != null) return {pt:[e.x, e.y], r:e.t === 'obj' ? Math.max(0.8, (LIBK[e.k]?.r || 1)) : 1.2};
+  return null;
+}
+/* sélection au clic : distance réelle à la forme (+ une marge à l'écran pour attraper facilement), les petits éléments passent devant les grands */
+function pickShape(q){
+  const tol = Math.max(0.6, mPerPx() * 9); let best = null, bd = Infinity;
+  for (const e of state.els){ if (e.hidden || phOff(e)) continue; const S = elShape(e); if (!S) continue; let d = Infinity;
+    if (S.pt) d = Math.max(0, V.dist(S.pt, q) - S.r) * 0.8 - 0.05;
+    else { for (const l of S.lines) for (let k = 0; k + 1 < l.length; k++){ const dd = V.dist(segClosest(q, l[k], l[k + 1]).pt, q) - S.w / 2; if (dd < d) d = dd; }
+      if (S.area && inPoly(q[0], q[1], S.area)) d = Math.min(d, tol * 0.9); d = Math.max(0, d) + (e.t === 'closure' || e.t === 'zone' ? 0.2 : 0); }
+    if (d < tol && d < bd){ bd = d; best = e.id; } }
+  return best;
+}
 function pickEl(ev){
+  const q = groundAt(ev); if (q){ const id = pickShape(q); if (id) return id; }
   setNdc(ev); const hits = ray.intersectObjects(projGroup.children, true);
   for (const h of hits){ let o = h.object; while (o && !o.userData.id) o = o.parent; if (o?.userData.id && byId(o.userData.id)) return o.userData.id; }
   return null;
@@ -5671,7 +5724,7 @@ function updatePolyPreview(){
   if (tool === 'detour' && draw.pts.length){ const r = detourPath([...draw.pts, ...(draw.cursor ? [draw.cursor] : [])]); if (r?.pts.length > 1){ const b = bandPreview(r.pts, 1.4, 0xF28A1A); if (b) previewGroup.add(b); } }
   else if (pts.length > 1) previewGroup.add(lineObj(pts, prevMat, 0.35, tool === 'zone'));
   if (tool === 'swept' && pts.length > 1){ const env = sweptCompute(pts, TOOLOPT.veh); if (env){ previewGroup.add(lineObj(env.l, new THREE.LineBasicMaterial({color:0x7B1FA2, depthTest:false}), 0.35)); previewGroup.add(lineObj(env.r, new THREE.LineBasicMaterial({color:0x7B1FA2, depthTest:false}), 0.35)); } }
-  if (tool === 'measure' && draw.pts.length && draw.cursor){ previewGroup.add(lineObj([draw.pts[0], draw.cursor])); setPrompt(`<b>Cote</b> : ${fmtM(V.dist(draw.pts[0], draw.cursor))}`); }
+  if (tool === 'measure' && draw.pts.length && draw.cursor && V.dist(draw.pts[0], draw.cursor) > 0.05){ const tmp = {id:'__dim', t:'dim', a:draw.pts[0], b:draw.cursor, ...TOOLOPT.dim}, g = new THREE.Group(); dimBuild(tmp, g); g.traverse(m => { if (m.material){ m.material = m.material.clone(); m.material.depthTest = false; m.material.transparent = true; m.material.opacity = 0.85; m.renderOrder = 9; } }); previewGroup.add(g); setPrompt(`<b>Cote</b> : ${dimText(tmp).replace('\n', ' · ')} — cliquez le second point`); }
   for (const q of draw.pts){ const s = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshBasicMaterial({color:0xF28A1A, depthTest:false})); s.position.set(q[0], H(q[0], q[1]) + 0.4, -q[1]); s.renderOrder = 11; previewGroup.add(s); }
   if (ghost) previewGroup.add(ghost);
   dirty = true;
@@ -5699,7 +5752,7 @@ function onClick(ev, q){
   if (tool === 'close'){ const nr = nearestRoad(q, 10); if (!nr){ toast('Cliquez sur une rue circulée.'); return; } makeClosure(nr); return; }
   if (tool === 'place'){ const e = {id:uid8(), t:'obj', k:PLACE.k, x:q[0], y:q[1], a:draw.ghostA ?? PLACE.a}; const L = LIBK[PLACE.k]; if (L?.p) e.p = {...L.p, ...(PLACE.p || {})}; addEl(e, false); toast(`${L?.name || 'Élément'} posé`); return; }
   if (tool === 'note'){ askNote(q); return; }
-  if (tool === 'measure'){ if (!draw.pts.length){ draw.pts = [q]; return; } addEl({id:uid8(), t:'dim', a:draw.pts[0], b:q}); draw.pts = []; clearPreview(); setPrompt(); return; }
+  if (tool === 'measure'){ if (!draw.pts.length){ draw.pts = [q]; return; } addEl({id:uid8(), t:'dim', a:draw.pts[0], b:q, ...TOOLOPT.dim}); draw.pts = []; clearPreview(); setPrompt(); return; }
   if (POLY_TOOLS.has(tool)){
     if (tool === 'zone' && draw.pts.length > 2 && V.dist(q, draw.pts[0]) < Math.max(1.5, mPerPx() * 12)) return finishPoly();
     draw.pts.push(q); updatePolyPreview(); syncHud();
@@ -6003,6 +6056,10 @@ function renderElProps(e){
     if (e.k === 'KR11') h += selF('eOn', 'Feu allumé', [['red', 'Rouge'], ['orange', 'Orange'], ['green', 'Vert']], e.p?.on || 'red');
     if (L?.color) h += `<label class="f"><span>Couleur</span><span class="in"><input id="eCol" type="color" value="${esc(e.p?.color || '#8D949B')}" style="height:30px;padding:0"></span></label>`;
     h += `</div>`;
+  } else if (e.t === 'dim'){ const o = dimOpt(e), L = V.dist(e.a, e.b), dz = WORLD ? H(e.b[0], e.b[1]) - H(e.a[0], e.a[1]) : 0, az = (Math.atan2(e.b[0] - e.a[0], e.b[1] - e.a[1]) * 180 / Math.PI + 360) % 360;
+    h += `<div class="dimpal" style="display:flex;gap:6px;margin:4px 0 10px">${DIM_COLS.map(c => `<button type="button" class="sw${c === o.col ? ' on' : ''}" data-dcol2="${c}" style="background:${c}" aria-label="Couleur"></button>`).join('')}<input type="color" id="eDimC" value="${esc(o.col)}" title="Autre couleur" style="width:30px;height:26px;padding:0;border:0;background:none"></div>
+      <div class="fields">${selF('eDimSt', 'Extrémités', DIM_STYLES, o.style, false)}${selF('eDimW', 'Épaisseur du trait', [[0.15, 'Fin'], [0.3, 'Moyen'], [0.5, 'Épais'], [0.8, 'Très épais']], o.w, false)}${fld('eDimOff', 'Décalage (m)', o.off, 'number', 'step="0.5"')}${selF('eDimDec', 'Précision', [[0, '1 m'], [1, '0,1 m'], [2, '1 cm'], [3, '1 mm']], o.dec, false)}<label class="f rchk wide"><input type="checkbox" id="eDimDz"${o.dz ? ' checked' : ''}> Afficher le dénivelé NGF et la pente</label></div>
+      <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(L)}</dd><dt>Dénivelé</dt><dd>${dz >= 0 ? '+' : '−'}${Math.abs(dz).toFixed(2).replace('.', ',')} m</dd><dt>Pente</dt><dd>${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %</dd><dt>Orientation</dt><dd>${Math.round(az)}° (nord = 0°)</dd></dl>`;
   } else if (e.t === 'closure'){
     h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}${e.mode !== 'total' ? '' : `<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label>`}${e.mode === 'voie' ? '<p class="hint wide" style="margin:4px 0 0">Sens unique à deux files : la circulation est maintenue sur l\'autre file.</p>' : ''}${e.mode === 'alternat' ? (() => { const A = alternatAdvice(e); return `<label class="f"><span>Trafic de pointe (véh/h)</span><span class="in"><input id="eVph" type="number" min="0" step="50" value="${A.vph}"></span></label><p class="hint wide" style="margin:4px 0 0;color:${A.mode === 'impossible' ? '#C62828' : 'inherit'}"><b>${esc(A.mode === 'impossible' ? 'Alternat déconseillé' : 'Régulation conseillée : ' + A.mode)}</b> — ${esc(A.txt)}</p>`; })() : ''}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
@@ -6033,6 +6090,7 @@ function bindElProps(){
   ch('eA', el => { e.a = (+el.value || 0) * Math.PI / 180; e.manualA = true; }); ch('eDz', el => { e.dz = +el.value || 0; });
   ch('eV', el => { e.p = {...(e.p || {}), v:el.value}; }); ch('eT', el => { e.p = {...(e.p || {}), t:el.value}; }); ch('ePole', el => { e.p = {...(e.p || {}), pole:el.value}; });
   ch('eH', el => { e.p = {...(e.p || {}), h:el.value}; }); ch('eOn', el => { e.p = {...(e.p || {}), on:el.value}; }); ch('eCol', el => { e.p = {...(e.p || {}), color:el.value}; });
+  pb().querySelectorAll('[data-dcol2]').forEach(b => b.onclick = () => edit(() => { e.col = b.dataset.dcol2; })); ch('eDimC', el => { e.col = el.value; }); ch('eDimSt', el => { e.style = el.value; }); ch('eDimW', el => { e.w = +el.value; }); ch('eDimOff', el => { e.off = +el.value || 0; }); ch('eDimDec', el => { e.dec = +el.value; }); ch('eDimDz', el => { e.dz = el.checked; });
   ch('eVph', el => { e.vph = +el.value || 0; if (TOOLOPT.autoSigns) autoSigns(e); }); ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value), ow = sectionOneway(e.ids); e.mode = m.mode; delete e.side; if (m.dir) e.dir = m.dir; if (m.mode === 'sens' && ow !== 0){ e.side = m.dir; e.dir = ow; if (closureWidth(e) >= 5.5) e.mode = 'voie'; }
     // le mode change la déviation et la signalisation : tout est recalculé
     if (['alternat', 'voie'].includes(e.mode)) state.els = state.els.filter(x => !(x.t === 'detour' && x.cl === e.id && x.auto)); else addDetoursFor(e);
@@ -6173,7 +6231,7 @@ function buildAnnos(){
   for (const e of state?.els || []){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
-    else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
+    else if (e.t === 'dim'){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))), d = mk('dimtxt', dimText(e), V.add(V.lerp(e.a, e.b, 0.5), V.mul(n, o.off)), 0.5); d.style.background = o.col; d.style.color = '#fff'; }
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
       const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
@@ -6182,7 +6240,7 @@ function buildAnnos(){
   }
 }
 function updateLabels(){
-  const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
+  const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.t === 'dim' ? JSON.stringify([e.a, e.b, e.col, e.off, e.dec, e.dz]) : '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   const W = vpEl.clientWidth, Hh = vpEl.clientHeight, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)

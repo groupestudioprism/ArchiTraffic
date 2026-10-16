@@ -128,6 +128,25 @@ function ribbonMesh(pts, w, mat, dz = 0.12, off = 0){
   const gb = new GB(); bandGB(gb, off ? plOffset(pts, off) : pts, -w / 2, w / 2, dz); if (gb.empty) return null;
   const g = gb.geo(), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + 0); const m = new THREE.Mesh(g, mat); m.renderOrder = 2; return m;
 }
+/* cote : ligne de cote (décalable), lignes d'attache, extrémités flèches / traits obliques / points, couleur et épaisseur au choix */
+const DIM_DEF = {col:'#0B57D0', w:0.3, style:'fleches', off:0, dec:2, dz:false};
+const dimOpt = e => ({...DIM_DEF, ...e});
+function dimBuild(e, g){
+  const o = dimOpt(e), col = new THREE.Color(o.col).getHex(), mat = matCol(col, {po:-12, rough:0.6}), d = V.norm(V.sub(e.b, e.a)), n = V.perp(d), A = V.add(e.a, V.mul(n, o.off)), B = V.add(e.b, V.mul(n, o.off)), w = o.w, L = V.dist(A, B);
+  const add = m => { if (m){ m.userData.id = e.id; g.add(m); } };
+  const tip = Math.min(L * 0.3, Math.max(1.4, w * 6));
+  add(ribbonMesh(o.style === 'fleches' ? [V.add(A, V.mul(d, tip * 0.9)), V.sub(B, V.mul(d, tip * 0.9))] : [A, B], w, mat, 0.22));
+  if (Math.abs(o.off) > 0.05) for (const [p, q] of [[e.a, A], [e.b, B]]) add(ribbonMesh([V.add(p, V.mul(n, Math.sign(o.off) * 0.3)), V.add(q, V.mul(n, Math.sign(o.off) * 0.6))], w * 0.45, mat, 0.22));
+  const z = q => H(q[0], q[1]) + 0.225, gb = new GB();
+  for (const [P, dir] of [[A, d], [B, V.mul(d, -1)]]){
+    if (o.style === 'fleches'){ const b0 = V.add(P, V.mul(dir, tip)), l = V.add(b0, V.mul(V.perp(dir), tip * 0.38)), r = V.sub(b0, V.mul(V.perp(dir), tip * 0.38)); gb.tri(P3(r[0], r[1], z(r)), P3(P[0], P[1], z(P)), P3(l[0], l[1], z(l)), [0, 0], [1, 0], [0, 1]); }
+    else if (o.style === 'traits'){ const t = V.norm(V.add(dir, V.perp(dir))); add(ribbonMesh([V.sub(P, V.mul(t, tip * 0.45)), V.add(P, V.mul(t, tip * 0.45))], w * 1.3, mat, 0.225)); }
+    else { const m = new THREE.Mesh(new THREE.CircleGeometry(Math.max(0.45, w * 1.8), 18), mat); m.rotation.x = -Math.PI / 2; m.position.set(P[0], z(P), -P[1]); add(m); }
+  }
+  if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), matCol(col, {po:-12, side:THREE.DoubleSide})); add(m); }
+}
+function dimText(e){ const o = dimOpt(e), L = V.dist(e.a, e.b), f = v => v.toFixed(o.dec).replace('.', ','); let t = `${f(L)} m`;
+  if (o.dz && WORLD){ const dz = H(e.b[0], e.b[1]) - H(e.a[0], e.a[1]); t += `\nΔ ${dz >= 0 ? '+' : '−'}${f(Math.abs(dz))} m · ${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %`; } return t; }
 function placeObj(grp, x, y, a, dz = 0){ grp.position.set(x, surfaceZ(x, y) + dz, -y); grp.rotation.y = a; return grp; }
 function elSig(e){ return JSON.stringify(e) + (WORLD ? WORLD.z0 + WORLD.size : '') + DISPLAY.style; }
 function buildEl(e){
@@ -176,10 +195,7 @@ function buildEl(e){
     const end = plAt(e.pts, L), base = V.sub(end.pt, V.mul(end.dir, head)), n = V.perp(end.dir), gb = new GB(), A = V.add(base, V.mul(n, w * 1.4)), B = V.sub(base, V.mul(n, w * 1.4)), z = q => H(q[0], q[1]) + 0.185;
     gb.tri(P3(B[0], B[1], z(B)), P3(end.pt[0], end.pt[1], z(end.pt)), P3(A[0], A[1], z(A)), [0, 0], [1, 0], [0, 1]); const hm = new THREE.Mesh(gb.geo(), matCol(new THREE.Color(col).getHex(), {po:-9, rough:0.7, side:THREE.DoubleSide})); hm.userData.id = e.id; g.add(hm); return g;
   }
-  if (e.t === 'dim' && e.a && e.b){
-    const m = ribbonMesh([e.a, e.b], 0.12, matCol(0x111827, {po:-9}), 0.2); if (m){ m.userData.id = e.id; g.add(m); }
-    const d = V.norm(V.sub(e.b, e.a)), n = V.perp(d); for (const q of [e.a, e.b]){ const t = ribbonMesh([V.add(q, V.mul(n, -0.9)), V.add(q, V.mul(n, 0.9))], 0.12, matCol(0x111827, {po:-9}), 0.2); if (t){ t.userData.id = e.id; g.add(t); } } return g;
-  }
+  if (e.t === 'dim' && e.a && e.b){ dimBuild(e, g); return g; }
   if (e.t === 'swept' && e.env){
     const gb = new GB(); try { polyGB(gb, [...e.env.l, ...e.env.r.slice().reverse()], [], 0.17); } catch(err){}
     if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), matCol(0x7B1FA2, {opacity:0.28, depthWrite:false, po:-9})); m.userData.id = e.id; g.add(m); }
@@ -215,8 +231,19 @@ function rebuildProj(){
 }
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
+let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A, transparent:true, opacity:0.32, depthTest:false}), selLine = new THREE.LineBasicMaterial({color:0xF28A1A, depthTest:false});
 function applySel(){
-  const c = sel && projCache.get(sel); if (!c){ selBox.visible = false; dirty = true; return; }
-  const b = new THREE.Box3().setFromObject(c.grp); if (b.isEmpty()){ selBox.visible = false; return; }
-  b.expandByScalar(0.25); selBox.box.copy(b); selBox.visible = true; dirty = true;
+  if (selShape){ markGroup.remove(selShape); selShape.traverse(o => o.geometry?.dispose()); selShape = null; } selBox.visible = false;
+  const c = sel && projCache.get(sel), e = sel && byId(sel); if (!c || !e){ dirty = true; return; }
+  const S = elShape(e);
+  if (S?.lines){ // éléments linéaires : bandeau orange le long de la forme
+    const g = new THREE.Group(); for (const l of S.lines){ const m = ribbonMesh(l, S.w + 1.2, selMat, 0.3); if (m){ m.renderOrder = 8; g.add(m); } } selShape = g; markGroup.add(g); dirty = true; return; }
+  // objets : boîte orientée comme l'objet (et non un rectangle aligné sur les axes)
+  const grp = c.grp, keep = [grp.position.clone(), grp.rotation.y]; grp.position.set(0, 0, 0); grp.rotation.y = 0; grp.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(grp); grp.position.copy(keep[0]); grp.rotation.y = keep[1]; grp.updateMatrixWorld(true);
+  if (b.isEmpty()){ dirty = true; return; } b.expandByScalar(0.2);
+  const h = new THREE.Box3Helper(b, 0xF28A1A); h.material.depthTest = false; h.renderOrder = 8; const w = new THREE.Group(); w.add(h);
+  // inner group children may carry their own rotation (placeObj on child) : on reprend la transformation du premier enfant si le groupe n'en a pas
+  const src = grp.rotation.y || grp.position.lengthSq() ? grp : grp.children[0]; if (src){ w.position.copy(src.position); w.rotation.y = src.rotation.y; }
+  selShape = w; markGroup.add(w); dirty = true;
 }
