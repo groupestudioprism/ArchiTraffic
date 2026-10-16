@@ -4949,7 +4949,7 @@ function buildEl(e){
   if (e.t === 'model'){ const o = MODELS.get(e.key); if (o){ const c = o.clone(true); c.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(c); } else { const ph = part(BOX(6, 3, 6), matCol(0x9AB0C8, {opacity:0.35, depthWrite:false}), 0, 1.5, 0); ph.userData.id = e.id; g.add(ph); }
     g.position.set(e.x, (e.zAbs != null && WORLD ? e.zAbs - WORLD.z0 : H(e.x, e.y)), -e.y); g.rotation.y = e.a || 0; return g; }
   if (e.t === 'closure' && e.pts?.length > 1){
-    const w = closureWidth(e) + 0.4, m = ribbonMesh(e.pts, w, MAT.closed ??= new THREE.MeshBasicMaterial({map:closedTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6}), 0.14);
+    const w = closureWidth(e) + 0.4, lane = e.mode === 'sens', pd = e.dir === -1 ? e.pts.slice().reverse() : e.pts, m = ribbonMesh(lane ? plOffset(pd, -w / 4) : e.pts, lane ? w / 2 : w, MAT.closed ??= new THREE.MeshBasicMaterial({map:closedTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6}), 0.14);
     if (m){ m.userData.id = e.id; g.add(m); }
     if (e.mode === 'sens'){ const p = e.dir === -1 ? e.pts.slice().reverse() : e.pts, mid = plAt(p, plLen(p) / 2), a = Math.atan2(mid.dir[1], mid.dir[0]), ar = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 3), matCol(0xD32F2F)); ar.rotation.set(0, a, -Math.PI / 2); ar.position.set(mid.pt[0], H(mid.pt[0], mid.pt[1]) + 0.3, -mid.pt[1]); ar.scale.y = 0.3; g.add(ar); }
     return g;
@@ -5215,6 +5215,9 @@ function simTick(now){
 
 /* ==== 70-input.js ==== */
 /* ============ Outils et saisie (souris, doigt, clavier) ============ */
+const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
+const modeOf = m => m === 'droite' ? {mode:'sens', dir:1} : m === 'gauche' ? {mode:'sens', dir:-1} : m === 'sens' ? {mode:'sens', dir:1} : {mode:m};
+const modeKey = e => e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
 let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi'};
 try { Object.assign(TOOLOPT, JSON.parse(localStorage.getItem('at.toolopt') || '{}')); } catch(e){}
 const saveToolOpt = () => { try { localStorage.setItem('at.toolopt', JSON.stringify(TOOLOPT)); } catch(e){} };
@@ -5249,7 +5252,7 @@ function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPre
 function syncHud(){
   const h = $('#hud'); let html = '';
   const sel_ = (id, opts, val) => `<select id="${id}">${opts.map(([v, n]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
-  if (tool === 'close') html = `<label class="pill tool-pill"><span>Fermeture</span>${sel_('hCloseMode', [['total', 'Totale (2 sens)'], ['sens', 'Un seul sens'], ['alternat', 'Alternat (chaussée rétrécie)']], TOOLOPT.closeMode)}</label>
+  if (tool === 'close') html = `<label class="pill tool-pill"><span>Fermeture</span>${sel_('hCloseMode', CLOSE_MODES, TOOLOPT.closeMode)}</label>
     <label class="pill"><input type="checkbox" id="hAutoDet"${TOOLOPT.autoDetour ? ' checked' : ''} style="width:auto"><span>Déviation auto</span></label><label class="pill"><input type="checkbox" id="hAutoSig"${TOOLOPT.autoSigns ? ' checked' : ''} style="width:auto"><span>Panneaux auto</span></label>`;
   else if (tool === 'line') html = `<label class="pill tool-pill"><span>Type</span>${sel_('hLine', Object.entries(LINE_TYPES).map(([k, T]) => [k, T.n]), TOOLOPT.line)}</label>${LINE_TYPES[TOOLOPT.line]?.item ? `<label class="pill"><span>Espacement</span><input id="hLineSp" type="number" min="1" max="30" step="0.5" value="${TOOLOPT.lineSp || LINE_TYPES[TOOLOPT.line].sp}"><em>m</em></label>` : ''}`;
   else if (tool === 'place'){ const L = LIBK[PLACE.k]; html = `<span class="pill tool-pill">${L?.sign ? `<img class="sg" src="${libThumb(L)}" alt="">` : ''}<b>${esc(L?.name || 'Élément')}</b><button type="button" id="hRot">↻ 15°</button><button type="button" id="hLib">Changer</button></span>`; }
@@ -5359,7 +5362,7 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && e.mode === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
@@ -5369,7 +5372,8 @@ function makeClosure(nr){
     if (TOOLOPT.autoDetour && adj.mode !== 'alternat'){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
     endEdit(); sel = adj.id; rebuildProj(); refreshPanel(); toast(msg, 5200); return; }
-  const ow = sectionOneway(sec.ids), mode = TOOLOPT.closeMode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:ow === -1 ? -1 : 1, riv:true, len:Math.round(sec.len * 10) / 10};
+  const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
+  if (mode === 'sens' && ow !== 0) cl.dir = ow;   // voie neutralisée sur un sens unique : c'est ce sens qui est concerné
   beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
   if (TOOLOPT.autoDetour && mode !== 'alternat'){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
@@ -5413,12 +5417,21 @@ function autoSigns(cl){
   state.els = state.els.filter(e => !(e.t === 'obj' && e.auto === cl.id));
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
+  const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
+  const lane = cl.mode === 'sens', apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
-    if (cl.mode === 'sens' && ((cl.dir === -1) === (i === 0))) return;        // en sens unique fermé : seulement à l'entrée
-    const d = V.norm(V.sub(B, A)), n = V.perp(d), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
-    if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), Math.atan2(-d[1], -d[0]), {on:'red'}); add('AK3', V.add(V.add(A, V.mul(d, -40)), V.mul(n, -w / 2 - 0.8)), Math.atan2(d[1], d[0]), undefined); return; }
-    const nb = Math.max(1, Math.round(w / 2.2)); for (let k = 0; k < nb; k++){ const o = -w / 2 + (k + 0.5) * w / nb; add('K2', V.add(base, V.mul(n, o)), Math.atan2(d[1], d[0]) + Math.PI / 2, {len:'2'}); }
-    add('KR_ROUTE', V.add(V.add(base, V.mul(d, -1.5)), V.mul(n, -w / 2 + 0.6)), Math.atan2(-d[1], -d[0]), cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'});
+    if (lane && ((cl.dir === -1) === (i === 0))) return;        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
+    const d = V.norm(V.sub(B, A)), n = V.perp(d), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
+    const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
+    if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), face, {on:'red'}); add('AK3', right(back(40)), face); return; }
+    // barrières K2 en travers de la chaussée, face aux usagers qui arrivent (pleine largeur, ou seule la voie de droite neutralisée)
+    const o0 = -w / 2, o1 = lane ? 0 : w / 2, span = o1 - o0, nb = Math.max(1, Math.round(span / 2.2));
+    for (let k = 0; k < nb; k++) add(k === Math.floor(nb / 2) && !lane ? 'KR_ROUTE' : 'K2', V.add(base, V.mul(n, o0 + (k + 0.5) * span / nb)), face, k === Math.floor(nb / 2) && !lane ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'});
+    if (lane){ // biseau de cônes K5a ramenant la circulation sur la voie restante
+      const nc = Math.max(4, Math.round(taper / 3)); for (let k = 0; k <= nc; k++){ const t = k / nc; add('K5a', V.add(V.sub(base, V.mul(d, taper * (1 - t))), V.mul(n, -w / 2 + 0.3 + (w / 2 - 0.3) * t)), face); }
+      add('AK3', right(back(apD)), face); add('K8', V.add(base, V.mul(n, -w / 4)), face);
+    } else add('AK5', right(back(apD)), face);
+    if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
   for (const dt0 of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)) for (const dt of dt0.both ? [dt0, {...dt0, ids:dt0.ids.slice().reverse(), inDir0:dt0.inDirEnd}] : [dt0]){
@@ -5510,7 +5523,7 @@ function renderPanel(){ if (!state) return; ({props:renderProps, lib:renderLib, 
 const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
 function elLabel(e){
   if (e.t === 'obj') return LIBK[e.k]?.name || e.k; if (e.t === 'line') return LINE_TYPES[e.k]?.n || 'Balisage';
-  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'sens' ? 'un sens' : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
+  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'sens' ? (e.dir === -1 ? 'voie de gauche' : 'voie de droite') : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
   if (e.t === 'detour') return e.name || 'Déviation'; if (e.t === 'zone') return e.name || 'Emprise'; if (e.t === 'note') return (e.text || '').split('\n')[0].slice(0, 40) || 'Annotation';
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
@@ -5581,8 +5594,7 @@ function renderElProps(e){
     if (L?.color) h += `<label class="f"><span>Couleur</span><span class="in"><input id="eCol" type="color" value="${esc(e.p?.color || '#8D949B')}" style="height:30px;padding:0"></span></label>`;
     h += `</div>`;
   } else if (e.t === 'closure'){
-    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', [['total', 'Totale (2 sens)'], ['sens', 'Un seul sens'], ['alternat', 'Alternat (circulation maintenue)']], e.mode)}
-      ${e.mode === 'sens' ? selF('eDir', 'Sens fermé', [['1', 'Sens du tracé'], ['-1', 'Sens inverse']], e.dir) : ''}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
+    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
       <div class="btns"><button class="btn primary" id="eDet">Recalculer les déviations</button><button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
   } else if (e.t === 'detour'){
@@ -5610,7 +5622,7 @@ function bindElProps(){
   ch('eA', el => { e.a = (+el.value || 0) * Math.PI / 180; e.manualA = true; }); ch('eDz', el => { e.dz = +el.value || 0; });
   ch('eV', el => { e.p = {...(e.p || {}), v:el.value}; }); ch('eT', el => { e.p = {...(e.p || {}), t:el.value}; }); ch('ePole', el => { e.p = {...(e.p || {}), pole:el.value}; });
   ch('eH', el => { e.p = {...(e.p || {}), h:el.value}; }); ch('eOn', el => { e.p = {...(e.p || {}), on:el.value}; }); ch('eCol', el => { e.p = {...(e.p || {}), color:el.value}; });
-  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { e.mode = el.value; }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
+  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value); e.mode = m.mode; if (m.dir) e.dir = m.dir; }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
   ch('eCol2', el => { e.col = el.value; }); ch('eCls', el => { e.cls = el.value; }); ch('eFence', el => { e.fence = el.checked; });
   ch('eLine', el => { e.k = el.value; e.sp = undefined; }); ch('eSp', el => { e.sp = +el.value || undefined; });
   ch('eText', el => { e.text = el.value; }); ch('eCol3', el => { e.col = el.value; }); ch('eSize', el => { e.size = el.value; });
@@ -5630,7 +5642,7 @@ function closureVariants(cl){
   const score = mode => { const res = proposeDetours({...cl, ...mode}, state.els); if (res.some(r => r.fail)) return null; return {n:res.length, extra:Math.max(0, ...res.map(r => r.extra || 0)), t:Math.max(0, ...res.map(r => r.extraT || 0))}; };
   const rows = [];
   const tot = score({mode:'total'}); if (tot) rows.push({k:'total|1', n:'Fermeture totale', d:`${tot.n} itinéraire${tot.n > 1 ? 's' : ''} dévié${tot.n > 1 ? 's' : ''} · +${fmtM(tot.extra)}`, on:cl.mode === 'total', sc:tot.extra * tot.n});
-  if (ow === 0) for (const dir of [1, -1]){ const v = score({mode:'sens', dir}); if (v) rows.push({k:`sens|${dir}`, n:`Sens unique temporaire (${dir === 1 ? 'sens du tracé fermé' : 'sens inverse fermé'})`, d:`1 sens maintenu sur ${fmtM(cl.len || plLen(cl.pts))} · l'autre dévié : +${fmtM(v.extra)}${w < 5.5 ? ' · chaussée étroite : vérifier 3 m libres + emprise' : ''}`, on:cl.mode === 'sens' && cl.dir === dir, sc:v.extra * (w < 5.5 ? 3 : 1)}); }
+  if (ow === 0) for (const dir of [1, -1]){ const v = score({mode:'sens', dir}); if (v) rows.push({k:`sens|${dir}`, n:`Sens unique temporaire (${dir === 1 ? 'voie de droite' : 'voie de gauche'} neutralisée)`, d:`1 sens maintenu sur ${fmtM(cl.len || plLen(cl.pts))} · l'autre dévié : +${fmtM(v.extra)}${w < 5.5 ? ' · chaussée étroite : vérifier 3 m libres + emprise' : ''}`, on:cl.mode === 'sens' && cl.dir === dir, sc:v.extra * (w < 5.5 ? 3 : 1)}); }
   if (rows.length < 2) return '';
   const best = rows.reduce((a, b) => b.sc < a.sc ? b : a);
   return `<div class="grp" style="margin-top:14px"><h3>Variantes d'exploitation</h3><p class="hint" style="margin-top:0">Comparaison calculée sur le réseau réel. Le sens unique temporaire garde une voie de circulation dans l'emprise et ne dévie qu'un sens.</p>
@@ -5694,7 +5706,7 @@ function legendEntries(){
   const add = (key, html, label, n = 1) => { if (seen.has(key)){ seen.get(key).n += n; return; } const e = {key, html, label, n}; seen.set(key, e); out.push(e); };
   for (const e of state.els){
     if (e.hidden) continue;
-    if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'sens' ? 'Route barrée dans un sens' : 'Route barrée');
+    if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
     else if (e.t === 'line'){ const T = LINE_TYPES[e.k]; add('line|' + e.k, `<i class="lg-line dash" style="border-color:${T?.col || '#F06A12'}"></i>`, T?.legend || 'Balisage'); }
@@ -5743,7 +5755,7 @@ function buildAnnos(){
     if (e.hidden) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ mk('dimtxt', fmtM(V.dist(e.a, e.b)), V.lerp(e.a, e.b, 0.5), 0.5); }
-    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' ? 'SENS BARRÉ' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
+    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
 }
@@ -6045,7 +6057,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, THUMBS, renderPreview,
+window.ATDebug = {simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>

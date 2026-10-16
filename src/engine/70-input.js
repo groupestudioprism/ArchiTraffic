@@ -1,4 +1,7 @@
 /* ============ Outils et saisie (souris, doigt, clavier) ============ */
+const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
+const modeOf = m => m === 'droite' ? {mode:'sens', dir:1} : m === 'gauche' ? {mode:'sens', dir:-1} : m === 'sens' ? {mode:'sens', dir:1} : {mode:m};
+const modeKey = e => e.mode === 'sens' ? (e.dir === -1 ? 'gauche' : 'droite') : e.mode;
 let tool = 'select', draw = {pts:[], cursor:null, hover:null}, PLACE = {k:'AK5', a:0, p:{}}, TOOLOPT = {closeMode:'total', autoDetour:true, autoSigns:true, line:'cones', lineSp:'', veh:'semi'};
 try { Object.assign(TOOLOPT, JSON.parse(localStorage.getItem('at.toolopt') || '{}')); } catch(e){}
 const saveToolOpt = () => { try { localStorage.setItem('at.toolopt', JSON.stringify(TOOLOPT)); } catch(e){} };
@@ -33,7 +36,7 @@ function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPre
 function syncHud(){
   const h = $('#hud'); let html = '';
   const sel_ = (id, opts, val) => `<select id="${id}">${opts.map(([v, n]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
-  if (tool === 'close') html = `<label class="pill tool-pill"><span>Fermeture</span>${sel_('hCloseMode', [['total', 'Totale (2 sens)'], ['sens', 'Un seul sens'], ['alternat', 'Alternat (chaussée rétrécie)']], TOOLOPT.closeMode)}</label>
+  if (tool === 'close') html = `<label class="pill tool-pill"><span>Fermeture</span>${sel_('hCloseMode', CLOSE_MODES, TOOLOPT.closeMode)}</label>
     <label class="pill"><input type="checkbox" id="hAutoDet"${TOOLOPT.autoDetour ? ' checked' : ''} style="width:auto"><span>Déviation auto</span></label><label class="pill"><input type="checkbox" id="hAutoSig"${TOOLOPT.autoSigns ? ' checked' : ''} style="width:auto"><span>Panneaux auto</span></label>`;
   else if (tool === 'line') html = `<label class="pill tool-pill"><span>Type</span>${sel_('hLine', Object.entries(LINE_TYPES).map(([k, T]) => [k, T.n]), TOOLOPT.line)}</label>${LINE_TYPES[TOOLOPT.line]?.item ? `<label class="pill"><span>Espacement</span><input id="hLineSp" type="number" min="1" max="30" step="0.5" value="${TOOLOPT.lineSp || LINE_TYPES[TOOLOPT.line].sp}"><em>m</em></label>` : ''}`;
   else if (tool === 'place'){ const L = LIBK[PLACE.k]; html = `<span class="pill tool-pill">${L?.sign ? `<img class="sg" src="${libThumb(L)}" alt="">` : ''}<b>${esc(L?.name || 'Élément')}</b><button type="button" id="hRot">↻ 15°</button><button type="button" id="hLib">Changer</button></span>`; }
@@ -143,7 +146,7 @@ function makeClosure(nr){
   const sec = sectionAt(nr.ri, nr.k); if (!sec) return;
   if (state.els.some(e => e.t === 'closure' && e.ids?.join() === sec.ids.join())){ toast('Ce tronçon est déjà barré.'); return; }
   // tronçon contigu à une rue déjà barrée (même voie, même mode) : on prolonge la fermeture existante → une seule déviation autour de l'ensemble
-  const adj = state.els.find(e => e.t === 'closure' && e.mode === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
+  const adj = state.els.find(e => e.t === 'closure' && modeKey(e) === TOOLOPT.closeMode && e.ids?.length && (e.name || '') === (sec.name || '') && [e.ids[0], e.ids[e.ids.length - 1]].some(id => id === sec.ids[0] || id === sec.ids[sec.ids.length - 1]));
   if (adj){ beginEdit();
     let ids = adj.ids, pts = adj.pts; const a0 = ids[0], a1 = ids[ids.length - 1], s0 = sec.ids[0], s1 = sec.ids[sec.ids.length - 1], rs = sec.ids.slice().reverse(), rp = sec.pts.slice().reverse();
     if (a1 === s0){ ids = [...ids, ...sec.ids.slice(1)]; pts = [...pts, ...sec.pts.slice(1)]; } else if (a1 === s1){ ids = [...ids, ...rs.slice(1)]; pts = [...pts, ...rp.slice(1)]; }
@@ -153,7 +156,8 @@ function makeClosure(nr){
     if (TOOLOPT.autoDetour && adj.mode !== 'alternat'){ const ds = addDetoursFor(adj); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} recalculée${ds.ok > 1 ? 's' : ''}` : ' · aucune déviation possible'; }
     if (TOOLOPT.autoSigns) autoSigns(adj); refreshOtherDetours(adj.id);
     endEdit(); sel = adj.id; rebuildProj(); refreshPanel(); toast(msg, 5200); return; }
-  const ow = sectionOneway(sec.ids), mode = TOOLOPT.closeMode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:ow === -1 ? -1 : 1, riv:true, len:Math.round(sec.len * 10) / 10};
+  const ow = sectionOneway(sec.ids), MO = modeOf(TOOLOPT.closeMode), mode = MO.mode, cl = {id:uid8(), t:'closure', ids:sec.ids, pts:sec.pts, name:sec.name, mode, dir:MO.dir ?? (ow === -1 ? -1 : 1), riv:true, len:Math.round(sec.len * 10) / 10};
+  if (mode === 'sens' && ow !== 0) cl.dir = ow;   // voie neutralisée sur un sens unique : c'est ce sens qui est concerné
   beginEdit(); state.els.push(cl);
   let msg = `${cap(sec.name)} barrée sur ${fmtM(sec.len)}`;
   if (TOOLOPT.autoDetour && mode !== 'alternat'){ const ds = addDetoursFor(cl); msg += ds.ok ? ` · ${ds.ok} déviation${ds.ok > 1 ? 's' : ''} : +${fmtM(Math.max(...ds.list.map(d => d.extra)))}` : ds.fail ? ' · aucune déviation possible (impasse ?)' : ''; }
@@ -197,12 +201,21 @@ function autoSigns(cl){
   state.els = state.els.filter(e => !(e.t === 'obj' && e.auto === cl.id));
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
+  const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
+  const lane = cl.mode === 'sens', apD = agglo ? 50 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
-    if (cl.mode === 'sens' && ((cl.dir === -1) === (i === 0))) return;        // en sens unique fermé : seulement à l'entrée
-    const d = V.norm(V.sub(B, A)), n = V.perp(d), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
-    if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), Math.atan2(-d[1], -d[0]), {on:'red'}); add('AK3', V.add(V.add(A, V.mul(d, -40)), V.mul(n, -w / 2 - 0.8)), Math.atan2(d[1], d[0]), undefined); return; }
-    const nb = Math.max(1, Math.round(w / 2.2)); for (let k = 0; k < nb; k++){ const o = -w / 2 + (k + 0.5) * w / nb; add('K2', V.add(base, V.mul(n, o)), Math.atan2(d[1], d[0]) + Math.PI / 2, {len:'2'}); }
-    add('KR_ROUTE', V.add(V.add(base, V.mul(d, -1.5)), V.mul(n, -w / 2 + 0.6)), Math.atan2(-d[1], -d[0]), cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'});
+    if (lane && ((cl.dir === -1) === (i === 0))) return;        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
+    const d = V.norm(V.sub(B, A)), n = V.perp(d), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
+    const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
+    if (cl.mode === 'alternat'){ add('KR11', V.add(base, V.mul(n, -w / 2 - 0.6)), face, {on:'red'}); add('AK3', right(back(40)), face); return; }
+    // barrières K2 en travers de la chaussée, face aux usagers qui arrivent (pleine largeur, ou seule la voie de droite neutralisée)
+    const o0 = -w / 2, o1 = lane ? 0 : w / 2, span = o1 - o0, nb = Math.max(1, Math.round(span / 2.2));
+    for (let k = 0; k < nb; k++) add(k === Math.floor(nb / 2) && !lane ? 'KR_ROUTE' : 'K2', V.add(base, V.mul(n, o0 + (k + 0.5) * span / nb)), face, k === Math.floor(nb / 2) && !lane ? (cl.riv ? {t:'RUE BARRÉE|SAUF RIVERAINS'} : {t:'ROUTE BARRÉE'}) : {len:'2'});
+    if (lane){ // biseau de cônes K5a ramenant la circulation sur la voie restante
+      const nc = Math.max(4, Math.round(taper / 3)); for (let k = 0; k <= nc; k++){ const t = k / nc; add('K5a', V.add(V.sub(base, V.mul(d, taper * (1 - t))), V.mul(n, -w / 2 + 0.3 + (w / 2 - 0.3) * t)), face); }
+      add('AK3', right(back(apD)), face); add('K8', V.add(base, V.mul(n, -w / 4)), face);
+    } else add('AK5', right(back(apD)), face);
+    if (!agglo){ add('B14', right(back(apD + 100)), face, {v:'70'}); add('B14', right(back(apD + 30)), face, {v:'50'}); }
   });
   // flèches de déviation aux changements de direction (et confirmation tout droit tous les 2 carrefours)
   for (const dt0 of state.els.filter(e => e.t === 'detour' && e.cl === cl.id && e.ids?.length)) for (const dt of dt0.both ? [dt0, {...dt0, ids:dt0.ids.slice().reverse(), inDir0:dt0.inDirEnd}] : [dt0]){

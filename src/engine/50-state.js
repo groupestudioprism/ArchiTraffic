@@ -107,7 +107,7 @@ function buildEl(e){
   if (e.t === 'model'){ const o = MODELS.get(e.key); if (o){ const c = o.clone(true); c.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(c); } else { const ph = part(BOX(6, 3, 6), matCol(0x9AB0C8, {opacity:0.35, depthWrite:false}), 0, 1.5, 0); ph.userData.id = e.id; g.add(ph); }
     g.position.set(e.x, (e.zAbs != null && WORLD ? e.zAbs - WORLD.z0 : H(e.x, e.y)), -e.y); g.rotation.y = e.a || 0; return g; }
   if (e.t === 'closure' && e.pts?.length > 1){
-    const w = closureWidth(e) + 0.4, m = ribbonMesh(e.pts, w, MAT.closed ??= new THREE.MeshBasicMaterial({map:closedTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6}), 0.14);
+    const w = closureWidth(e) + 0.4, lane = e.mode === 'sens', pd = e.dir === -1 ? e.pts.slice().reverse() : e.pts, m = ribbonMesh(lane ? plOffset(pd, -w / 4) : e.pts, lane ? w / 2 : w, MAT.closed ??= new THREE.MeshBasicMaterial({map:closedTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6}), 0.14);
     if (m){ m.userData.id = e.id; g.add(m); }
     if (e.mode === 'sens'){ const p = e.dir === -1 ? e.pts.slice().reverse() : e.pts, mid = plAt(p, plLen(p) / 2), a = Math.atan2(mid.dir[1], mid.dir[0]), ar = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 3), matCol(0xD32F2F)); ar.rotation.set(0, a, -Math.PI / 2); ar.position.set(mid.pt[0], H(mid.pt[0], mid.pt[1]) + 0.3, -mid.pt[1]); ar.scale.y = 0.3; g.add(ar); }
     return g;

@@ -12,7 +12,7 @@ function renderPanel(){ if (!state) return; ({props:renderProps, lib:renderLib, 
 const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
 function elLabel(e){
   if (e.t === 'obj') return LIBK[e.k]?.name || e.k; if (e.t === 'line') return LINE_TYPES[e.k]?.n || 'Balisage';
-  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'sens' ? 'un sens' : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
+  if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'sens' ? (e.dir === -1 ? 'voie de gauche' : 'voie de droite') : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
   if (e.t === 'detour') return e.name || 'Déviation'; if (e.t === 'zone') return e.name || 'Emprise'; if (e.t === 'note') return (e.text || '').split('\n')[0].slice(0, 40) || 'Annotation';
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
@@ -83,8 +83,7 @@ function renderElProps(e){
     if (L?.color) h += `<label class="f"><span>Couleur</span><span class="in"><input id="eCol" type="color" value="${esc(e.p?.color || '#8D949B')}" style="height:30px;padding:0"></span></label>`;
     h += `</div>`;
   } else if (e.t === 'closure'){
-    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', [['total', 'Totale (2 sens)'], ['sens', 'Un seul sens'], ['alternat', 'Alternat (circulation maintenue)']], e.mode)}
-      ${e.mode === 'sens' ? selF('eDir', 'Sens fermé', [['1', 'Sens du tracé'], ['-1', 'Sens inverse']], e.dir) : ''}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
+    h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label></div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
       <div class="btns"><button class="btn primary" id="eDet">Recalculer les déviations</button><button class="btn" id="eSig">Reposer les panneaux</button></div>${closureVariants(e)}`;
   } else if (e.t === 'detour'){
@@ -112,7 +111,7 @@ function bindElProps(){
   ch('eA', el => { e.a = (+el.value || 0) * Math.PI / 180; e.manualA = true; }); ch('eDz', el => { e.dz = +el.value || 0; });
   ch('eV', el => { e.p = {...(e.p || {}), v:el.value}; }); ch('eT', el => { e.p = {...(e.p || {}), t:el.value}; }); ch('ePole', el => { e.p = {...(e.p || {}), pole:el.value}; });
   ch('eH', el => { e.p = {...(e.p || {}), h:el.value}; }); ch('eOn', el => { e.p = {...(e.p || {}), on:el.value}; }); ch('eCol', el => { e.p = {...(e.p || {}), color:el.value}; });
-  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { e.mode = el.value; }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
+  ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value); e.mode = m.mode; if (m.dir) e.dir = m.dir; }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
   ch('eCol2', el => { e.col = el.value; }); ch('eCls', el => { e.cls = el.value; }); ch('eFence', el => { e.fence = el.checked; });
   ch('eLine', el => { e.k = el.value; e.sp = undefined; }); ch('eSp', el => { e.sp = +el.value || undefined; });
   ch('eText', el => { e.text = el.value; }); ch('eCol3', el => { e.col = el.value; }); ch('eSize', el => { e.size = el.value; });
@@ -132,7 +131,7 @@ function closureVariants(cl){
   const score = mode => { const res = proposeDetours({...cl, ...mode}, state.els); if (res.some(r => r.fail)) return null; return {n:res.length, extra:Math.max(0, ...res.map(r => r.extra || 0)), t:Math.max(0, ...res.map(r => r.extraT || 0))}; };
   const rows = [];
   const tot = score({mode:'total'}); if (tot) rows.push({k:'total|1', n:'Fermeture totale', d:`${tot.n} itinéraire${tot.n > 1 ? 's' : ''} dévié${tot.n > 1 ? 's' : ''} · +${fmtM(tot.extra)}`, on:cl.mode === 'total', sc:tot.extra * tot.n});
-  if (ow === 0) for (const dir of [1, -1]){ const v = score({mode:'sens', dir}); if (v) rows.push({k:`sens|${dir}`, n:`Sens unique temporaire (${dir === 1 ? 'sens du tracé fermé' : 'sens inverse fermé'})`, d:`1 sens maintenu sur ${fmtM(cl.len || plLen(cl.pts))} · l'autre dévié : +${fmtM(v.extra)}${w < 5.5 ? ' · chaussée étroite : vérifier 3 m libres + emprise' : ''}`, on:cl.mode === 'sens' && cl.dir === dir, sc:v.extra * (w < 5.5 ? 3 : 1)}); }
+  if (ow === 0) for (const dir of [1, -1]){ const v = score({mode:'sens', dir}); if (v) rows.push({k:`sens|${dir}`, n:`Sens unique temporaire (${dir === 1 ? 'voie de droite' : 'voie de gauche'} neutralisée)`, d:`1 sens maintenu sur ${fmtM(cl.len || plLen(cl.pts))} · l'autre dévié : +${fmtM(v.extra)}${w < 5.5 ? ' · chaussée étroite : vérifier 3 m libres + emprise' : ''}`, on:cl.mode === 'sens' && cl.dir === dir, sc:v.extra * (w < 5.5 ? 3 : 1)}); }
   if (rows.length < 2) return '';
   const best = rows.reduce((a, b) => b.sc < a.sc ? b : a);
   return `<div class="grp" style="margin-top:14px"><h3>Variantes d'exploitation</h3><p class="hint" style="margin-top:0">Comparaison calculée sur le réseau réel. Le sens unique temporaire garde une voie de circulation dans l'emprise et ne dévie qu'un sens.</p>
