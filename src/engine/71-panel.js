@@ -186,7 +186,8 @@ function renderTrafficStats(){
   const el = $('#tStats'); if (!el) return; const L = SIM.live;
   if (!L || !SIM.t){ el.innerHTML = ''; return; }
   el.innerHTML = `<div class="sumcards"><div><b>${L.n}</b><span>véhicules</span></div><div><b>${Math.round(L.vm)}</b><span>km/h moyens</span></div><div><b>${L.dev}</b><span>déviés</span></div></div>
-    <dl class="kv" style="margin-top:10px"><dt>Trajets terminés</dt><dd>${L.done}</dd><dt>Retard moyen par trajet</dt><dd>${L.done ? fmtDur(Math.max(0, L.delay)) : '—'}</dd><dt>Véhicules à l'arrêt</dt><dd>${L.stopped}</dd></dl>`;
+    <dl class="kv" style="margin-top:10px"><dt>Trajets terminés</dt><dd>${L.done}</dd><dt>Retard moyen par trajet</dt><dd>${L.done ? fmtDur(Math.max(0, L.delay)) : '—'}</dd><dt>Véhicules à l'arrêt</dt><dd>${L.stopped}</dd></dl>${(() => { const Q = congQueues(); return `<p class="eyebrow" style="margin:12px 0 4px">Files d'attente les plus longues</p>${Q.length ? `<dl class="kv">${Q.map(([n, q]) => `<dt>${esc(n)}</dt><dd style="color:${q > 120 ? '#C62828' : q > 50 ? '#C77700' : 'inherit'}">${Math.round(q)} m</dd>`).join('')}</dl>` : '<p class="hint">Aucune file notable pour l\'instant.</p>'}<label class="mi" style="margin-top:8px;display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" id="congShow"${CONG.show ? ' checked' : ''} style="width:auto"> Carte des bouchons (vert fluide · orange ralenti · rouge bouchon)</label>`; })()}`;
+  const cs = $('#congShow'); if (cs) cs.onchange = () => { CONG.show = cs.checked; congRender(); dirty = true; };
 }
 /* ---------- fenêtres (dialogue moteur) ---------- */
 function dlgEngine(html, size = ''){ const d = $('#engDlg'); d.className = size; d.querySelector('.edlg-card').innerHTML = html; d.hidden = false; }

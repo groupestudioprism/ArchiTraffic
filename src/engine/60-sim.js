@@ -41,7 +41,7 @@ function simNetworkChanged(){ SIM.rc.clear(); if (!SIM.on) return; const C = clo
     const r = route(e.to, a.dest, C, {vtype:a.pl ? 'pl' : ''}); if (!r){ a.kill = true; continue; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }
 }
 function simStop(clear){ SIM.on = false; $('#simPlay')?.classList.remove('on'); const b = $('#simPlay'); if (b){ b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>'; b.setAttribute('aria-label', 'Lancer la simulation'); }
-  if (clear){ SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
+  if (clear){ congReset(); SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
 function simStart(){
   if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier (outil Lieu).'); return; }
   simBuildInstances(); if (!SIM.entries.length || SIM.entriesFor !== WORLD) { simEntries(); SIM.entriesFor = WORLD; }
@@ -103,6 +103,7 @@ function simStep(dt){
     let acc = am * (1 - Math.pow(a.v / Math.max(1, v0), 4) - (gap < Infinity ? Math.pow(ss / Math.max(0.1, gap), 2) : 0));
     acc = clamp(acc, -8, am); a.v = Math.max(0, a.v + acc * dt); if (gap < 0.5) a.v = 0;
     a.s += a.v * dt; if (a.v < 0.5) a.wait += dt;
+    congSample(a.edges[a.ei], a.v / Math.max(1, e.sp), dt, a.v < 1 ? a.len + 2 : 0);
     while (a.s >= NET.edges[a.edges[a.ei]].len){ a.s -= NET.edges[a.edges[a.ei]].len; a.ei++; if (a.ei >= a.edges.length){ a.done = true; break; } }
     if (a.done){ SIM.stats.done++; SIM.stats.sumT += SIM.t - a.t0; SIM.stats.sumT0 += a.free; }
   }
@@ -136,5 +137,5 @@ function simTick(now){
   let dt = Math.min(0.1, (now - lastT) / 1000) * SIM.speed; lastT = now;
   while (dt > 0){ const st = Math.min(0.1, dt); simStep(st); dt -= st; }
   simRender(); dirty = true;
-  if (now - statT > 500){ statT = now; simStatus(); if (activeTab === 'traffic') renderTrafficStats(); }
+  if (now - statT > 500){ statT = now; simStatus(); congRender(); if (activeTab === 'traffic') renderTrafficStats(); }
 }

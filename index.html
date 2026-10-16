@@ -5423,7 +5423,7 @@ function simNetworkChanged(){ SIM.rc.clear(); if (!SIM.on) return; const C = clo
     const r = route(e.to, a.dest, C, {vtype:a.pl ? 'pl' : ''}); if (!r){ a.kill = true; continue; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }
 }
 function simStop(clear){ SIM.on = false; $('#simPlay')?.classList.remove('on'); const b = $('#simPlay'); if (b){ b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>'; b.setAttribute('aria-label', 'Lancer la simulation'); }
-  if (clear){ SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
+  if (clear){ congReset(); SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
 function simStart(){
   if (!WORLD){ toast('Choisissez d\'abord le lieu du chantier (outil Lieu).'); return; }
   simBuildInstances(); if (!SIM.entries.length || SIM.entriesFor !== WORLD) { simEntries(); SIM.entriesFor = WORLD; }
@@ -5485,6 +5485,7 @@ function simStep(dt){
     let acc = am * (1 - Math.pow(a.v / Math.max(1, v0), 4) - (gap < Infinity ? Math.pow(ss / Math.max(0.1, gap), 2) : 0));
     acc = clamp(acc, -8, am); a.v = Math.max(0, a.v + acc * dt); if (gap < 0.5) a.v = 0;
     a.s += a.v * dt; if (a.v < 0.5) a.wait += dt;
+    congSample(a.edges[a.ei], a.v / Math.max(1, e.sp), dt, a.v < 1 ? a.len + 2 : 0);
     while (a.s >= NET.edges[a.edges[a.ei]].len){ a.s -= NET.edges[a.edges[a.ei]].len; a.ei++; if (a.ei >= a.edges.length){ a.done = true; break; } }
     if (a.done){ SIM.stats.done++; SIM.stats.sumT += SIM.t - a.t0; SIM.stats.sumT0 += a.free; }
   }
@@ -5518,7 +5519,39 @@ function simTick(now){
   let dt = Math.min(0.1, (now - lastT) / 1000) * SIM.speed; lastT = now;
   while (dt > 0){ const st = Math.min(0.1, dt); simStep(st); dt -= st; }
   simRender(); dirty = true;
-  if (now - statT > 500){ statT = now; simStatus(); if (activeTab === 'traffic') renderTrafficStats(); }
+  if (now - statT > 500){ statT = now; simStatus(); congRender(); if (activeTab === 'traffic') renderTrafficStats(); }
+}
+
+/* ==== 61-cong.js ==== */
+/* ============ Bouchons : carte de congestion et files d'attente ============
+   Pour chaque tronçon parcouru : rapport vitesse réelle / vitesse libre, lissé dans le temps (≈ 30 s),
+   et longueur de file (véhicules à l'arrêt). Carte : vert fluide, orange ralenti, rouge bouchon. */
+const CONG = {r:new Map(), q:new Map(), qmax:new Map(), mesh:null, show:true};
+function congReset(){ CONG.r.clear(); CONG.q.clear(); CONG.qmax.clear(); if (CONG.mesh){ CONG.mesh.parent?.remove(CONG.mesh); CONG.mesh.geometry.dispose(); CONG.mesh = null; } }
+function congSample(ei, ratio, dt, qlen){
+  const k = NET.edges[ei]?.key; if (!k) return; const w = Math.min(1, dt / 30), o = CONG.r.get(k); CONG.r.set(k, o === undefined ? ratio : o + (Math.min(1, ratio) - o) * w);
+  if (qlen) CONG.q.set(k, (CONG.q.get(k) || 0) + qlen);
+}
+function congRender(){
+  // files du pas de temps écoulé → maxima par tronçon
+  for (const [k, q] of CONG.q) if (q > (CONG.qmax.get(k) || 0)) CONG.qmax.set(k, q); CONG.q.clear();
+  if (CONG.mesh){ CONG.mesh.parent?.remove(CONG.mesh); CONG.mesh.geometry.dispose(); CONG.mesh = null; }
+  if (!CONG.show || !SIM.t) return;
+  const pos = [], col = [], c = new THREE.Color();
+  for (const [k, r] of CONG.r){ const sg = NET.segIdx.get(k); if (!sg) continue; const A = NET.nodes.get(sg.a)?.xy, B = NET.nodes.get(sg.b)?.xy; if (!A || !B) continue;
+    c.set(r > 0.7 ? 0x1FB45A : r > 0.4 ? 0xF29A0E : r > 0.15 ? 0xE0321E : 0x8E0F0F);
+    const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), 1.6), w = Math.max(2, mPerPx() * 5), nn = V.mul(V.norm(n), w), za = H(A[0], A[1]) + 0.5, zb = H(B[0], B[1]) + 0.5;
+    const p1 = V.add(A, nn), p2 = V.sub(A, nn), p3 = V.add(B, nn), p4 = V.sub(B, nn);
+    pos.push(p1[0], za, -p1[1], p2[0], za, -p2[1], p3[0], zb, -p3[1], p3[0], zb, -p3[1], p2[0], za, -p2[1], p4[0], zb, -p4[1]); for (let i = 0; i < 6; i++) col.push(c.r, c.g, c.b); }
+  if (!pos.length) return;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  CONG.mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, opacity:0.85, depthTest:false, side:THREE.DoubleSide})); CONG.mesh.renderOrder = 6; CONG.mesh.name = 'Carte des bouchons'; markGroup.add(CONG.mesh);
+}
+/* les plus longues files observées, avec le nom de la rue */
+function congQueues(n = 4){
+  const byStreet = new Map();
+  for (const [k, q] of CONG.qmax){ const sg = NET.segIdx.get(k); if (!sg) continue; const nm = NET.roads[sg.ri]?.name || 'voie sans nom'; byStreet.set(nm, Math.max(byStreet.get(nm) || 0, q)); }
+  return [...byStreet].sort((a, b) => b[1] - a[1]).filter(x => x[1] >= 12).slice(0, n);
 }
 
 /* ==== 70-input.js ==== */
@@ -6040,7 +6073,8 @@ function renderTrafficStats(){
   const el = $('#tStats'); if (!el) return; const L = SIM.live;
   if (!L || !SIM.t){ el.innerHTML = ''; return; }
   el.innerHTML = `<div class="sumcards"><div><b>${L.n}</b><span>véhicules</span></div><div><b>${Math.round(L.vm)}</b><span>km/h moyens</span></div><div><b>${L.dev}</b><span>déviés</span></div></div>
-    <dl class="kv" style="margin-top:10px"><dt>Trajets terminés</dt><dd>${L.done}</dd><dt>Retard moyen par trajet</dt><dd>${L.done ? fmtDur(Math.max(0, L.delay)) : '—'}</dd><dt>Véhicules à l'arrêt</dt><dd>${L.stopped}</dd></dl>`;
+    <dl class="kv" style="margin-top:10px"><dt>Trajets terminés</dt><dd>${L.done}</dd><dt>Retard moyen par trajet</dt><dd>${L.done ? fmtDur(Math.max(0, L.delay)) : '—'}</dd><dt>Véhicules à l'arrêt</dt><dd>${L.stopped}</dd></dl>${(() => { const Q = congQueues(); return `<p class="eyebrow" style="margin:12px 0 4px">Files d'attente les plus longues</p>${Q.length ? `<dl class="kv">${Q.map(([n, q]) => `<dt>${esc(n)}</dt><dd style="color:${q > 120 ? '#C62828' : q > 50 ? '#C77700' : 'inherit'}">${Math.round(q)} m</dd>`).join('')}</dl>` : '<p class="hint">Aucune file notable pour l\'instant.</p>'}<label class="mi" style="margin-top:8px;display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" id="congShow"${CONG.show ? ' checked' : ''} style="width:auto"> Carte des bouchons (vert fluide · orange ralenti · rouge bouchon)</label>`; })()}`;
+  const cs = $('#congShow'); if (cs) cs.onchange = () => { CONG.show = cs.checked; congRender(); dirty = true; };
 }
 /* ---------- fenêtres (dialogue moteur) ---------- */
 function dlgEngine(html, size = ''){ const d = $('#engDlg'); d.className = size; d.querySelector('.edlg-card').innerHTML = html; d.hidden = false; }
@@ -6604,7 +6638,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1) simStep(0.1); simRender(); simStatus(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+window.ATDebug = {renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 </script>
