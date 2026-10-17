@@ -28,6 +28,15 @@ const c3 = new OrbitControls(persp, canvas); c3.enableDamping = true; c3.damping
 c3.touches = {ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN}; c3.mouseButtons = {LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c3.zoomToCursor = true;
 const c2 = new OrbitControls(ortho, canvas); c2.enableRotate = false; c2.screenSpacePanning = true; c2.zoomToCursor = true; c2.minZoom = 0.05; c2.maxZoom = 60; c2.enabled = false;
 c2.mouseButtons = {LEFT:THREE.MOUSE.PAN, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c2.touches = {ONE:THREE.TOUCH.PAN, TWO:THREE.TOUCH.DOLLY_PAN};
+/* Tactile (Safari iOS) : chaque doigt posé sur la vue lui reste attaché jusqu'à la fin du geste. Sinon, quand le 2e doigt d'un
+   pincement se lève au-dessus d'une étiquette, d'un repère ou de la légende, la vue ne reçoit jamais sa fin : les commandes de
+   caméra gardent un « doigt fantôme » et chaque geste à un doigt devient un pincement (on ne peut plus que zoomer). */
+(cv => { const live = new Set();
+  cv.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; live.add(e.pointerId); try { cv.setPointerCapture(e.pointerId); } catch(_){ } }, {capture:true});
+  const end = e => { if (!live.has(e.pointerId)) return; live.delete(e.pointerId);
+    if (e.target !== cv) cv.dispatchEvent(new PointerEvent(e.type, {pointerId:e.pointerId, pointerType:e.pointerType, isPrimary:e.isPrimary, clientX:e.clientX, clientY:e.clientY, button:0, buttons:0, bubbles:true})); };
+  addEventListener('pointerup', end, true); addEventListener('pointercancel', end, true);
+})(canvas);
 let dirty = true;
 [c2, c3].forEach(c => c.addEventListener('change', () => { dirty = true; }));
 let view = '3d';   // '2d' plan | '3d' | 'render'

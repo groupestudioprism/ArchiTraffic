@@ -23,11 +23,14 @@ function renderLegend(){
   box.innerHTML = `<h4>${esc(state.legend.title || 'Légende')}<span class="lg-n">${L.length}</span><button type="button" class="lg-tog" title="${mini ? 'Déplier la légende' : 'Réduire la légende'}" aria-label="${mini ? 'Déplier' : 'Réduire'} la légende">${mini ? '+' : '–'}</button></h4><ul>${L.map(e => `<li><span class="lg-sym">${e.html}</span><span>${esc(e.label)}${e.n > 1 ? ` <small style="display:inline;color:var(--mut)">× ${e.n}</small>` : ''}</span></li>`).join('')}</ul><small>${esc(state.site?.label || '')}</small>`;
   const p = state.legend.pos; if (p){ box.style.left = p[0] + 'px'; box.style.top = p[1] + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; } else { box.style.left = box.style.top = ''; box.style.right = ''; box.style.bottom = ''; }
 }
-/* déplacement de la légende à la souris */
+/* déplacement de la légende (souris : partout ; doigt : par son titre) */
 (() => { const box = $('#legendBox'); let st = null;
   box.addEventListener('click', e => { if (!e.target.closest('.lg-tog')) return; DISPLAY.legMin = !box.classList.contains('mini'); saveDisplay(); renderLegend(); });
-  box.addEventListener('pointerdown', e => { if (e.target.closest('.lg-tog')) return; const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr, mv:false}; box.setPointerCapture(e.pointerId); });
-  box.addEventListener('pointermove', e => { if (!st) return; st.mv = true; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
+  /* au doigt : on déplace la légende par son titre seulement (la liste défile normalement) ; geste annulé → on relâche */
+  const stop = () => { st = null; };
+  box.addEventListener('pointercancel', stop); box.addEventListener('lostpointercapture', () => { if (st?.mv) { state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); } stop(); });
+  box.addEventListener('pointerdown', e => { if (e.target.closest('.lg-tog')) return; if (e.pointerType !== 'mouse' && !e.target.closest('h4')) return; const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr, mv:false}; box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', e => { if (!st || !box.hasPointerCapture?.(e.pointerId) && e.pointerType !== 'mouse') return; st.mv = true; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
   box.addEventListener('pointerup', () => { if (!st) return; const mv = st.mv; st = null; if (!mv) return; state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); }); })();
 function renderLegendTab(){
   const all = (() => { const keep = state.legend.hide; state.legend.hide = []; const r = legendEntries(); state.legend.hide = keep; return r; })(), hide = new Set(state.legend.hide || []);

@@ -1057,6 +1057,8 @@ a.ap-link{text-decoration:none}
 /* qualité « Économie » : les flous d'arrière-plan au-dessus de la 3D forcent la tablette à recomposer toute l'image à chaque trame */
 html.gfx-eco *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+
+.legend-box h4{touch-action:none}.legend-box{overscroll-behavior:contain}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -2888,6 +2890,7 @@ const touchOnly = () => MQ_COARSE.matches && !MQ_FINE.matches;
 const TOUCH_TXT = [
   [/ <kbd>Suppr<\/kbd> l'efface\./g, ''],
   [/ \(pas de 15° avec <kbd>Maj<\/kbd>\)/g, ''],
+  [/glissez autour d'un élément pour l'orienter/g, 'glissez depuis un élément pour l\'orienter'],
   [/ ; <kbd>R<\/kbd> ou la molette \+ <kbd>Maj<\/kbd> pour le tourner\./g, ' ; l\'outil Rotation l\'oriente ensuite.'],
   [/<kbd>Entrée<\/kbd> ou double-clic pour fermer/g, 'bouton Terminer pour fermer'],
   [/<kbd>Entrée<\/kbd> pour terminer/g, 'bouton Terminer pour finir'],
@@ -3523,6 +3526,15 @@ const c3 = new OrbitControls(persp, canvas); c3.enableDamping = true; c3.damping
 c3.touches = {ONE:THREE.TOUCH.ROTATE, TWO:THREE.TOUCH.DOLLY_PAN}; c3.mouseButtons = {LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c3.zoomToCursor = true;
 const c2 = new OrbitControls(ortho, canvas); c2.enableRotate = false; c2.screenSpacePanning = true; c2.zoomToCursor = true; c2.minZoom = 0.05; c2.maxZoom = 60; c2.enabled = false;
 c2.mouseButtons = {LEFT:THREE.MOUSE.PAN, MIDDLE:THREE.MOUSE.PAN, RIGHT:THREE.MOUSE.PAN}; c2.touches = {ONE:THREE.TOUCH.PAN, TWO:THREE.TOUCH.DOLLY_PAN};
+/* Tactile (Safari iOS) : chaque doigt posé sur la vue lui reste attaché jusqu'à la fin du geste. Sinon, quand le 2e doigt d'un
+   pincement se lève au-dessus d'une étiquette, d'un repère ou de la légende, la vue ne reçoit jamais sa fin : les commandes de
+   caméra gardent un « doigt fantôme » et chaque geste à un doigt devient un pincement (on ne peut plus que zoomer). */
+(cv => { const live = new Set();
+  cv.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') return; live.add(e.pointerId); try { cv.setPointerCapture(e.pointerId); } catch(_){ } }, {capture:true});
+  const end = e => { if (!live.has(e.pointerId)) return; live.delete(e.pointerId);
+    if (e.target !== cv) cv.dispatchEvent(new PointerEvent(e.type, {pointerId:e.pointerId, pointerType:e.pointerType, isPrimary:e.isPrimary, clientX:e.clientX, clientY:e.clientY, button:0, buttons:0, bubbles:true})); };
+  addEventListener('pointerup', end, true); addEventListener('pointercancel', end, true);
+})(canvas);
 let dirty = true;
 [c2, c3].forEach(c => c.addEventListener('change', () => { dirty = true; }));
 let view = '3d';   // '2d' plan | '3d' | 'render'
@@ -6135,7 +6147,7 @@ let down = null, drag = null;
 canvas.addEventListener('pointerdown', ev => {
   if (ev.button !== 0) return; down = {x:ev.clientX, y:ev.clientY, t:performance.now()};
   if ((tool === 'move' || tool === 'rotate') && WORLD !== undefined){
-    const id = pickEl(ev) || (sel && tool === 'rotate' ? sel : null); if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
+    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
   }
 });
 canvas.addEventListener('pointermove', ev => {
@@ -6408,11 +6420,14 @@ function renderLegend(){
   box.innerHTML = `<h4>${esc(state.legend.title || 'Légende')}<span class="lg-n">${L.length}</span><button type="button" class="lg-tog" title="${mini ? 'Déplier la légende' : 'Réduire la légende'}" aria-label="${mini ? 'Déplier' : 'Réduire'} la légende">${mini ? '+' : '–'}</button></h4><ul>${L.map(e => `<li><span class="lg-sym">${e.html}</span><span>${esc(e.label)}${e.n > 1 ? ` <small style="display:inline;color:var(--mut)">× ${e.n}</small>` : ''}</span></li>`).join('')}</ul><small>${esc(state.site?.label || '')}</small>`;
   const p = state.legend.pos; if (p){ box.style.left = p[0] + 'px'; box.style.top = p[1] + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; } else { box.style.left = box.style.top = ''; box.style.right = ''; box.style.bottom = ''; }
 }
-/* déplacement de la légende à la souris */
+/* déplacement de la légende (souris : partout ; doigt : par son titre) */
 (() => { const box = $('#legendBox'); let st = null;
   box.addEventListener('click', e => { if (!e.target.closest('.lg-tog')) return; DISPLAY.legMin = !box.classList.contains('mini'); saveDisplay(); renderLegend(); });
-  box.addEventListener('pointerdown', e => { if (e.target.closest('.lg-tog')) return; const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr, mv:false}; box.setPointerCapture(e.pointerId); });
-  box.addEventListener('pointermove', e => { if (!st) return; st.mv = true; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
+  /* au doigt : on déplace la légende par son titre seulement (la liste défile normalement) ; geste annulé → on relâche */
+  const stop = () => { st = null; };
+  box.addEventListener('pointercancel', stop); box.addEventListener('lostpointercapture', () => { if (st?.mv) { state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); } stop(); });
+  box.addEventListener('pointerdown', e => { if (e.target.closest('.lg-tog')) return; if (e.pointerType !== 'mouse' && !e.target.closest('h4')) return; const r = box.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(); st = {dx:e.clientX - r.left, dy:e.clientY - r.top, vr, mv:false}; box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', e => { if (!st || !box.hasPointerCapture?.(e.pointerId) && e.pointerType !== 'mouse') return; st.mv = true; const x = clamp(e.clientX - st.vr.left - st.dx, 0, st.vr.width - box.offsetWidth), y = clamp(e.clientY - st.vr.top - st.dy, 0, st.vr.height - box.offsetHeight); box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto'; });
   box.addEventListener('pointerup', () => { if (!st) return; const mv = st.mv; st = null; if (!mv) return; state.legend.pos = [parseFloat(box.style.left), parseFloat(box.style.top)]; save(); }); })();
 function renderLegendTab(){
   const all = (() => { const keep = state.legend.hide; state.legend.hide = []; const r = legendEntries(); state.legend.hide = keep; return r; })(), hide = new Set(state.legend.hide || []);
@@ -7038,6 +7053,11 @@ function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISP
   if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
   toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
 function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
+/* la vue reste sur le site : la cible de la caméra ne sort pas de l'emprise chargée (+ 50 % de marge), la caméra suit le même décalage */
+function keepInSite(){
+  const c = ctl(), t = c.target, m = WORLD.size * 0.75, x = clamp(t.x, -m, m), z = clamp(t.z, -m, m);
+  if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
+}
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
@@ -7045,7 +7065,7 @@ function loop(now){
   const P = PERF.on, t0 = P ? performance.now() : 0;
   if (P && PERF.orbit){ const c = ctl(); if (c.object.isPerspectiveCamera){ const o = c.target, v = c.object.position.clone().sub(o); v.applyAxisAngle(new THREE.Vector3(0, 1, 0), PERF.orbit); c.object.position.copy(o).add(v); } }
   simTick(now); const t1 = P ? performance.now() : 0;
-  const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; const t2 = P ? performance.now() : 0;
+  const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; if (moved && WORLD) keepInSite(); const t2 = P ? performance.now() : 0;
   if (moved){ lastMove = now; setPR(prLow); }
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;

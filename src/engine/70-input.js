@@ -321,7 +321,7 @@ let down = null, drag = null;
 canvas.addEventListener('pointerdown', ev => {
   if (ev.button !== 0) return; down = {x:ev.clientX, y:ev.clientY, t:performance.now()};
   if ((tool === 'move' || tool === 'rotate') && WORLD !== undefined){
-    const id = pickEl(ev) || (sel && tool === 'rotate' ? sel : null); if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
+    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
   }
 });
 canvas.addEventListener('pointermove', ev => {

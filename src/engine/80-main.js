@@ -38,6 +38,11 @@ function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISP
   if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
   toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
 function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
+/* la vue reste sur le site : la cible de la caméra ne sort pas de l'emprise chargée (+ 50 % de marge), la caméra suit le même décalage */
+function keepInSite(){
+  const c = ctl(), t = c.target, m = WORLD.size * 0.75, x = clamp(t.x, -m, m), z = clamp(t.z, -m, m);
+  if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
+}
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
@@ -45,7 +50,7 @@ function loop(now){
   const P = PERF.on, t0 = P ? performance.now() : 0;
   if (P && PERF.orbit){ const c = ctl(); if (c.object.isPerspectiveCamera){ const o = c.target, v = c.object.position.clone().sub(o); v.applyAxisAngle(new THREE.Vector3(0, 1, 0), PERF.orbit); c.object.position.copy(o).add(v); } }
   simTick(now); const t1 = P ? performance.now() : 0;
-  const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; const t2 = P ? performance.now() : 0;
+  const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; if (moved && WORLD) keepInSite(); const t2 = P ? performance.now() : 0;
   if (moved){ lastMove = now; setPR(prLow); }
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;

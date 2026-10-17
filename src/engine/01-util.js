@@ -23,6 +23,7 @@ const touchOnly = () => MQ_COARSE.matches && !MQ_FINE.matches;
 const TOUCH_TXT = [
   [/ <kbd>Suppr<\/kbd> l'efface\./g, ''],
   [/ \(pas de 15° avec <kbd>Maj<\/kbd>\)/g, ''],
+  [/glissez autour d'un élément pour l'orienter/g, 'glissez depuis un élément pour l\'orienter'],
   [/ ; <kbd>R<\/kbd> ou la molette \+ <kbd>Maj<\/kbd> pour le tourner\./g, ' ; l\'outil Rotation l\'oriente ensuite.'],
   [/<kbd>Entrée<\/kbd> ou double-clic pour fermer/g, 'bouton Terminer pour fermer'],
   [/<kbd>Entrée<\/kbd> pour terminer/g, 'bouton Terminer pour finir'],

@@ -226,3 +226,5 @@
 /* qualité « Économie » : les flous d'arrière-plan au-dessus de la 3D forcent la tablette à recomposer toute l'image à chaque trame */
 html.gfx-eco *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+
+.legend-box h4{touch-action:none}.legend-box{overscroll-behavior:contain}
