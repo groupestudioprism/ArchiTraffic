@@ -38,15 +38,28 @@ function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISP
   if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
   toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
 function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
+/* mesure de performance (ATDebug.perf) : temps par poste et par image */
+const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
   requestAnimationFrame(loop);
-  simTick(now);
-  const moved = ctl().update(); if (updateSignals()) dirty = true;
+  const P = PERF.on, t0 = P ? performance.now() : 0;
+  if (P && PERF.orbit){ const c = ctl(); if (c.object.isPerspectiveCamera){ const o = c.target, v = c.object.position.clone().sub(o); v.applyAxisAngle(new THREE.Vector3(0, 1, 0), PERF.orbit); c.object.position.copy(o).add(v); } }
+  simTick(now); const t1 = P ? performance.now() : 0;
+  const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; const t2 = P ? performance.now() : 0;
   if (moved){ lastMove = now; setPR(prLow); }
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
-  if (moved || dirty){ const t = performance.now(); lastRender = now; renderer.render(scene, cam()); updateLabels(); updateCompass(); dirty = false;
+  let t3 = t2, t4 = t2;
+  if (moved || dirty){ const t = performance.now(); lastRender = now; renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
     if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, GFX().prLow)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
+  if (P){ PERF.n++; PERF.sim += t1 - t0; PERF.sig += t2 - t1; PERF.rnd += t3 - t2; PERF.lab += t4 - t3; PERF.tot += t4 - t0; if (PERF.last) PERF.worst = Math.max(PERF.worst, now - PERF.last); PERF.last = now; }
+}
+/* ATDebug.perf(s, orbite) : fait tourner la caméra et renvoie i/s, pire image et ms moyennes par poste */
+async function perfRun(sec = 5, orbit = 0.01){
+  Object.assign(PERF, {on:true, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit}); const t0 = performance.now();
+  await new Promise(r => setTimeout(r, sec * 1000)); PERF.on = false; PERF.orbit = 0; const el = (performance.now() - t0) / 1000, n = Math.max(1, PERF.n), f = v => Math.round(v / n * 10) / 10;
+  const I = renderer.info.render;
+  return {fps:Math.round(PERF.n / el), worst:Math.round(PERF.worst), ms:{sim:f(PERF.sim), feux:f(PERF.sig), rendu:f(PERF.rnd), etiquettes:f(PERF.lab), total:f(PERF.tot)}, calls:I.calls, tris:I.triangles, pr:prNow, annos:typeof annos !== 'undefined' ? annos.length : 0, agents:SIM.agents.length, objs:scene.children.length};
 }
 
 /* ---------- exemple : rue barrée en centre-ville, déviation et balisage ---------- */
