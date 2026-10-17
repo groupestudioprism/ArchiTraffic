@@ -132,19 +132,12 @@ function tex(name){ // texture courante (procédurale, puis photo dès qu'elle e
   if (texOpts.photo && PH[name]) loadPhoto(name);
   return t;
 }
-const PHOTO = {}, PHOTO_WAIT = [];
-/* toutes les photos de matériaux sont demandées dès l'ouverture de l'app ; le chargement d'une zone les attend
-   (au plus quelques secondes) avant d'afficher la 3D : on ne voit jamais une texture « provisoire » être remplacée */
-function preloadPhotos(maxMs = 6000){ if (!texOpts.photo) return Promise.resolve(); for (const n of Object.keys(PH)) tex(n);
-  const done = () => Object.keys(PH).every(n => PHOTO[n] === 'ok' || PHOTO[n] === 'err');
-  return new Promise(res => { if (done()) return res(); const t0 = setTimeout(res, maxMs); const chk = () => { if (done()){ clearTimeout(t0); res(); } else PHOTO_WAIT.push(chk); }; PHOTO_WAIT.push(chk); }); }
+const PHOTO = {};
 function loadPhoto(name){
   if (PHOTO[name]) return; PHOTO[name] = 'loading';
   const P = PH[name], img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
-  const fin = st => { PHOTO[name] = st; for (const f of PHOTO_WAIT.splice(0)) f(); };
-  img.onload = async () => { try { await img.decode(); } catch(e){}   /* décodage hors du fil principal : pas d'à-coup à l'affichage */
-    const t = TEX[name]; if (!t) return fin('ok'); t.image = img; t.userData.photo = true; t.needsUpdate = true; try { renderer.initTexture(t); } catch(e){} fin('ok'); TEX_LISTENERS.forEach(f => f(name)); };
-  img.onerror = () => fin('err');
+  img.onload = () => { const t = TEX[name]; if (!t) return; t.image = img; t.userData.photo = true; t.needsUpdate = true; PHOTO[name] = 'ok'; TEX_LISTENERS.forEach(f => f(name)); };
+  img.onerror = () => { PHOTO[name] = 'err'; };
   img.src = `${PH_BASE}${P.id}/${P.id}_diff_1k.jpg`;
 }
 const REP = {granite:[2, 2], gutter:[1.2, 0.3], roofFlat:[4, 4]};
