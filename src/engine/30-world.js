@@ -399,6 +399,49 @@ function buildStreetLabels(){
 }
 /* ---------- reconstruction complète du site ---------- */
 function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose(); }); g.clear(); }
+/* ============ Découpage en tuiles et niveaux de détail ============
+   Chaque couche (chaussées, façades, bordures…) était un seul maillage couvrant toute la zone : sur 20 km, la carte
+   graphique dessinait toute la ville à chaque image (et une 2e fois pour les ombres), même hors champ. On découpe les
+   gros maillages en tuiles de 400 m (la caméra ne dessine que les tuiles visibles) et on masque les petits détails
+   au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
+const TILE = 400; let WTILES = [];
+const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : Infinity;
+function tileWorld(grp){
+  WTILES = [];
+  for (const m of [...grp.children]){
+    if (!m.isMesh || m.userData.terrain || m.userData.noTile) continue;
+    const lod = lodOf(m.name || '');
+    if (m.isInstancedMesh){
+      if (m.count < 400){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
+      const buckets = new Map(), M = new THREE.Matrix4(), P = new THREE.Vector3(), C = new THREE.Color();
+      for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = Math.floor(P.x / TILE) + ',' + Math.floor(P.z / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
+      if (buckets.size < 2) continue;
+      for (const [k, ids] of buckets){ const t = new THREE.InstancedMesh(m.geometry, m.material, ids.length); t.name = m.name; t.castShadow = m.castShadow; t.receiveShadow = m.receiveShadow; t.userData = {...m.userData};
+        ids.forEach((i, j) => { m.getMatrixAt(i, M); t.setMatrixAt(j, M); if (m.instanceColor){ m.getColorAt(i, C); t.setColorAt(j, C); } });
+        t.computeBoundingSphere(); t.userData.lod = lod; grp.add(t); WTILES.push(t); }
+      grp.remove(m); continue;   // la géométrie est partagée par les tuiles : on ne la libère pas
+    }
+    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 30000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
+    const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
+    for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
+    if (buckets.size < 2) continue;
+    for (const [, tris] of buckets){
+      const n = tris.length * 3, gp = new Float32Array(n * 3), gn = nor ? new Float32Array(n * 3) : null, gu = uv ? new Float32Array(n * 2) : null; let o = 0;
+      for (const t of tris) for (let v = 0; v < 3; v++, o++){ const i = t + v; gp.set(A.subarray(i * 3, i * 3 + 3), o * 3); if (gn) gn.set(nor.array.subarray(i * 3, i * 3 + 3), o * 3); if (gu) gu.set(uv.array.subarray(i * 2, i * 2 + 2), o * 2); }
+      const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(gp, 3)); if (gn) tg.setAttribute('normal', new THREE.BufferAttribute(gn, 3)); if (gu) tg.setAttribute('uv', new THREE.BufferAttribute(gu, 2)); tg.computeBoundingSphere();
+      const tm = new THREE.Mesh(tg, m.material); tm.name = m.name; tm.castShadow = m.castShadow; tm.receiveShadow = m.receiveShadow; tm.renderOrder = m.renderOrder; tm.userData = {...m.userData, lod}; grp.add(tm); WTILES.push(tm);
+    }
+    grp.remove(m); g.dispose();
+  }
+}
+/* niveaux de détail : appelé avant chaque rendu ; masque les tuiles de détail trop loin de la caméra */
+const _lc = new THREE.Vector3();
+function updateLOD(){
+  if (!WTILES.length) return; const c = cam(); if (!c) return; _lc.copy(c.position);
+  const ortho2d = view === '2d', k = ortho2d ? mPerPx() * 900 : 0;   // en vue de dessus : selon l'échelle (m par pixel)
+  for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod; if (L === Infinity) continue;
+    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = d < L; }
+}
 function buildWorld(){
   disposeGroup(worldGroup); if (!WORLD) { dirty = true; return; }
   const t0 = performance.now();
@@ -411,7 +454,7 @@ function buildWorld(){
   if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
   if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
-  applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
+  tileWorld(worldGroup); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
 }
 TEX_LISTENERS.add(() => { dirty = true; });

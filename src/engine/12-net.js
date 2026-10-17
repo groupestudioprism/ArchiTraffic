@@ -114,6 +114,7 @@ function route(fromId, toId, C, opt = {}){
     for (const ei of n.out){
       const e = NET.edges[ei]; if (C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)) continue;
       if (avoid && avoid.has(e.key)) continue;
+      if (opt.box){ const q = NET.nodes.get(e.to).xy; if (Math.abs(q[0]) > opt.box || Math.abs(q[1]) > opt.box) continue; }   // simulation : rester dans la zone simulée
       const toWay = NET.roads[e.r].id;
       if (only != null && toWay !== only) continue; if (no && no.has(toWay)) continue;
       if (inEdge >= 0 && e.to === NET.edges[inEdge].from && nodeDeg(n) > 1) continue;   // pas de demi-tour sur place

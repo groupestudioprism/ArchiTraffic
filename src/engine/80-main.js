@@ -55,7 +55,7 @@ function loop(now){
   else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
-  if (moved || dirty){ const t = performance.now(); lastRender = now; renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
+  if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
     if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, GFX().prLow)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
   if (P){ PERF.n++; PERF.sim += t1 - t0; PERF.sig += t2 - t1; PERF.rnd += t3 - t2; PERF.lab += t4 - t3; PERF.tot += t4 - t0; if (PERF.last) PERF.worst = Math.max(PERF.worst, now - PERF.last); PERF.last = now; }
 }

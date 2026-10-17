@@ -10,7 +10,9 @@ const SIGT = () => SIM.on ? SIM.t : performance.now() / 1000;   // simulation en
    carrefour lui-même. Tous les feux d'un même carrefour sont rattachés à ce carrefour : même cycle, même référence d'axe,
    donc toujours un axe au vert (jamais 4 feux rouges ensemble hors des 2 s de dégagement). */
 function sigCtl(n){ if (n._ctl) return n._ctl; let best = n, bd = nodeDeg(n) >= 3 ? 0 : 30;
-  if (bd) for (const m of NET.nodes.values()){ if (nodeDeg(m) < 3) continue; const d = Math.hypot(m.xy[0] - n.xy[0], m.xy[1] - n.xy[1]); if (d < bd){ bd = d; best = m; } }
+  if (bd){ if (!NET._jg){ NET._jg = new Map(); for (const m of NET.nodes.values()) if (nodeDeg(m) >= 3){ const k = Math.floor(m.xy[0] / 50) + ',' + Math.floor(m.xy[1] / 50); (NET._jg.get(k) || NET._jg.set(k, []).get(k)).push(m); } }
+    const gx = Math.floor(n.xy[0] / 50), gy = Math.floor(n.xy[1] / 50);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of NET._jg.get((gx + i) + ',' + (gy + j)) || []){ const d = Math.hypot(m.xy[0] - n.xy[0], m.xy[1] - n.xy[1]); if (d < bd){ bd = d; best = m; } } }
   return n._ctl = best; }
 function sigAxis(n0, d){ const n = sigCtl(n0); let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
   return Math.abs(d[0] * r[0] + d[1] * r[1]) >= Math.SQRT1_2 ? 0 : 1; }
@@ -38,7 +40,7 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; }
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; } NET._jg = null;
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
@@ -65,7 +67,7 @@ function buildSignals(grp){
 }
 /* rafraîchit les lampes allumées (appelé à chaque image ; ne redessine que si un feu a changé) */
 function updateSignals(force = false){
-  if (!SIGHEADS) return false; const t = SIGT(), st = SIGHEADS.heads.map(h => sigState(h.n, h.d, t)), key = st.join('');
+  if (!SIGHEADS) return false; const t = Math.floor(SIGT() * 4) / 4; if (!force && t === SIGHEADS.tq) return false; SIGHEADS.tq = t; const _u = 0, st = SIGHEADS.heads.map(h => sigState(h.n, h.d, t)), key = st.join('');
   if (!force && key === SIGHEADS.last) return false; SIGHEADS.last = key; const c = new THREE.Color();
   st.forEach((s, i) => { for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
   for (const k in SIGHEADS.lamps) if (SIGHEADS.lamps[k].instanceColor) SIGHEADS.lamps[k].instanceColor.needsUpdate = true;
