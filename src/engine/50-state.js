@@ -154,7 +154,9 @@ function buildEl(e){
   if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); const light = L.sign || /^(temp|bal|chan)$/.test(L.cat || ''); pr.traverse(m => { m.userData.shared = true; if (light && m.isMesh) m.castShadow = false; });   /* petits objets : pas d'ombre portée (rendu plus léger) */ OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
     o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
     if (L.sign){ // en plan : symbole du panneau vu de face, à l'échelle du plan
-      const sp = new THREE.Sprite(MAT['spr|' + L.sign + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(L.sign, e.p || {}), depthTest:false})); const sh = signShape(L.sign), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
+      let sc = L.sign; if (/^KD22[abc]$/.test(sc)){ const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)], go = sc === 'KD22c' ? din : sc === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]];   // plan (nord en haut) : flèche dans la direction réelle
+        sc = Math.abs(go[0]) >= Math.abs(go[1]) * 0.9 ? (go[0] > 0 ? 'KD22b' : 'KD22a') : (go[1] > 0 ? 'KD22c' : 'KD22d'); }
+      const sp = new THREE.Sprite(MAT['spr|' + sc + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(sc, e.p || {}), depthTest:false})); const sh = signShape(sc), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
       sp.scale.set(2.2 * ar, 2.2, 1); sp.position.set(0, 3, 0); sp.renderOrder = 20; sp.userData = {planOnly:true, id:e.id}; sp.visible = view === '2d'; g.add(sp); }
     return g; }
   if (e.t === 'model'){ const o = MODELS.get(e.key); if (o){ const c = o.clone(true); c.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(c); } else { const ph = part(BOX(6, 3, 6), matCol(0x9AB0C8, {opacity:0.35, depthWrite:false}), 0, 1.5, 0); ph.userData.id = e.id; g.add(ph); }

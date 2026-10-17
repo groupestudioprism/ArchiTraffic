@@ -64,9 +64,19 @@ function buildAnnos(){
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
       const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
-      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
+      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; if (/^KD22[abc]$/.test(code)) { const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)];   // panneau face aux usagers : sens de circulation = -face
+        annos[annos.length - 1].go = code === 'KD22c' ? din : code === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]]; annos[annos.length - 1].kdp = e.p || {}; } }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
+}
+/* panneaux de déviation (bulles) : la flèche montre la direction RÉELLE à prendre, vue depuis la caméra
+   (une déviation « à droite » apparaît à gauche quand on regarde dans l'autre sens) */
+function kdOrient(a){
+  const g = a.gz ?? 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 2)), B = toScreen(W3(a.xy[0] + a.go[0] * 6, a.xy[1] + a.go[1] * 6, g + 2)), dx = B[0] - A[0], dy = B[1] - A[1];
+  if (Math.hypot(dx, dy) < 2) return;
+  const v = Math.abs(dx) >= Math.abs(dy) * 0.9 ? (dx > 0 ? 'KD22b' : 'KD22a') : (dy < 0 ? 'KD22c' : 'KD22d');
+  if (a.kdv === v) return; a.kdv = v; const key = v + JSON.stringify(a.kdp); PIN_IMG[key] ??= signThumb(v, a.kdp);
+  const im = a.d.querySelector('img'); if (im) im.src = PIN_IMG[key];
 }
 function updateLabels(){
   const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.t === 'dim' ? JSON.stringify([e.a, e.b, e.col, e.off, e.dec, e.dz]) : '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
@@ -81,7 +91,7 @@ function updateLabels(){
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
   const show = (a, v) => { if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
-    if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
+    if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
     const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!vis) continue;

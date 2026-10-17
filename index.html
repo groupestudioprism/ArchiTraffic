@@ -4631,6 +4631,7 @@ const SIGNS = {
   KD22a:{n:'Déviation (vers la gauche)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.4, h / 2, w * 0.08, h / 2, h * 0.2, h * 0.36, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.66, h / 2, w * 0.56, Math.round(h * 0.3)); }},
   KD22b:{n:'Déviation (vers la droite)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.6, h / 2, w * 0.92, h / 2, h * 0.2, h * 0.36, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.34, h / 2, w * 0.56, Math.round(h * 0.3)); }},
   KD22c:{n:'Déviation (tout droit)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.14, h * 0.86, w * 0.14, h * 0.14, h * 0.2, h * 0.32, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.6, h / 2, w * 0.7, Math.round(h * 0.3)); }},
+  KD22d:{n:'Déviation (vers l\'observateur, bulles seulement)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.14, h * 0.14, w * 0.14, h * 0.86, h * 0.2, h * 0.32, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.6, h / 2, w * 0.7, Math.round(h * 0.3)); }},
   KD8:{n:'Présignalisation de déviation', s:'rect', ak:1, ar:1.3, p:{t:'DÉVIATION|à 150 m'}, draw:(g, p, w, h) => { const L = String(p?.t || 'DÉVIATION|à 150 m').split(/\n|\|/).slice(0, 3); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; L.forEach((t, i) => textFit(g, i ? t : t.toUpperCase(), w / 2, h * 0.36 + i * h * 0.3, w - 40, Math.round(h * (i ? 0.17 : 0.2)))); arrow(g, w / 2, h * 0.92, w / 2, h * 0.72, h * 0.07, h * 0.12, SC.blk); }},
   KM9:{n:'Piétons, passez en face', s:'rect', ak:1, ar:1.3, draw:(g, p, w, h) => { walker(g, w * 0.22, h * 0.62, h / 256 * 1.1, SC.blk); arrow(g, w * 0.4, h * 0.56, w * 0.9, h * 0.56, h * 0.08, h * 0.16, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; textFit(g, 'PIÉTONS', w / 2, h * 0.2, w - 40, Math.round(h * 0.14)); textFit(g, 'PASSEZ EN FACE', w / 2, h * 0.88, w - 40, Math.round(h * 0.12)); }},
   KR_ROUTE:{n:'Route barrée sauf riverains', s:'rect', ak:1, ar:1.6, p:{t:'RUE BARRÉE|SAUF RIVERAINS'}, base:'KC1'},
@@ -5589,7 +5590,9 @@ function buildEl(e){
   if (e.t === 'obj'){ const L = LIBK[e.k]; if (!L) return g; const pk = e.k + '|' + JSON.stringify(e.p || {}); let pr = OBJ_PROTO.get(pk); if (!pr){ pr = L.build(e.p || {}); const light = L.sign || /^(temp|bal|chan)$/.test(L.cat || ''); pr.traverse(m => { m.userData.shared = true; if (light && m.isMesh) m.castShadow = false; });   /* petits objets : pas d'ombre portée (rendu plus léger) */ OBJ_PROTO.set(pk, pr); } const o = pr.clone();   // modèle construit une fois, géométries et matériaux partagés par toutes les copies
     o.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(o); placeObj(g, e.x, e.y, e.a || 0, e.dz || 0);
     if (L.sign){ // en plan : symbole du panneau vu de face, à l'échelle du plan
-      const sp = new THREE.Sprite(MAT['spr|' + L.sign + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(L.sign, e.p || {}), depthTest:false})); const sh = signShape(L.sign), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
+      let sc = L.sign; if (/^KD22[abc]$/.test(sc)){ const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)], go = sc === 'KD22c' ? din : sc === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]];   // plan (nord en haut) : flèche dans la direction réelle
+        sc = Math.abs(go[0]) >= Math.abs(go[1]) * 0.9 ? (go[0] > 0 ? 'KD22b' : 'KD22a') : (go[1] > 0 ? 'KD22c' : 'KD22d'); }
+      const sp = new THREE.Sprite(MAT['spr|' + sc + JSON.stringify(e.p || {})] ??= new THREE.SpriteMaterial({map:signFaceTex(sc, e.p || {}), depthTest:false})); const sh = signShape(sc), ar = sh.s === 'rect' ? sh.ar || 1.6 : 1;
       sp.scale.set(2.2 * ar, 2.2, 1); sp.position.set(0, 3, 0); sp.renderOrder = 20; sp.userData = {planOnly:true, id:e.id}; sp.visible = view === '2d'; g.add(sp); }
     return g; }
   if (e.t === 'model'){ const o = MODELS.get(e.key); if (o){ const c = o.clone(true); c.traverse(m => { if (m.isMesh) m.userData.id = e.id; }); g.add(c); } else { const ph = part(BOX(6, 3, 6), matCol(0x9AB0C8, {opacity:0.35, depthWrite:false}), 0, 1.5, 0); ph.userData.id = e.id; g.add(ph); }
@@ -6561,9 +6564,19 @@ function buildAnnos(){
     else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
       const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
-      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; }
+      const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; if (/^KD22[abc]$/.test(code)) { const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)];   // panneau face aux usagers : sens de circulation = -face
+        annos[annos.length - 1].go = code === 'KD22c' ? din : code === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]]; annos[annos.length - 1].kdp = e.p || {}; } }
     else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
   }
+}
+/* panneaux de déviation (bulles) : la flèche montre la direction RÉELLE à prendre, vue depuis la caméra
+   (une déviation « à droite » apparaît à gauche quand on regarde dans l'autre sens) */
+function kdOrient(a){
+  const g = a.gz ?? 0, A = toScreen(W3(a.xy[0], a.xy[1], g + 2)), B = toScreen(W3(a.xy[0] + a.go[0] * 6, a.xy[1] + a.go[1] * 6, g + 2)), dx = B[0] - A[0], dy = B[1] - A[1];
+  if (Math.hypot(dx, dy) < 2) return;
+  const v = Math.abs(dx) >= Math.abs(dy) * 0.9 ? (dx > 0 ? 'KD22b' : 'KD22a') : (dy < 0 ? 'KD22c' : 'KD22d');
+  if (a.kdv === v) return; a.kdv = v; const key = v + JSON.stringify(a.kdp); PIN_IMG[key] ??= signThumb(v, a.kdp);
+  const im = a.d.querySelector('img'); if (im) im.src = PIN_IMG[key];
 }
 function updateLabels(){
   const k = labelsKey !== null && labelsVer === stateVer ? labelsKey : (labelsVer = stateVer, labelsKey = (state?.els || []).map(e => e.id + (e.text || '') + (e.name || '') + (e.t === 'dim' ? JSON.stringify([e.a, e.b, e.col, e.off, e.dec, e.dz]) : '') + (e.hidden ? 1 : 0) + (e.pts?.length || '') + (e.x ?? '') + (e.a ?? '')).join() + '|' + (WORLD?.labels?.length || 0) + DISPLAY.lay.names + '|' + (state?.phase || ''));
@@ -6578,7 +6591,7 @@ function updateLabels(){
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
   const show = (a, v) => { if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
-    if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
+    if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
     const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!vis) continue;
@@ -7236,7 +7249,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;
