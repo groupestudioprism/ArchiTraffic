@@ -69,7 +69,7 @@ function elShape(e){
   if (e.t === 'dim' && e.a && e.b){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))); return {lines:[[V.add(e.a, V.mul(n, o.off)), V.add(e.b, V.mul(n, o.off))]], w:o.w}; }
   if (e.t === 'zone' && e.pts?.length > 2) return {lines:[[...e.pts, e.pts[0]]], area:e.pts, w:0.3};
   if (e.t === 'swept' && e.env) return {lines:[e.env.l, e.env.r], area:[...e.env.l, ...e.env.r.slice().reverse()], w:0.3};
-  if (e.pts?.length > 1) return {lines:[e.pts], w:e.t === 'closure' ? closureWidth(e) : e.t === 'detour' ? (e.w || 1.2) : (e.w || 0.6)};
+  if (e.pts?.length > 1) return {lines:[e.t === 'closure' ? closureVis(e) : e.pts], w:e.t === 'closure' ? closureWidth(e) : e.t === 'detour' ? (e.w || 1.2) : (e.w || 0.6)};
   if (e.x != null) return {pt:[e.x, e.y], r:e.t === 'obj' ? Math.max(0.8, (LIBK[e.k]?.r || 1)) : 1.2};
   return null;
 }
