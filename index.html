@@ -3867,9 +3867,11 @@ function densify(pts, step = 3){
 }
 /* bande drapée sur le relief, entre les décalages o0 et o1 (gauche > 0) ; dz = hauteur au-dessus du sol ; v en mètres */
 function bandGB(gb, pts, o0, o1, dz0, dz1 = dz0, flipV = false){
-  const p = densify(pts, 3); if (p.length < 2) return;
+  /* hors du cœur détaillé d'une grande zone (relief plus grossier, vu de loin) : maillage 3 à 6 fois plus léger */
+  const far = typeof CORE !== 'undefined' && WORLD && WORLD.size > CORE && Math.max(Math.abs(pts[0][0]), Math.abs(pts[0][1])) > CORE / 2 + 150;
+  const p = densify(pts, far ? 12 : 3); if (p.length < 2) return;
   /* bandes larges (chaussées) : une rangée de points tous les 4 m en travers, chacun posé sur le sol affiché */
-  const w = Math.abs(o1 - o0), K = Math.max(1, Math.ceil(w / 4)), rows = [];
+  const w = Math.abs(o1 - o0), K = far ? 1 : Math.max(1, Math.ceil(w / 4)), rows = [];
   for (let k = 0; k <= K; k++){ const t = k / K, o = o0 + (o1 - o0) * t, L = plOffset(p, o), dz = dz0 + (dz1 - dz0) * t, v = flipV ? w * (1 - t) : w * t;
     rows.push({v, P:L.map(q => P3(q[0], q[1], H(q[0], q[1]) + dz))}); }
   let s = 0;
