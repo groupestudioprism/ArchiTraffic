@@ -322,11 +322,9 @@ function insetRing(p, d){ const n = p.length, out = [];
 function buildBuildings(grp){
   const W = WORLD.W, plan = planLook(), groups = new Map(), gb = key => groups.get(key) || groups.set(key, new GB()).get(key);
   const reg = frRegion(WORLD.P.lat0, WORLD.P.lon0), urbI = urbanIndex(W), roofDefault = reg === 'bzh' ? 'ardoises' : 'tuiles';
-  const farGB = new GB();   /* façades simplifiées : un quadrilatère par mur, dessinées au loin à la place des façades détaillées */
   W.bld.forEach((b, bi) => {
     const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, n = p.length, c0 = centroid(p), st = bldStyle(b, bi, Math.abs(ringArea(p)), urbI(c0[0], c0[1]), reg);
     const zs = p.map(q => H(q[0], q[1])), zMin = Math.min(...zs) - 0.4, zAvg = zs.reduce((a, v) => a + v, 0) / n;
-    if (!plan){ const F = farGB, zt = zAvg + b.h; for (let i = 0; i < n; i++){ const q0 = p[i], q1 = p[(i + 1) % n]; F.quad(P3(q0[0], q0[1], zMin), P3(q1[0], q1[1], zMin), P3(q1[0], q1[1], zt), P3(q0[0], q0[1], zt), [0, 0], [1, 0], [1, 1], [0, 1]); } }   // murs simplifiés (vue lointaine)
     const A = Math.abs(ringArea(p)), O = obb(p), fill = A / ((O.u1 - O.u0) * (O.v1 - O.v0)), minorW = O.v1 - O.v0;
     const tag = b.roof, pitchedTag = /gabled|hipped|pyramidal|half-hipped|gambrel|saltbox|mansard|round/.test(tag), flatTag = tag === 'flat';
     let ridgeH = 0; const mans = st.type === 'haus' && b.h > 12, mansH = mans ? 2.8 : 0;
@@ -381,7 +379,6 @@ function buildBuildings(grp){
       for (const [i, j, k] of tris){ const a = all[i], bb = all[j], c = all[k]; R.tri(P3(a[0], a[1], zTop), P3(bb[0], bb[1], zTop), P3(c[0], c[1], zTop), a, bb, c); }
     }
   });
-  if (!farGB.empty){ const fm = new THREE.Mesh(farGB.geo(), matCol(0xD8CDBB, {rough:0.95})); fm.name = 'Façades (vue lointaine)'; fm.receiveShadow = true; fm.userData.bld = true; grp.add(fm); }
   const mats = {plan:matCol(PLAN_COL.bld, {rough:1, side:THREE.DoubleSide}), planTop:matCol(PLAN_COL.bldTop, {rough:1, side:THREE.DoubleSide}), roofTiles:matTex('roofTiles', {rough:0.85, side:THREE.DoubleSide}), roofSlate:matTex('roofSlate', {rough:0.7, side:THREE.DoubleSide}), roofZinc:matTex('roofZinc', {rough:0.5, side:THREE.DoubleSide}), roofFlat:matTex('roofFlat', {side:THREE.DoubleSide})};
   for (const [key, g] of groups){
     let m = mats[key];
@@ -452,10 +449,7 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    gros maillages en tuiles de 400 m (la caméra ne dessine que les tuiles visibles) et on masque les petits détails
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
 const TILE = 800; let WTILES = [];
-const FAR_FAC = 1500;   // au-delà : façades simplifiées
-const lodMinOf = name => /vue lointaine/.test(name) ? FAR_FAC : 0;
-const lodOf = name => /vue lointaine/.test(name) ? Infinity : /^Façades$/.test(name) ? FAR_FAC + 250 : /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : Infinity;
-const tileKey = (x, z) => Math.floor(x / TILE) + ',' + Math.floor(z / TILE);   // (essai de grandes tuiles hors du cœur : plus lent, car moins bien écartées hors champ)
+const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : /^Façades$/.test(name) ? 5500 : Infinity;   // façades : au-delà de 5,5 km, quelques pixels
 function tileWorld(grp){
   WTILES = [];
   for (const m of [...grp.children]){
@@ -464,22 +458,22 @@ function tileWorld(grp){
     if (m.isInstancedMesh){
       if (m.count < 1500){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
       const buckets = new Map(), M = new THREE.Matrix4(), P = new THREE.Vector3(), C = new THREE.Color();
-      for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = tileKey(P.x, P.z); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
+      for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = Math.floor(P.x / TILE) + ',' + Math.floor(P.z / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
       if (buckets.size < 2) continue;
       for (const [k, ids] of buckets){ const t = new THREE.InstancedMesh(m.geometry, m.material, ids.length); t.name = m.name; t.castShadow = m.castShadow; t.receiveShadow = m.receiveShadow; t.userData = {...m.userData};
         ids.forEach((i, j) => { m.getMatrixAt(i, M); t.setMatrixAt(j, M); if (m.instanceColor){ m.getColorAt(i, C); t.setColorAt(j, C); } });
         t.computeBoundingSphere(); t.userData.lod = lod; grp.add(t); WTILES.push(t); }
       grp.remove(m); continue;   // la géométrie est partagée par les tuiles : on ne la libère pas
     }
-    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { const l0 = lodMinOf(m.name || ''); if (lod < Infinity || l0){ g.computeBoundingSphere(); m.userData.lod = lod; m.userData.lodMin = l0; WTILES.push(m); } continue; }
+    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
     const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
-    for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = tileKey(cx, cz); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
+    for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
     if (buckets.size < 2) continue;
     for (const [, tris] of buckets){
       const n = tris.length * 3, gp = new Float32Array(n * 3), gn = nor ? new Float32Array(n * 3) : null, gu = uv ? new Float32Array(n * 2) : null; let o = 0;
       for (const t of tris) for (let v = 0; v < 3; v++, o++){ const i = t + v; gp.set(A.subarray(i * 3, i * 3 + 3), o * 3); if (gn) gn.set(nor.array.subarray(i * 3, i * 3 + 3), o * 3); if (gu) gu.set(uv.array.subarray(i * 2, i * 2 + 2), o * 2); }
       const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(gp, 3)); if (gn) tg.setAttribute('normal', new THREE.BufferAttribute(gn, 3)); if (gu) tg.setAttribute('uv', new THREE.BufferAttribute(gu, 2)); tg.computeBoundingSphere();
-      const tm = new THREE.Mesh(tg, m.material); tm.name = m.name; tm.castShadow = m.castShadow; tm.receiveShadow = m.receiveShadow; tm.renderOrder = m.renderOrder; tm.userData = {...m.userData, lod, lodMin:lodMinOf(m.name || '')}; grp.add(tm); WTILES.push(tm);
+      const tm = new THREE.Mesh(tg, m.material); tm.name = m.name; tm.castShadow = m.castShadow; tm.receiveShadow = m.receiveShadow; tm.renderOrder = m.renderOrder; tm.userData = {...m.userData, lod}; grp.add(tm); WTILES.push(tm);
     }
     grp.remove(m); g.dispose();
   }
@@ -499,8 +493,8 @@ function updateLOD(){
     for (const o of projCache.values()){ if (!o.small) continue; const v = o.base && !far2d && (view === '2d' || (o.x - _lc.x) ** 2 + (o.y + _lc.z) ** 2 < R2); if (o.grp.visible !== v) o.grp.visible = v; } }
   if (!WTILES.length) return;
   const ortho2d = view === '2d', k = ortho2d ? mPerPx() * 900 : 0;   // en vue de dessus : selon l'échelle (m par pixel)
-  for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod, L0 = t.userData.lodMin || 0; if (L === Infinity && !L0) continue;
-    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; const dc = ortho2d ? k : _lc.distanceTo(sp.center); t.visible = L0 ? dc >= L0 : (/^Façades$/.test(t.name) ? dc < FAR_FAC : d < L); }
+  for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod; if (L === Infinity) continue;
+    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = d < L; }
 }
 function buildWorld(){
   disposeGroup(worldGroup); if (!WORLD) { dirty = true; return; }

@@ -37,12 +37,7 @@ function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISP
   renderer.shadowMap.type = G.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; sun.shadow.mapSize.set(G.sh, G.sh); sun.shadow.map?.dispose(); sun.shadow.map = null;
   if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
   toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
-/* changer la résolution réalloue toute l'image (et l'anticrénelage) : c'est coûteux. On ne la change donc qu'au plus
-   toutes les 0,6 s et par paliers d'au moins 0,15 — sauf le retour à la pleine résolution quand la vue se pose.
-   (Avant : pendant un zoom à la molette, elle alternait entre deux valeurs à CHAQUE image → saccades.) */
-let prT = 0;
-function setPR(pr, force = false){ const now = performance.now(); if (Math.abs(pr - prNow) < 0.01) return;
-  if (!force && (now - prT < 600 || Math.abs(pr - prNow) < 0.15)) return; prT = now; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
+function setPR(pr){ if (Math.abs(pr - prNow) < 0.01) return; prNow = pr; renderer.setPixelRatio(pr); renderer.setSize(vpEl.clientWidth, vpEl.clientHeight, false); }
 /* la vue reste sur le site : la cible de la caméra ne sort pas de l'emprise chargée (+ 50 % de marge), la caméra suit le même décalage */
 function keepInSite(){
   const c = ctl(), t = c.target, m = WORLD.size * 0.75, x = clamp(t.x, -m, m), z = clamp(t.z, -m, m);
@@ -61,13 +56,12 @@ function loop(now){
   /* résolution dynamique : on mesure l'intervalle RÉEL entre deux images (temps de la carte graphique compris) ;
      si l'on passe sous ~55 i/s, la résolution baisse un peu, puis remonte dès que la marge revient.
      En mouvement continu (rotation, simulation) on vise 60 i/s ; à l'arrêt complet, une image pleine résolution. */
-  const camMv = moved || now - LBL.t < 80;   // y compris le zoom molette (qui déplace la caméra hors de cette boucle)
-  const busy = camMv || SIM.on || (dirty && now - lastRender < 120);
+  const busy = moved || SIM.on || (dirty && now - lastRender < 120);
   if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
     const tgt = 1000 / GFX().fps; const floor = persp.position.distanceTo(c3.target) > 2500 ? 0.5 : 0.7; /* vue d'ensemble de toute la ville : on accepte une image moins fine */ if (DYN.ema > tgt * 1.12 && DYN.pr > floor) DYN.pr = Math.max(floor, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
-    if (moved) lastMove = now; setPR(Math.round((camMv ? Math.min(DYN.pr, Math.max(prLow, 0.5)) : DYN.pr) * 20) / 20); }
+    if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.5)) : DYN.pr) * 20) / 20); }
   { const mv = now - Math.max(lastMove, LBL.t) < 300; if (mv !== LBL.fast){ LBL.fast = mv; LBL.el?.classList.toggle('fast', mv); } }
-  if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - Math.max(lastMove, LBL.t) > 250){ setPR(PR_FULL, true); dirty = true; } }
+  if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
   if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.shadowMap.autoUpdate = false; if (!busy || (++DYN.sh % 3) === 0) renderer.shadowMap.needsUpdate = true; /* ombres recalculées 1 image sur 3 en mouvement : c'est un 2e dessin complet de la scène */ renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
