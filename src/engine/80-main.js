@@ -58,8 +58,8 @@ function loop(now){
      En mouvement continu (rotation, simulation) on vise 60 i/s ; à l'arrêt complet, une image pleine résolution. */
   const busy = moved || SIM.on || (dirty && now - lastRender < 120);
   if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
-    const tgt = 1000 / GFX().fps; const floor = persp.position.distanceTo(c3.target) > 2500 ? 0.5 : 0.7; /* vue d'ensemble de toute la ville : on accepte une image moins fine */ if (DYN.ema > tgt * 1.12 && DYN.pr > floor) DYN.pr = Math.max(floor, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
-    if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.5)) : DYN.pr) * 20) / 20); }
+    const tgt = 1000 / GFX().fps; const floor = Math.min(PR_FULL, Math.max(1, PR_FULL * 0.75)); /* jamais d'image floue : au plus -25 % de résolution, et pas sous 1 */ /* vue d'ensemble de toute la ville : on accepte une image moins fine */ if (DYN.ema > tgt * 1.12 && DYN.pr > floor) DYN.pr = Math.max(floor, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
+    if (moved) lastMove = now; setPR(Math.round(DYN.pr * 20) / 20); }
   { const mv = now - Math.max(lastMove, LBL.t) < 300; if (mv !== LBL.fast){ LBL.fast = mv; LBL.el?.classList.toggle('fast', mv); } }
   if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
@@ -154,7 +154,7 @@ PrismSettings.init({
     {title:'Légende et repères', fields:[
       {type:'switch', label:'Légende repliée par défaut', sub:'Le bouton – / + de la légende la replie à tout moment', get:() => !!(DISPLAY.legMin ?? (isNarrow.matches || LOWPOW)), set:v => { DISPLAY.legMin = v; saveDisplay(); renderLegend(); }},
       {type:'seg', label:'Taille des bulles de panneaux', options:[[0.75, 'Petite'], [1, 'Normale'], [1.3, 'Grande']], get:() => DISPLAY.pinSz || 1, set:v => { DISPLAY.pinSz = v; saveDisplay(); document.documentElement.style.setProperty('--pin-sz', v); dirty = true; }},
-      {type:'switch', label:'Sens uniques et sens interdits', get:() => DISPLAY.lay.oneway !== false, set:v => { DISPLAY.lay.oneway = v; saveDisplay(); buildWorld(); }},
+      {type:'switch', label:'Sens uniques et sens interdits', get:() => DISPLAY.lay.oneway !== false, set:v => { DISPLAY.lay.oneway = v; saveDisplay(); applyLayers(); }},
       {type:'switch', label:'Noms des rues', get:() => DISPLAY.lay.names !== false, set:v => { DISPLAY.lay.names = v; saveDisplay(); annoKey = ''; dirty = true; }}]},
     {title:'Cotes', fields:[
       {type:'seg', label:'Unité', options:[['m', 'Mètres'], ['cm', 'Centimètres']], get:() => DISPLAY.dimUnit || 'm', set:v => { DISPLAY.dimUnit = v; saveDisplay(); rebuildProj(); annoKey = ''; dirty = true; }},

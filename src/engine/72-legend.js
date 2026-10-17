@@ -85,13 +85,13 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   if (annos._pk !== annoKey){ annos._pk = annoKey; annos._pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri); }
   const occ = new Set(), pins = annos._pins; let npin = 0; const MAXPIN = GFX().cap < 200 ? 80 : 150;
-  for (const a of pins){ if (npin >= MAXPIN){ a.show = false; continue; } const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  for (const a of pins){ if (npin >= MAXPIN || (a.sig && SIGVIS && !SIGVIS.has(sigCtl(a.sn).id))){ a.show = false; continue; } /* feux loin des routes barrées : pas de repère */ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
   /* caméra en mouvement rapide : on ne fait ni apparaître ni disparaître d'étiquette (chaque bascule oblige le navigateur à
      recalculer styles et mise en page ; des centaines par image = saccades). Les bascules se font dès que la vue se pose. */
-  const frz = typeof LBL !== 'undefined' && LBL.fast;
+  const frz = false;   // (le gel des étiquettes en mouvement provoquait des décalages : supprimé)
   const show = (a, v) => { if (frz && a.vis !== undefined) return; if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }

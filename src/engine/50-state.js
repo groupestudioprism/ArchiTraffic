@@ -255,6 +255,7 @@ let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A,
 /* tracé visible d'une route barrée : arrêté sur la ligne des barrières, à min(6 m, L/3) de chaque carrefour (voir autoSigns) */
 function closureVis(e){ const L = plLen(e.pts), t = Math.min(6, L / 3); return L > 1 ? plSlice(e.pts, t, L - t) : e.pts; }
 function applySel(){
+  if (typeof sigVisibility === 'function' && applySel.k !== sel + '|' + stateVer){ applySel.k = sel + '|' + stateVer; sigVisibility(); }   // feux affichés selon la route barrée sélectionnée
   if (selShape){ markGroup.remove(selShape); selShape.traverse(o => o.geometry?.dispose()); selShape = null; } selBox.visible = false;
   const c = sel && projCache.get(sel), e = sel && byId(sel); if (!c || !e){ dirty = true; return; }
   const S = elShape(e);

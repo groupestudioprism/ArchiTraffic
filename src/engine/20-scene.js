@@ -59,6 +59,9 @@ scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 /* Réglages d'affichage, par appareil */
 const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
+/* affichage de base : style « Plan », calques de détail décochés (ils sont tout de même préparés au chargement et
+   s'affichent instantanément quand on les coche). Appliqué une fois aux réglages existants. */
+if (!DISPLAY.base2){ DISPLAY.base2 = true; DISPLAY.style = 'plan'; Object.assign(DISPLAY.lay, {trees:false, marks:false, sidewalks:false, walls:false, lamps:false, oneway:false}); try { localStorage.setItem('at.display', JSON.stringify(DISPLAY)); } catch(e){} }
 if (!GFX().shadows && !DISPLAY.shadowsUser) DISPLAY.shadows = false;   // tablette : ombres coupées sauf si réactivées dans Calques
 const STYLES = {plan:'Plan', textured:'Textures', realistic:'Réaliste', aerial:'Photo aérienne'};
 if (!STYLES[DISPLAY.style]) DISPLAY.style = 'textured';

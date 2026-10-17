@@ -191,7 +191,7 @@ function buildRoads(grp){
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
-    if (!plan && DISPLAY.lay.marks !== false && r.drive && !r.round && r.cls <= 6 && r.w >= 5){
+    if (!plan && r.drive && !r.round && r.cls <= 6 && r.w >= 5){
       const L = plLen(r.pts), t0 = trimAt(r, false) + 6, t1 = L - trimAt(r, true) - 6;
       if (t1 - t0 > 4){
         const p = plSlice(r.pts, t0, t1);
@@ -200,7 +200,7 @@ function buildRoads(grp){
       }
     }
     // trottoirs : caniveau 2 rangs de pavés granit, bordure granit, trottoir (en ville seulement)
-    const sw = String(r.sidewalk || ''); if (DISPLAY.lay.sidewalks === false || sw === 'no' || sw === 'none' || sw === 'separate' || r.cls > 6 || r.round || r.hw === 'living_street') continue;
+    const sw = String(r.sidewalk || ''); if (sw === 'no' || sw === 'none' || sw === 'separate' || r.cls > 6 || r.round || r.hw === 'living_street') continue;
     const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (!sw && urb(mid[0], mid[1]) < 3) continue;
     const L = plLen(r.pts), t0 = trimAt(r, false) + 1.2, t1 = L - trimAt(r, true) - 1.2; if (t1 - t0 < 3) continue;
     const p = plSlice(r.pts, t0, t1), swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6, e = r.w / 2, Lp = plLen(p);
@@ -230,7 +230,7 @@ function buildRoads(grp){
   // carrefours : disques de chaussée (comblent les jonctions)
   for (const [id, n] of NET.nodes){ if (nodeDeg(n) < 3) continue; const r = junctionRadius(id); if (r > 0) discGB(gRoad, n.xy, r * 1.02, 0.049, 20); }
   // passages piétons
-  if (!plan && DISPLAY.lay.marks !== false) for (const pt of W.points) if (pt.k === 'crossing'){
+  if (!plan) for (const pt of W.points) if (pt.k === 'crossing'){
     const nr = nearestRoad([pt.x, pt.y], 6); if (!nr || nr.r.foot) continue; const d = nr.dir, n = V.perp(d), w = nr.r.w - 0.6;
     for (let s = -w / 2 + 0.25; s < w / 2 - 0.25; s += 1){ const c = V.add(nr.pt, V.mul(n, s)); bandGB(gMark, [V.add(c, V.mul(d, -1.25)), V.add(c, V.mul(d, 1.25))], -0.25, 0.25, 0.075); }
   }
@@ -247,7 +247,7 @@ function buildRoads(grp){
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3)); const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x7E8690})); ls.name = 'Bords de chaussée'; grp.add(ls); }
   add(gMark, M.mark, 'Marquages au sol');
   buildOneways(grp, plan);
-  if (!plan && deco.length && DISPLAY.lay.marks !== false){ // regards, avaloirs, chambres télécom, bandes podotactiles
+  if (!plan && deco.length){ // regards, avaloirs, chambres télécom, bandes podotactiles
     const D = {regard:[0.66, 0.66, 'round'], avaloir:[0.75, 0.32, 'grid'], telecom:[1.0, 0.5, 'plate'], podo:[1.2, 0.42, 'podo']};
     for (const [k, [lx, lz, kind]] of Object.entries(D)){ const list = deco.filter(d => d.k === k); if (!list.length) continue;
       const geo = kind === 'round' ? new THREE.CylinderGeometry(lx / 2, lx / 2, 0.02, 24) : new THREE.BoxGeometry(lx, 0.02, lz), im = new THREE.InstancedMesh(geo, streetDecalMat(kind), list.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
@@ -262,7 +262,6 @@ function buildRoads(grp){
 /* sens de circulation : flèches de sens unique le long des voies, disque « sens interdit » à la sortie de chaque sens unique */
 let ARROW_GEO = null, NOENTRY_GEO = null;
 function buildOneways(grp, plan){
-  if (DISPLAY.lay.oneway === false || (DISPLAY.lay.marks === false && !plan)) return;
   if (!ARROW_GEO){ const sh = new THREE.Shape([[-1.6, -0.22], [0.4, -0.22], [0.4, -0.55], [1.6, 0], [0.4, 0.55], [0.4, 0.22], [-1.6, 0.22]].map(q => new THREE.Vector2(q[0], q[1]))); ARROW_GEO = new THREE.ShapeGeometry(sh); ARROW_GEO.rotateX(-Math.PI / 2); }
   if (!NOENTRY_GEO){ NOENTRY_GEO = new THREE.CircleGeometry(0.9, 24); NOENTRY_GEO.rotateX(-Math.PI / 2); }
   const arrows = [], ends = [];
@@ -273,7 +272,7 @@ function buildOneways(grp, plan){
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   const inst = (geo, mat, list, name, z) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((d, i) => { m4.compose(new THREE.Vector3(d.x, H(d.x, d.y) + z, -d.y), q.setFromAxisAngle(up, d.a), new THREE.Vector3(d.s, 1, d.s)); im.setMatrixAt(i, m4); }); im.name = name; im.renderOrder = 3; grp.add(im); return im; };
   inst(ARROW_GEO, plan ? matCol(0x1565C0, {basic:true, po:-6}) : matCol(0xF4F4F0, {rough:0.6, po:-6}), arrows, 'Sens uniques', plan ? 0.1 : 0.072);
-  if (plan || DISPLAY.lay.marks !== false){ const im = inst(NOENTRY_GEO, matCol(0xC1121F, {basic:plan, po:-7}), ends, 'Sens interdits', plan ? 0.11 : 0.074);
+  { const im = inst(NOENTRY_GEO, matCol(0xC1121F, {basic:plan, po:-7}), ends, 'Sens interdits', plan ? 0.11 : 0.074);
     if (im){ const bar = new THREE.PlaneGeometry(1.2, 0.3); bar.rotateX(-Math.PI / 2); inst(bar, matCol(0xFFFFFF, {basic:plan, po:-8}), ends, 'Sens interdits (barre)', plan ? 0.12 : 0.076); } }
 }
 /* matériaux des équipements au sol (fonte, grilles, plaques, dalles podotactiles) */
@@ -422,7 +421,7 @@ function buildWalls(grp){
   add(gWall, matCol(0xC9BFAE, {rough:0.95}), 'Murs'); add(gHedge, matCol(0x4C6B33, {rough:1}), 'Haies'); add(gFence, matCol(0x3B4148, {metal:0.4, rough:0.6, opacity:0.75}), 'Clôtures');
 }
 function buildFurniture(grp){
-  const W = WORLD.W; if (DISPLAY.lay.lamps === false) return;
+  const W = WORLD.W;
   const lamps = W.points.filter(p => p.k === 'street_lamp');
   if (lamps.length){
     const pole = new THREE.CylinderGeometry(0.06, 0.09, 6, 6); pole.translate(0, 3, 0); const head = new THREE.BoxGeometry(0.7, 0.14, 0.28); head.translate(0.3, 6, 0);
@@ -494,21 +493,31 @@ function updateLOD(){
   if (!WTILES.length) return;
   const ortho2d = view === '2d', k = ortho2d ? mPerPx() * 900 : 0;   // en vue de dessus : selon l'échelle (m par pixel)
   for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod; if (L === Infinity) continue;
-    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = d < L; }
+    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = !t.userData.off && d < L; }
 }
+/* ============ Calques pré-générés ============
+   Tous les calques du site sont construits pendant le chargement de la zone ; un calque décoché n'est ni dessiné ni
+   mis à jour (aucun coût à l'affichage) ; le cocher l'affiche instantanément, sans reconstruction. (Réseaux et
+   occupation du sol, qui changent la peinture du sol, restent reconstruits à la demande.) */
+const LAYER_RX = [['oneway', /^Sens (uniques|interdits)/], ['marks', /Marquages|Passages|podotact|Regards|Avaloirs|Chambres/], ['sidewalks', /Trottoir|Bordure|Caniveau/],
+  ['bld', /Façades|Toitures|Bâtiments|Fenêtre|Vitrine|Corniche|Soubassement/], ['trees', /Arbres|Troncs/], ['walls', /Mur|Haie|Clôture/], ['lamps', /Lampadaire/]];   // (les feux tricolores restent toujours affichés près des routes barrées)
+const layerOf = name => (LAYER_RX.find(([, rx]) => rx.test(name)) || [''])[0];
+const PRE_LAYERS = new Set(LAYER_RX.map(x => x[0]));
+function applyLayers(){ for (const m of worldGroup.children){ const k = m.userData.layer; m.userData.off = !!(k && DISPLAY.lay[k] === false); if (!m.userData.lod) m.visible = !m.userData.off; } updateLOD(); dirty = true; }
 function buildWorld(){
   disposeGroup(worldGroup); if (!WORLD) { dirty = true; return; }
   const t0 = performance.now();
   paintGround(); buildTerrain(worldGroup);
   if (DISPLAY.style === 'aerial' && !orthoTex) loadOrtho();
   if (DISPLAY.style !== 'aerial') buildRoads(worldGroup); else { const g = new THREE.Group(); buildRoads(g); g.children.forEach(m => { if (m.name === 'Marquages au sol') worldGroup.add(m); else m.geometry.dispose(); }); }
-  if (DISPLAY.lay.bld !== false && !(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
-  if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
-  if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
-  if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
+  if (!(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
+  buildTrees(worldGroup);
+  if (!planLook()) buildWalls(worldGroup);
+  if (!planLook()){ buildFurniture(worldGroup); buildUtilities(worldGroup); }
   if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
-  tileWorld(worldGroup); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
+  for (const m of worldGroup.children) m.userData.layer = layerOf(m.name || '');
+  tileWorld(worldGroup); applyLayers(); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
 }
 TEX_LISTENERS.add(() => { dirty = true; });
