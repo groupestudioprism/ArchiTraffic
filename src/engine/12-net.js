@@ -100,7 +100,7 @@ function closedSets(els){
 function route(fromId, toId, C, opt = {}){
   const S = NET.nodes.get(fromId), T = NET.nodes.get(toId); if (!S || !T) return null;
   const pen = opt.detour ? {1:1, 2:1, 3:1.05, 4:1.15, 5:1.5, 6:3, 7:4, 8:6} : {1:1, 2:1, 3:1, 4:1, 5:1.1, 6:1.4, 7:2, 8:3};
-  const vmax = 30, h = n => V.dist(n.xy, T.xy) / vmax;
+  const vmax = opt.fast ? 11 : 30, h = n => V.dist(n.xy, T.xy) / vmax;   // simulation : heuristique « gloutonne » (itinéraire quasi optimal, 5 à 20× moins de nœuds explorés)
   const g = new Map(), prev = new Map(), open = [[h(S), 0, fromId, -1, -1]];
   const push = it => { open.push(it); let i = open.length - 1; while (i > 0){ const p = (i - 1) >> 1; if (open[p][0] <= open[i][0]) break; [open[p], open[i]] = [open[i], open[p]]; i = p; } };
   const pop = () => { const top = open[0], last = open.pop(); if (open.length){ open[0] = last; let i = 0; for (;;){ const l = 2 * i + 1, r = l + 1; let m = i; if (l < open.length && open[l][0] < open[m][0]) m = l; if (r < open.length && open[r][0] < open[m][0]) m = r; if (m === i) break; [open[m], open[i]] = [open[i], open[m]]; i = m; } } return top; };

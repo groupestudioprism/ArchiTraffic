@@ -44,7 +44,7 @@ function simReroute(){
   if (!SIM.agents.some(a => a.rr)) return; if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); } const C = SIM.cSet;
   for (const a of SIM.agents){ if (!a.rr) continue; if (performance.now() > SIM.budget) return; a.rr = false;
     const e = NET.edges[a.edges[a.ei]]; if (!e) continue; if (C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)){ a.kill = true; continue; }
-    const r = route(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150}); if (!r){ a.kill = true; continue; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }
+    const r = route(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150, fast:true}); if (!r){ a.kill = true; continue; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }
 }
 function simStop(clear){ SIM.on = false; $('#simPlay')?.classList.remove('on'); const b = $('#simPlay'); if (b){ b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>'; b.setAttribute('aria-label', 'Lancer la simulation'); }
   if (clear){ congReset(); SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
@@ -71,9 +71,9 @@ function simSpawn(dt){
       const type = pickType(), T = SIM_TYPES[type];
       const exits = SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80); if (!exits.length) continue;
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
-      let r = SIM.rc.get(key); if (r === undefined){ if (performance.now() > SIM.budget){ SIM.nextSpawn.set(en.id, 0.2); continue; } r = route(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150}) || null; SIM.rc.set(key, r); }
+      let r = SIM.rc.get(key); if (r === undefined){ if (performance.now() > SIM.budget){ SIM.nextSpawn.set(en.id, 0.2); continue; } r = route(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}) || null; SIM.rc.set(key, r); }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
-      let base = SIM.base.get(key); if (base === undefined){ base = route(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150}); SIM.base.set(key, base); }
+      let base = SIM.base.get(key); if (base === undefined){ base = route(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}); SIM.base.set(key, base); }
       const col = new THREE.Color(T.mix === 'bus' ? 0xF2F4F6 : T.pl && Math.random() < 0.5 ? 0xE9ECEF : BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)]);
       const v0 = Math.min(NET.edges[r.edges[0]].sp, 14);
       SIM.agents.push({id:++SIM.seq, type, len:T.len, pl:!!T.pl, edges:r.edges.slice(), ei:0, s:0, v:v0 * 0.7, from:en.id, dest, col, t0:SIM.t, free:r.time, dev:!!base && r.len > base.len + 5, wait:0});

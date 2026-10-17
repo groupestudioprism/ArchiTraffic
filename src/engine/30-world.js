@@ -479,7 +479,12 @@ function tileWorld(grp){
 /* niveaux de détail : appelé avant chaque rendu ; masque les tuiles de détail trop loin de la caméra */
 const _lc = new THREE.Vector3();
 function updateLOD(){
-  if (!WTILES.length) return; const c = cam(); if (!c) return; _lc.copy(c.position);
+  const c = cam(); if (!c) return; _lc.copy(c.position);
+  /* objets du chantier (panneaux, barrières, cônes…) : au-delà de ~450 m ils ne font que quelques pixels et la bulle
+     les remplace ; on ne les dessine plus (des centaines d'objets = des milliers d'appels de dessin) */
+  { const far2d = view === '2d' && mPerPx() > 1.2, R2 = 450 * 450;
+    for (const o of projCache.values()){ if (!o.small) continue; const v = o.base && !far2d && (view === '2d' || (o.x - _lc.x) ** 2 + (o.y + _lc.z) ** 2 < R2); if (o.grp.visible !== v) o.grp.visible = v; } }
+  if (!WTILES.length) return;
   const ortho2d = view === '2d', k = ortho2d ? mPerPx() * 900 : 0;   // en vue de dessus : selon l'échelle (m par pixel)
   for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod; if (L === Infinity) continue;
     const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = d < L; }

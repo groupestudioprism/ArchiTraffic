@@ -227,7 +227,7 @@ function rebuildProj(){
   for (const e of state?.els || []){
     const sig = elSig(e); let c = projCache.get(e.id);
     if (!c || c.sig !== sig){ if (c){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); } let grp; try { grp = buildEl(e); } catch(err){ console.warn('élément', e, err); grp = new THREE.Group(); } c = {sig, grp}; projCache.set(e.id, c); projGroup.add(grp); }
-    c.grp.visible = !e.hidden && !phOff(e);
+    c.base = !e.hidden && !phOff(e); c.grp.visible = c.base; c.small = e.t === 'obj'; c.x = e.x; c.y = e.y;
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
