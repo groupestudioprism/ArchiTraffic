@@ -136,4 +136,4 @@ const tmpV = new THREE.Vector3();
 let vpW = 0, vpH = 0; const vpSize = () => { if (!vpW){ vpW = vpEl.clientWidth; vpH = vpEl.clientHeight; } };
 function toScreen(v){ vpSize(); tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpW, (1 - tmpV.y) / 2 * vpH, tmpV.z]; }
 /* mètres par pixel (pour régler la taille des symboles en plan) */
-function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpEl.clientHeight || 600); }
+function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); vpSize(); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpH || 600); }

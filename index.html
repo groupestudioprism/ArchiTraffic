@@ -1019,7 +1019,8 @@ a.ap-link{text-decoration:none}
 .anno.pin{padding:4px;border:0;border-radius:10px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,calc(-100% - 7px));line-height:0;pointer-events:auto;cursor:pointer;}
 .anno.pin::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:#fff;transform:translateX(-50%) rotate(45deg);box-shadow:2px 2px 3px rgba(0,0,0,.15);z-index:-1}
 .anno.pin img{width:calc(50px * var(--pin-sz, 1));height:calc(50px * var(--pin-sz, 1));object-fit:contain;display:block}.anno.pin.eq{border-radius:50%;padding:4px}.anno.pin.eq img{width:46px;height:46px;border-radius:50%;background:#F4F6FA}
-.anno{transition:opacity .25s ease,scale .25s ease}.anno.off{opacity:0;scale:.55;visibility:hidden;pointer-events:none!important;transition:opacity .25s ease,scale .25s ease,visibility 0s linear .25s}
+.anno{transition:opacity .25s ease,scale .25s ease}.anno:not(.off){animation:annoIn .25s ease}@keyframes annoIn{from{opacity:0;scale:.55}}
+.anno.off{opacity:0;scale:.55;visibility:hidden;pointer-events:none!important;transition:opacity .25s ease,scale .25s ease,visibility 0s linear .25s}
 .anno.pin:hover{transform:translate(-50%,calc(-100% - 7px)) scale(1.35);z-index:5}
 @keyframes pinIn{from{opacity:0;transform:translate(-50%,calc(-100% - 2px)) scale(.6)}}
 :root[data-theme="dark"] .anno.pin,:root[data-theme="dark"] .anno.pin::after{background:#263044}
@@ -3635,7 +3636,7 @@ const tmpV = new THREE.Vector3();
 let vpW = 0, vpH = 0; const vpSize = () => { if (!vpW){ vpW = vpEl.clientWidth; vpH = vpEl.clientHeight; } };
 function toScreen(v){ vpSize(); tmpV.copy(v).project(cam()); return [(tmpV.x + 1) / 2 * vpW, (1 - tmpV.y) / 2 * vpH, tmpV.z]; }
 /* mètres par pixel (pour régler la taille des symboles en plan) */
-function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpEl.clientHeight || 600); }
+function mPerPx(){ if (view === '2d') return 1 / ortho.zoom; const d = persp.position.distanceTo(c3.target); vpSize(); return 2 * d * Math.tan(persp.fov * Math.PI / 360) / (vpH || 600); }
 
 /* ==== 21-tex.js ==== */
 /* ============ Textures ============
@@ -4244,7 +4245,7 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    graphique dessinait toute la ville à chaque image (et une 2e fois pour les ombres), même hors champ. On découpe les
    gros maillages en tuiles de 400 m (la caméra ne dessine que les tuiles visibles) et on masque les petits détails
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
-const TILE = 400; let WTILES = [];
+const TILE = 800; let WTILES = [];
 const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : Infinity;
 function tileWorld(grp){
   WTILES = [];
@@ -4252,7 +4253,7 @@ function tileWorld(grp){
     if (!m.isMesh || m.userData.terrain || m.userData.noTile) continue;
     const lod = lodOf(m.name || '');
     if (m.isInstancedMesh){
-      if (m.count < 400){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
+      if (m.count < 1500){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
       const buckets = new Map(), M = new THREE.Matrix4(), P = new THREE.Vector3(), C = new THREE.Color();
       for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = Math.floor(P.x / TILE) + ',' + Math.floor(P.z / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
       if (buckets.size < 2) continue;
@@ -4261,7 +4262,7 @@ function tileWorld(grp){
         t.computeBoundingSphere(); t.userData.lod = lod; grp.add(t); WTILES.push(t); }
       grp.remove(m); continue;   // la géométrie est partagée par les tuiles : on ne la libère pas
     }
-    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 30000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
+    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
     const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
     for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
     if (buckets.size < 2) continue;
@@ -6565,12 +6566,13 @@ function updateLabels(){
   if (k !== annoKey){ annoKey = k; buildAnnos(); }
   vpSize(); const W = vpW, Hh = vpH, far = view !== '2d' && persp.position.distanceTo(c3.target) > 700, mpp = mPerPx();
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
-  const occ = new Set(), pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri);
-  for (const a of pins){ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  if (annos._pk !== annoKey){ annos._pk = annoKey; annos._pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri); }
+  const occ = new Set(), pins = annos._pins; let npin = 0; const MAXPIN = GFX().cap < 200 ? 80 : 150;
+  for (const a of pins){ if (npin >= MAXPIN){ a.show = false; continue; } const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
-    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; a.sx = A[0]; a.sy = A[1]; }
+    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
-  const show = (a, v) => { if (a.vis !== v){ a.vis = v; a.d.hidden = false; a.d.classList.toggle('off', !v); } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
+  const show = (a, v) => { if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show) place(a, a.sx, a.sy); continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }

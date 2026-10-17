@@ -446,7 +446,7 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    graphique dessinait toute la ville à chaque image (et une 2e fois pour les ombres), même hors champ. On découpe les
    gros maillages en tuiles de 400 m (la caméra ne dessine que les tuiles visibles) et on masque les petits détails
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
-const TILE = 400; let WTILES = [];
+const TILE = 800; let WTILES = [];
 const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : Infinity;
 function tileWorld(grp){
   WTILES = [];
@@ -454,7 +454,7 @@ function tileWorld(grp){
     if (!m.isMesh || m.userData.terrain || m.userData.noTile) continue;
     const lod = lodOf(m.name || '');
     if (m.isInstancedMesh){
-      if (m.count < 400){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
+      if (m.count < 1500){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
       const buckets = new Map(), M = new THREE.Matrix4(), P = new THREE.Vector3(), C = new THREE.Color();
       for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = Math.floor(P.x / TILE) + ',' + Math.floor(P.z / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
       if (buckets.size < 2) continue;
@@ -463,7 +463,7 @@ function tileWorld(grp){
         t.computeBoundingSphere(); t.userData.lod = lod; grp.add(t); WTILES.push(t); }
       grp.remove(m); continue;   // la géométrie est partagée par les tuiles : on ne la libère pas
     }
-    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 30000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
+    const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
     const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
     for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
     if (buckets.size < 2) continue;
