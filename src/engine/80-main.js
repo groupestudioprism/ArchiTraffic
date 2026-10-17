@@ -44,7 +44,7 @@ function keepInSite(){
   if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
 }
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
-const DYN = {pr:PR_FULL, ema:16, last:0};
+const DYN = {pr:PR_FULL, ema:16, last:0, sh:0};
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
   requestAnimationFrame(loop);
@@ -62,7 +62,7 @@ function loop(now){
   else { DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
-  if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
+  if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.shadowMap.autoUpdate = false; if (!busy || (++DYN.sh % 3) === 0) renderer.shadowMap.needsUpdate = true; /* ombres recalculées 1 image sur 3 en mouvement : c'est un 2e dessin complet de la scène */ renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
     if (moved){ frameMs = frameMs * 0.8 + (performance.now() - t) * 0.2; if (frameMs > 22 && prLow > 0.6) prLow = Math.max(0.6, prLow - 0.1); else if (frameMs < 9 && prLow < Math.min(PR_FULL, GFX().prLow)) prLow = Math.min(PR_FULL, prLow + 0.05); } }
   if (P){ PERF.n++; PERF.sim += t1 - t0; PERF.sig += t2 - t1; PERF.rnd += t3 - t2; PERF.lab += t4 - t3; PERF.tot += t4 - t0; if (PERF.last) PERF.worst = Math.max(PERF.worst, now - PERF.last); PERF.last = now; }
 }
