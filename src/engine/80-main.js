@@ -44,7 +44,8 @@ function keepInSite(){
   if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
 }
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
-const DYN = {pr:PR_FULL, ema:16, last:0, sh:0};
+const DYN = {pr:PR_FULL, ema:16, last:0, sh:0}, LBL = {fast:false, t:0, el:document.getElementById('labels')};
+for (const c of [c2, c3]) c.addEventListener('change', () => { LBL.t = performance.now(); });   // zoom molette, glisser, rotation
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
   requestAnimationFrame(loop);
@@ -59,7 +60,8 @@ function loop(now){
   if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
     const tgt = 1000 / GFX().fps; if (DYN.ema > tgt * 1.12 && DYN.pr > 0.7) DYN.pr = Math.max(0.7, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
     if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.7)) : DYN.pr) * 20) / 20); }
-  else { DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
+  { const mv = now - Math.max(lastMove, LBL.t) < 300; if (mv !== LBL.fast){ LBL.fast = mv; LBL.el?.classList.toggle('fast', mv); } }
+  if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
   if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.shadowMap.autoUpdate = false; if (!busy || (++DYN.sh % 3) === 0) renderer.shadowMap.needsUpdate = true; /* ombres recalculées 1 image sur 3 en mouvement : c'est un 2e dessin complet de la scène */ renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;

@@ -962,7 +962,7 @@ a.ap-link{text-decoration:none}
 :root[data-theme="dark"] .ap-warnbox{background:#2A2114;border-color:#5A4321;color:#F0CF9C}
 
 /* annotations à l'écran (texte des notes) */
-.anno{position:absolute;left:0;top:0;will-change:translate;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
+.anno{position:absolute;left:0;top:0;transform:translate(-50%,-50%);pointer-events:none;font:600 13px var(--f-body);color:#111;background:#FFFFFFE8;border:1.5px solid currentColor;border-radius:7px;padding:3px 8px;white-space:pre;box-shadow:0 2px 6px rgb(0 0 0 / .15)}
 .anno.big{font-size:16px}
 .anno.dimtxt{border:0;color:#fff;font:700 12.5px var(--f-mono);padding:3px 8px;border-radius:7px;white-space:pre;text-align:center;line-height:1.25;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .anno.street{border:0;background:rgba(255,255,255,.86);box-shadow:0 0 0 1px rgba(0,0,0,.06);font:600 10.5px var(--f-body);color:#2B3445;text-shadow:none;letter-spacing:.02em;padding:1px 6px;border-radius:7px}
@@ -1060,6 +1060,9 @@ html.gfx-eco *{backdrop-filter:none!important;-webkit-backdrop-filter:none!impor
 html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px rgba(0,0,0,.18)}
 
 .legend-box h4{touch-action:none}.legend-box{overscroll-behavior:contain}
+
+/* caméra en mouvement : pas de fondu ni d'animation sur les centaines d'étiquettes (sinon le navigateur recalcule styles et calques à chaque image) */
+#labels.fast .anno{transition:none!important;animation:none!important}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -6622,12 +6625,15 @@ function updateLabels(){
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
-  const show = (a, v) => { if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
+  /* caméra en mouvement rapide : on ne fait ni apparaître ni disparaître d'étiquette (chaque bascule oblige le navigateur à
+     recalculer styles et mise en page ; des centaines par image = saccades). Les bascules se font dès que la vue se pose. */
+  const frz = typeof LBL !== 'undefined' && LBL.fast;
+  const show = (a, v) => { if (frz && a.vis !== undefined) return; if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
-    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!vis) continue;
+    const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!(frz ? a.vis : vis)) continue;
     place(a, x, y);
     if (a.street){ let tr = 'translate(-50%,-50%)'; if (view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; tr += ` rotate(${ang.toFixed(1)}deg)`; } if (a.tr !== tr){ a.tr = tr; a.d.style.transform = tr; } }
   }
@@ -7217,7 +7223,8 @@ function keepInSite(){
   if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
 }
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
-const DYN = {pr:PR_FULL, ema:16, last:0, sh:0};
+const DYN = {pr:PR_FULL, ema:16, last:0, sh:0}, LBL = {fast:false, t:0, el:document.getElementById('labels')};
+for (const c of [c2, c3]) c.addEventListener('change', () => { LBL.t = performance.now(); });   // zoom molette, glisser, rotation
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
   requestAnimationFrame(loop);
@@ -7232,7 +7239,8 @@ function loop(now){
   if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
     const tgt = 1000 / GFX().fps; if (DYN.ema > tgt * 1.12 && DYN.pr > 0.7) DYN.pr = Math.max(0.7, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
     if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.7)) : DYN.pr) * 20) / 20); }
-  else { DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
+  { const mv = now - Math.max(lastMove, LBL.t) < 300; if (mv !== LBL.fast){ LBL.fast = mv; LBL.el?.classList.toggle('fast', mv); } }
+  if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
   if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.shadowMap.autoUpdate = false; if (!busy || (++DYN.sh % 3) === 0) renderer.shadowMap.needsUpdate = true; /* ombres recalculées 1 image sur 3 en mouvement : c'est un 2e dessin complet de la scène */ renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
