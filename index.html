@@ -3779,12 +3779,19 @@ function tex(name){ // texture courante (procédurale, puis photo dès qu'elle e
   if (texOpts.photo && PH[name]) loadPhoto(name);
   return t;
 }
-const PHOTO = {};
+const PHOTO = {}, PHOTO_WAIT = [];
+/* toutes les photos de matériaux sont demandées dès l'ouverture de l'app ; le chargement d'une zone les attend
+   (au plus quelques secondes) avant d'afficher la 3D : on ne voit jamais une texture « provisoire » être remplacée */
+function preloadPhotos(maxMs = 6000){ if (!texOpts.photo) return Promise.resolve(); for (const n of Object.keys(PH)) tex(n);
+  const done = () => Object.keys(PH).every(n => PHOTO[n] === 'ok' || PHOTO[n] === 'err');
+  return new Promise(res => { if (done()) return res(); const t0 = setTimeout(res, maxMs); const chk = () => { if (done()){ clearTimeout(t0); res(); } else PHOTO_WAIT.push(chk); }; PHOTO_WAIT.push(chk); }); }
 function loadPhoto(name){
   if (PHOTO[name]) return; PHOTO[name] = 'loading';
   const P = PH[name], img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
-  img.onload = () => { const t = TEX[name]; if (!t) return; t.image = img; t.userData.photo = true; t.needsUpdate = true; PHOTO[name] = 'ok'; TEX_LISTENERS.forEach(f => f(name)); };
-  img.onerror = () => { PHOTO[name] = 'err'; };
+  const fin = st => { PHOTO[name] = st; for (const f of PHOTO_WAIT.splice(0)) f(); };
+  img.onload = async () => { try { await img.decode(); } catch(e){}   /* décodage hors du fil principal : pas d'à-coup à l'affichage */
+    const t = TEX[name]; if (!t) return fin('ok'); t.image = img; t.userData.photo = true; t.needsUpdate = true; try { renderer.initTexture(t); } catch(e){} fin('ok'); TEX_LISTENERS.forEach(f => f(name)); };
+  img.onerror = () => fin('err');
   img.src = `${PH_BASE}${P.id}/${P.id}_diff_1k.jpg`;
 }
 const REP = {granite:[2, 2], gutter:[1.2, 0.3], roofFlat:[4, 4]};
@@ -3873,7 +3880,7 @@ function bandGB(gb, pts, o0, o1, dz0, dz1 = dz0, flipV = false){
   /* bandes larges (chaussées) : une rangée de points tous les 4 m en travers, chacun posé sur le sol affiché */
   const w = Math.abs(o1 - o0), K = far ? 1 : Math.max(1, Math.ceil(w / 4)), rows = [];
   for (let k = 0; k <= K; k++){ const t = k / K, o = o0 + (o1 - o0) * t, L = plOffset(p, o), dz = dz0 + (dz1 - dz0) * t, v = flipV ? w * (1 - t) : w * t;
-    rows.push({v, P:L.map(q => P3(q[0], q[1], H(q[0], q[1]) + dz))}); }
+    rows.push({v, P:L.map(q => P3(q[0], q[1], H(q[0], q[1]) + dz + (far ? 0.12 : 0)))}); }   // maillage allégé : léger rehaussement pour ne jamais passer sous le relief entre deux points
   let s = 0;
   for (let i = 0; i + 1 < p.length; i++){
     const ds = V.dist(p[i], p[i + 1]);
@@ -3996,7 +4003,7 @@ function buildRoads(grp){
     bandGB(/sett|cobblestone|unhewn/.test(r.surface) ? gSett : /paving_stones|paving/.test(r.surface) ? gPaveRoad : /concrete/.test(r.surface) ? gConcRoad : gRoad, r.pts, -r.w / 2, r.w / 2, 0.05);   // revêtement OSM → texture de l'app
     if (plan){ bandGB(gEdgePlan, r.pts, r.w / 2, r.w / 2 + 0.35, 0.045); bandGB(gEdgePlan, r.pts, -r.w / 2 - 0.35, -r.w / 2, 0.045); }
     // marquages : axe discontinu (double sens), lignes de rive (routes principales)
-    if (!plan && DISPLAY.lay.marks !== false && r.drive && !r.round && r.cls <= 6 && r.w >= 5){
+    if (!plan && r.drive && !r.round && r.cls <= 6 && r.w >= 5){
       const L = plLen(r.pts), t0 = trimAt(r, false) + 6, t1 = L - trimAt(r, true) - 6;
       if (t1 - t0 > 4){
         const p = plSlice(r.pts, t0, t1);
@@ -4005,7 +4012,7 @@ function buildRoads(grp){
       }
     }
     // trottoirs : caniveau 2 rangs de pavés granit, bordure granit, trottoir (en ville seulement)
-    const sw = String(r.sidewalk || ''); if (DISPLAY.lay.sidewalks === false || sw === 'no' || sw === 'none' || sw === 'separate' || r.cls > 6 || r.round || r.hw === 'living_street') continue;
+    const sw = String(r.sidewalk || ''); if (sw === 'no' || sw === 'none' || sw === 'separate' || r.cls > 6 || r.round || r.hw === 'living_street') continue;
     const mid = plAt(r.pts, plLen(r.pts) / 2).pt; if (!sw && urb(mid[0], mid[1]) < 3) continue;
     const L = plLen(r.pts), t0 = trimAt(r, false) + 1.2, t1 = L - trimAt(r, true) - 1.2; if (t1 - t0 < 3) continue;
     const p = plSlice(r.pts, t0, t1), swW = r.cls <= 3 ? 2.6 : r.cls <= 4 ? 2 : 1.6, e = r.w / 2, Lp = plLen(p);
@@ -4035,7 +4042,7 @@ function buildRoads(grp){
   // carrefours : disques de chaussée (comblent les jonctions)
   for (const [id, n] of NET.nodes){ if (nodeDeg(n) < 3) continue; const r = junctionRadius(id); if (r > 0) discGB(gRoad, n.xy, r * 1.02, 0.049, 20); }
   // passages piétons
-  if (!plan && DISPLAY.lay.marks !== false) for (const pt of W.points) if (pt.k === 'crossing'){
+  if (!plan) for (const pt of W.points) if (pt.k === 'crossing'){
     const nr = nearestRoad([pt.x, pt.y], 6); if (!nr || nr.r.foot) continue; const d = nr.dir, n = V.perp(d), w = nr.r.w - 0.6;
     for (let s = -w / 2 + 0.25; s < w / 2 - 0.25; s += 1){ const c = V.add(nr.pt, V.mul(n, s)); bandGB(gMark, [V.add(c, V.mul(d, -1.25)), V.add(c, V.mul(d, 1.25))], -0.25, 0.25, 0.075); }
   }
@@ -4052,7 +4059,7 @@ function buildRoads(grp){
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3)); const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x7E8690})); ls.name = 'Bords de chaussée'; grp.add(ls); }
   add(gMark, M.mark, 'Marquages au sol');
   buildOneways(grp, plan);
-  if (!plan && deco.length && DISPLAY.lay.marks !== false){ // regards, avaloirs, chambres télécom, bandes podotactiles
+  if (!plan && deco.length){ // regards, avaloirs, chambres télécom, bandes podotactiles
     const D = {regard:[0.66, 0.66, 'round'], avaloir:[0.75, 0.32, 'grid'], telecom:[1.0, 0.5, 'plate'], podo:[1.2, 0.42, 'podo']};
     for (const [k, [lx, lz, kind]] of Object.entries(D)){ const list = deco.filter(d => d.k === k); if (!list.length) continue;
       const geo = kind === 'round' ? new THREE.CylinderGeometry(lx / 2, lx / 2, 0.02, 24) : new THREE.BoxGeometry(lx, 0.02, lz), im = new THREE.InstancedMesh(geo, streetDecalMat(kind), list.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
@@ -4067,7 +4074,6 @@ function buildRoads(grp){
 /* sens de circulation : flèches de sens unique le long des voies, disque « sens interdit » à la sortie de chaque sens unique */
 let ARROW_GEO = null, NOENTRY_GEO = null;
 function buildOneways(grp, plan){
-  if (DISPLAY.lay.oneway === false || (DISPLAY.lay.marks === false && !plan)) return;
   if (!ARROW_GEO){ const sh = new THREE.Shape([[-1.6, -0.22], [0.4, -0.22], [0.4, -0.55], [1.6, 0], [0.4, 0.55], [0.4, 0.22], [-1.6, 0.22]].map(q => new THREE.Vector2(q[0], q[1]))); ARROW_GEO = new THREE.ShapeGeometry(sh); ARROW_GEO.rotateX(-Math.PI / 2); }
   if (!NOENTRY_GEO){ NOENTRY_GEO = new THREE.CircleGeometry(0.9, 24); NOENTRY_GEO.rotateX(-Math.PI / 2); }
   const arrows = [], ends = [];
@@ -4078,7 +4084,7 @@ function buildOneways(grp, plan){
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   const inst = (geo, mat, list, name, z) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((d, i) => { m4.compose(new THREE.Vector3(d.x, H(d.x, d.y) + z, -d.y), q.setFromAxisAngle(up, d.a), new THREE.Vector3(d.s, 1, d.s)); im.setMatrixAt(i, m4); }); im.name = name; im.renderOrder = 3; grp.add(im); return im; };
   inst(ARROW_GEO, plan ? matCol(0x1565C0, {basic:true, po:-6}) : matCol(0xF4F4F0, {rough:0.6, po:-6}), arrows, 'Sens uniques', plan ? 0.1 : 0.072);
-  if (plan || DISPLAY.lay.marks !== false){ const im = inst(NOENTRY_GEO, matCol(0xC1121F, {basic:plan, po:-7}), ends, 'Sens interdits', plan ? 0.11 : 0.074);
+  { const im = inst(NOENTRY_GEO, matCol(0xC1121F, {basic:plan, po:-7}), ends, 'Sens interdits', plan ? 0.11 : 0.074);
     if (im){ const bar = new THREE.PlaneGeometry(1.2, 0.3); bar.rotateX(-Math.PI / 2); inst(bar, matCol(0xFFFFFF, {basic:plan, po:-8}), ends, 'Sens interdits (barre)', plan ? 0.12 : 0.076); } }
 }
 /* matériaux des équipements au sol (fonte, grilles, plaques, dalles podotactiles) */
@@ -4227,7 +4233,7 @@ function buildWalls(grp){
   add(gWall, matCol(0xC9BFAE, {rough:0.95}), 'Murs'); add(gHedge, matCol(0x4C6B33, {rough:1}), 'Haies'); add(gFence, matCol(0x3B4148, {metal:0.4, rough:0.6, opacity:0.75}), 'Clôtures');
 }
 function buildFurniture(grp){
-  const W = WORLD.W; if (DISPLAY.lay.lamps === false) return;
+  const W = WORLD.W;
   const lamps = W.points.filter(p => p.k === 'street_lamp');
   if (lamps.length){
     const pole = new THREE.CylinderGeometry(0.06, 0.09, 6, 6); pole.translate(0, 3, 0); const head = new THREE.BoxGeometry(0.7, 0.14, 0.28); head.translate(0.3, 6, 0);
@@ -4255,6 +4261,29 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
 const TILE = 800; let WTILES = [];
 const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : /^Façades$/.test(name) ? 5500 : Infinity;   // façades : au-delà de 5,5 km, quelques pixels
+/* géométrie indexée : les triangles voisins (les 2 triangles d'un quadrilatère, les bandes de route…) partagent leurs
+   sommets au lieu de les répéter → 30 à 50 % de sommets en moins à transformer par la carte graphique. Recherche du
+   sommet identique parmi les 16 derniers créés (suffit pour les quadrilatères et les bandes, en temps linéaire). Les
+   coordonnées de texture sont supprimées quand le matériau n'a pas de texture (plus de sommets fusionnables). */
+const matHasMap = m => Array.isArray(m) ? m.some(x => x.map) : !!m?.map;
+function indexGeo(P, N, U){
+  const n = P.length / 3, idx = new (n > 65535 ? Uint32Array : Uint16Array)(n), oP = new Float32Array(P.length), oN = N ? new Float32Array(N.length) : null, oU = U ? new Float32Array(U.length) : null, W = 16;
+  let k = 0;
+  for (let i = 0; i < n; i++){
+    let hit = -1;
+    for (let j = k - 1, lim = Math.max(0, k - W); j >= lim; j--){
+      if (oP[j * 3] !== P[i * 3] || oP[j * 3 + 1] !== P[i * 3 + 1] || oP[j * 3 + 2] !== P[i * 3 + 2]) continue;
+      if (N && oN[j * 3] * N[i * 3] + oN[j * 3 + 1] * N[i * 3 + 1] + oN[j * 3 + 2] * N[i * 3 + 2] < 0.97) continue;   // arêtes vives conservées (angle > 14°)
+      if (U && (oU[j * 2] !== U[i * 2] || oU[j * 2 + 1] !== U[i * 2 + 1])) continue;
+      hit = j; break;
+    }
+    if (hit < 0){ hit = k++; oP[hit * 3] = P[i * 3]; oP[hit * 3 + 1] = P[i * 3 + 1]; oP[hit * 3 + 2] = P[i * 3 + 2];
+      if (N){ oN[hit * 3] = N[i * 3]; oN[hit * 3 + 1] = N[i * 3 + 1]; oN[hit * 3 + 2] = N[i * 3 + 2]; } if (U){ oU[hit * 2] = U[i * 2]; oU[hit * 2 + 1] = U[i * 2 + 1]; } }
+    idx[i] = hit;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(oP.slice(0, k * 3), 3)); if (N) g.setAttribute('normal', new THREE.BufferAttribute(oN.slice(0, k * 3), 3)); if (U) g.setAttribute('uv', new THREE.BufferAttribute(oU.slice(0, k * 2), 2));
+  g.setIndex(new THREE.BufferAttribute(k > 65535 ? idx : (idx instanceof Uint16Array ? idx : new Uint16Array(idx)), 1)); return g;
+}
 function tileWorld(grp){
   WTILES = [];
   for (const m of [...grp.children]){
@@ -4270,6 +4299,7 @@ function tileWorld(grp){
         t.computeBoundingSphere(); t.userData.lod = lod; grp.add(t); WTILES.push(t); }
       grp.remove(m); continue;   // la géométrie est partagée par les tuiles : on ne la libère pas
     }
+    if (!m.geometry.index && m.geometry.attributes.position.count >= 6 && !m.isInstancedMesh){ const g0 = m.geometry, A0 = g0.attributes; if (A0.position.count < 120000){ const gi = indexGeo(A0.position.array, A0.normal?.array, matHasMap(m.material) ? A0.uv?.array : null); gi.computeVertexNormals(); m.geometry = gi; g0.dispose(); } }
     const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
     const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
     for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
@@ -4277,7 +4307,7 @@ function tileWorld(grp){
     for (const [, tris] of buckets){
       const n = tris.length * 3, gp = new Float32Array(n * 3), gn = nor ? new Float32Array(n * 3) : null, gu = uv ? new Float32Array(n * 2) : null; let o = 0;
       for (const t of tris) for (let v = 0; v < 3; v++, o++){ const i = t + v; gp.set(A.subarray(i * 3, i * 3 + 3), o * 3); if (gn) gn.set(nor.array.subarray(i * 3, i * 3 + 3), o * 3); if (gu) gu.set(uv.array.subarray(i * 2, i * 2 + 2), o * 2); }
-      const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(gp, 3)); if (gn) tg.setAttribute('normal', new THREE.BufferAttribute(gn, 3)); if (gu) tg.setAttribute('uv', new THREE.BufferAttribute(gu, 2)); tg.computeBoundingSphere();
+      const tg = indexGeo(gp, gn, matHasMap(m.material) ? gu : null); tg.computeVertexNormals(); tg.computeBoundingSphere();
       const tm = new THREE.Mesh(tg, m.material); tm.name = m.name; tm.castShadow = m.castShadow; tm.receiveShadow = m.receiveShadow; tm.renderOrder = m.renderOrder; tm.userData = {...m.userData, lod}; grp.add(tm); WTILES.push(tm);
     }
     grp.remove(m); g.dispose();
@@ -4299,21 +4329,31 @@ function updateLOD(){
   if (!WTILES.length) return;
   const ortho2d = view === '2d', k = ortho2d ? mPerPx() * 900 : 0;   // en vue de dessus : selon l'échelle (m par pixel)
   for (const t of WTILES){ const sp = t.isInstancedMesh ? t.boundingSphere : t.geometry.boundingSphere; if (!sp) continue; const L = t.userData.lod; if (L === Infinity) continue;
-    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = d < L; }
+    const d = ortho2d ? k : _lc.distanceTo(sp.center) - sp.radius; t.visible = !t.userData.off && d < L; }
 }
+/* ============ Calques pré-générés ============
+   Tous les calques du site sont construits pendant le chargement de la zone (un peu plus long) ; les cocher / décocher
+   ne fait plus qu'afficher ou masquer des maillages déjà prêts, instantanément. (Réseaux et occupation du sol, qui
+   changent la peinture du sol ou demandent des calculs à part, restent reconstruits à la demande.) */
+const LAYER_RX = [['oneway', /^Sens (uniques|interdits)/], ['marks', /Marquages|Passages|podotact|Regards|Avaloirs|Chambres/], ['sidewalks', /Trottoir|Bordure|Caniveau/],
+  ['bld', /Façades|Toitures|Bâtiments|Fenêtre|Vitrine|Corniche|Soubassement/], ['trees', /Arbres|Troncs/], ['walls', /Mur|Haie|Clôture/], ['lamps', /Lampadaire|Feux/]];
+const layerOf = name => (LAYER_RX.find(([, rx]) => rx.test(name)) || [''])[0];
+const PRE_LAYERS = new Set(LAYER_RX.map(x => x[0]));
+function applyLayers(){ for (const m of worldGroup.children){ const k = m.userData.layer; m.userData.off = !!(k && DISPLAY.lay[k] === false); if (!m.userData.lod && !m.userData.lodMin) m.visible = !m.userData.off; } updateLOD(); dirty = true; }
 function buildWorld(){
   disposeGroup(worldGroup); if (!WORLD) { dirty = true; return; }
   const t0 = performance.now();
   paintGround(); buildTerrain(worldGroup);
   if (DISPLAY.style === 'aerial' && !orthoTex) loadOrtho();
   if (DISPLAY.style !== 'aerial') buildRoads(worldGroup); else { const g = new THREE.Group(); buildRoads(g); g.children.forEach(m => { if (m.name === 'Marquages au sol') worldGroup.add(m); else m.geometry.dispose(); }); }
-  if (DISPLAY.lay.bld !== false && !(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
-  if (DISPLAY.lay.trees !== false) buildTrees(worldGroup);
-  if (DISPLAY.lay.walls !== false && !planLook()) buildWalls(worldGroup);
-  if (!planLook()){ buildFurniture(worldGroup); if (DISPLAY.lay.lamps !== false) buildUtilities(worldGroup); }
+  if (!(planLook() && view === '2d')) buildBuildings(worldGroup);   // en plan : emprises dessinées au sol
+  buildTrees(worldGroup);
+  if (!planLook()) buildWalls(worldGroup);
+  if (!planLook()){ buildFurniture(worldGroup); buildUtilities(worldGroup); }
   if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
-  tileWorld(worldGroup); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
+  for (const m of worldGroup.children) m.userData.layer = layerOf(m.name || '');
+  tileWorld(worldGroup); applyLayers(); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);
   dirty = true;
 }
 TEX_LISTENERS.add(() => { dirty = true; });
@@ -4481,8 +4521,20 @@ function sigCtl(n){ if (n._ctl) return n._ctl; let best = n, bd = nodeDeg(n) >= 
     const gx = Math.floor(n.xy[0] / 50), gy = Math.floor(n.xy[1] / 50);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of NET._jg.get((gx + i) + ',' + (gy + j)) || []){ const d = Math.hypot(m.xy[0] - n.xy[0], m.xy[1] - n.xy[1]); if (d < bd){ bd = d; best = m; } } }
   return n._ctl = best; }
-function sigAxis(n0, d){ const n = sigCtl(n0); let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
-  return Math.abs(d[0] * r[0] + d[1] * r[1]) >= Math.SQRT1_2 ? 0 : 1; }
+/* axe d'une approche : les directions des approches d'un carrefour sont regroupées en deux axes par leur ANGLE DE ROUTE
+   (sens ignoré : deux approches face à face ou dans le prolongement l'une de l'autre sont toujours sur le même axe,
+   donc toujours de la même couleur, comme dans la réalité) ; regroupement par 2 moyennes sur les angles doublés. */
+const dblAng = d => Math.atan2(2 * d[0] * d[1], d[0] * d[0] - d[1] * d[1]);   // angle doublé : d et -d donnent la même valeur
+const angGap = (a, b) => { let x = Math.abs(a - b) % (2 * Math.PI); return x > Math.PI ? 2 * Math.PI - x : x; };
+function sigAxis(n0, d){ const n = sigCtl(n0); const g = n._ax; if (!g) return 0; const a = dblAng(d); return angGap(a, g[0]) <= angGap(a, g[1]) ? 0 : 1; }
+function sigCluster(c, dirs){
+  const A = dirs.map(dblAng); let i0 = 0, i1 = 0, best = -1;
+  for (let i = 0; i < A.length; i++) for (let j = i + 1; j < A.length; j++){ const g = angGap(A[i], A[j]); if (g > best){ best = g; i0 = i; i1 = j; } }
+  if (best < 0.7){ c._ax = [A[0], A[0] + Math.PI]; c._one = true; return; }   // toutes les approches sur une même route (< 20°)
+  let g0 = A[i0], g1 = A[i1];
+  for (let it = 0; it < 6; it++){ let s0 = [0, 0], s1 = [0, 0]; for (const a of A){ const t = angGap(a, g0) <= angGap(a, g1) ? s0 : s1; t[0] += Math.cos(a); t[1] += Math.sin(a); }
+    if (s0[0] || s0[1]) g0 = Math.atan2(s0[1], s0[0]); if (s1[0] || s1[1]) g1 = Math.atan2(s1[1], s1[0]); }
+  c._ax = [g0, g1]; c._one = false; }
 /* coordination : les feux à moins de 300 m les uns des autres (OSM ou posés à la main) forment un ensemble ;
    chaque feu est décalé du feu pilote selon la distance (onde verte à 40 km/h) au lieu d'un décalage aléatoire */
 function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return o;
@@ -4507,14 +4559,13 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; } NET._jg = null;
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; n._ax = null; } NET._jg = null;
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
     const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); heads.push({n, d, p, a:Math.atan2(-d[1], -d[0])}); }
   // référence d'axe = première approche ÉQUIPÉE de feux du carrefour ; si toutes les approches équipées sont sur le même axe → cycle « un seul axe »
-  for (const h of heads){ const c = sigCtl(h.n); if (!c._sref) c._sref = h.d; c._one = true; }
-  for (const h of heads){ const c = sigCtl(h.n); if (sigAxis(h.n, h.d) === 1) c._one = false; }
+  { const by = new Map(); for (const h of heads){ const c = sigCtl(h.n); (by.get(c) || by.set(c, []).get(c)).push(h.d); } for (const [c, ds] of by) sigCluster(c, ds); }
   // mât + caisson noir à plaque de contraste jaune (feux R11v français), face aux usagers
   const pole = new THREE.CylinderGeometry(0.055, 0.065, 3.3, 8); pole.translate(0, 1.65, 0);
   const box = new THREE.BoxGeometry(0.22, 0.78, 0.3); box.translate(0, 3.0, 0);
@@ -4530,16 +4581,29 @@ function buildSignals(grp){
   heads.forEach((h, i) => { q.setFromAxisAngle(up, h.a); m4.compose(new THREE.Vector3(h.p[0], H(h.p[0], h.p[1]), -h.p[1]), q, one);
     body.setMatrixAt(i, m4); back.setMatrixAt(i, m4); for (const k in lamps) lamps[k].setMatrixAt(i, m4); });
   body.castShadow = true; body.name = 'Feux tricolores'; back.name = 'Feux tricolores · plaques'; grp.add(body, back);
-  SIGHEADS = {heads, lamps, last:''}; updateSignals(true);
+  heads.forEach((h, i) => { h.i = i; h.m = m4.clone().compose(new THREE.Vector3(h.p[0], H(h.p[0], h.p[1]), -h.p[1]), q.setFromAxisAngle(up, h.a), one); });
+  SIGHEADS = {heads, lamps, body, back, last:'', vis:heads}; sigVisibility(); updateSignals(true);
+}
+/* feux affichés : seulement ceux à moins de 500 m des routes barrées (de la route barrée sélectionnée s'il y en a une) ;
+   les autres continuent de régler la circulation simulée mais ne sont ni dessinés ni mis à jour à l'écran.
+   Sans aucune route barrée, tous les feux sont affichés. */
+let SIGVIS = null;
+function sigVisibility(){
+  if (!SIGHEADS) return; const cls = (state?.els || []).filter(e => e.t === 'closure' && e.pts?.length && !phOff(e)), selC = cls.find(e => e.id === sel), use = selC ? [selC] : cls;
+  const near = h => !use.length || use.some(c => c.pts.some((q, i) => { const b = c.pts[i + 1] || q; const t = segClosest(h.n.xy, q, b); return V.dist(t.pt, h.n.xy) < 500; }));
+  const vis = SIGHEADS.heads.filter(near), Z = new THREE.Matrix4().makeScale(0, 0, 0); SIGVIS = new Set(vis.map(h => sigCtl(h.n).id));
+  for (const h of SIGHEADS.heads){ const M = vis.includes(h) ? h.m : Z; SIGHEADS.body.setMatrixAt(h.i, M); SIGHEADS.back.setMatrixAt(h.i, M); for (const k in SIGHEADS.lamps) SIGHEADS.lamps[k].setMatrixAt(h.i, M); }
+  for (const im of [SIGHEADS.body, SIGHEADS.back, ...Object.values(SIGHEADS.lamps)]){ im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
+  SIGHEADS.vis = vis; SIGHEADS.last = ''; updateSignals(true); annoKey = ''; dirty = true;
 }
 /* rafraîchit les lampes allumées (appelé à chaque image ; ne redessine que si un feu a changé) */
 function updateSignals(force = false){
-  if (!SIGHEADS) return false; const t = Math.floor(SIGT() * 4) / 4; if (!force && t === SIGHEADS.tq) return false; SIGHEADS.tq = t; const _u = 0, st = SIGHEADS.heads.map(h => sigState(h.n, h.d, t)), key = st.join('');
+  if (!SIGHEADS) return false; const t = Math.floor(SIGT() * 4) / 4; if (!force && t === SIGHEADS.tq) return false; SIGHEADS.tq = t; const V_ = SIGHEADS.vis, st = V_.map(h => sigState(h.n, h.d, t)), key = st.join('');
   if (!force && key === SIGHEADS.last) return false; SIGHEADS.last = key; const c = new THREE.Color();
-  st.forEach((s, i) => { for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
+  st.forEach((s, j) => { const i = V_[j].i; for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
   for (const k in SIGHEADS.lamps) if (SIGHEADS.lamps[k].instanceColor) SIGHEADS.lamps[k].instanceColor.needsUpdate = true;
   // repères carte : couleur de l'axe principal
-  for (const a of annos) if (a.sig) a.d.dataset.s = sigState(a.sn, a.sd, t);
+  for (const a of annos) if (a.sig && a.vis) a.d.dataset.s = sigState(a.sn, a.sd, t);
   return true;
 }
 
@@ -5531,6 +5595,7 @@ async function loadSite(force = false){
       if (tok !== loadToken) return;
       IDB.set(key, raw);
     }
+    loadUI(true, 'Construction du site en 3D', 'Matériaux et textures…', 0.76); await preloadPhotos();
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
@@ -5685,7 +5750,7 @@ function rebuildProj(){
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
-  objInstances(); applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
+  objInstances(); applySel(); sigVisibility(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* objets du chantier en instances : les copies d'un même modèle (cône, barrière, panneau AK5…) sont dessinées en un seul
    appel par pièce au lieu d'un appel par objet et par pièce (900 objets ≈ 6 000 appels → quelques dizaines) */
@@ -6623,16 +6688,16 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   if (annos._pk !== annoKey){ annos._pk = annoKey; annos._pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri); }
   const occ = new Set(), pins = annos._pins; let npin = 0; const MAXPIN = GFX().cap < 200 ? 80 : 150;
-  for (const a of pins){ if (npin >= MAXPIN){ a.show = false; continue; } const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  for (const a of pins){ if (npin >= MAXPIN || (a.sig && SIGVIS && !SIGVIS.has(sigCtl(a.sn).id))){ a.show = false; continue; } /* feux éloignés des routes barrées : pas de repère */ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
-    a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
+    a.show = false; a.sx = A[0]; a.sy = A[1]; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé
   /* caméra en mouvement rapide : on ne fait ni apparaître ni disparaître d'étiquette (chaque bascule oblige le navigateur à
      recalculer styles et mise en page ; des centaines par image = saccades). Les bascules se font dès que la vue se pose. */
   const frz = typeof LBL !== 'undefined' && LBL.fast;
   const show = (a, v) => { if (frz && a.vis !== undefined) return; if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
   for (const a of annos){
-    if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
+    if (a.pin){ show(a, a.show); if (frz ? a.vis && a.sx != null : a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }   /* figé : le repère suit quand même la vue */
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
     const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!(frz ? a.vis : vis)) continue;
@@ -6794,7 +6859,7 @@ function renderViewMenu(){
     <hr><div class="lbl">Qualité graphique</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px;flex-wrap:wrap">${[['auto', 'Auto'], ['eco', 'Économie'], ['std', 'Équilibrée'], ['high', 'Élevée']].map(([k, n]) => `<button type="button" class="btn sm${GFXQ === k ? ' primary' : ''}" data-gfx="${k}" title="${k === 'auto' ? (LOWPOW ? 'Cet appareil : Économie' : 'Cet appareil : Élevée') : ''}">${n}</button>`).join('')}</div>
     <hr><div class="lbl">Lumière</div><label class="mi"><input type="checkbox" data-night${DISPLAY.night ? ' checked' : ''}> Vue de nuit (éclairage public, feux, rétroréflexion)</label><label class="mi"><input type="checkbox" data-shadow${DISPLAY.shadows ? ' checked' : ''}> Ombres portées</label><label class="mi" style="display:grid;grid-template-columns:auto 1fr;gap:8px">Soleil<input type="range" min="60" max="300" step="5" value="${DISPLAY.sunAz}" data-sun></label>
     <hr><div class="lbl">Thème de l'interface</div><div class="thm" style="display:flex;gap:6px;padding:4px 10px">${[['light', 'Clair'], ['dark', 'Sombre']].map(([k, n]) => `<button type="button" class="btn" data-thm="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'light') === k}">${n}</button>`).join('')}</div>`;
-  m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); buildWorld(); annoKey = ''; renderLegend(); if (c.dataset.lay === 'nets' && c.checked) toast((state.nets || []).length ? 'Réseaux : plans importés, et réseau présumé pour les autres types.' : 'Réseaux PRÉSUMÉS (règles de pose usuelles) : à confirmer par les réponses DT/DICT. Fichier → Importer un plan de réseaux.', 6500); });
+  m.querySelectorAll('[data-lay]').forEach(c => c.onchange = () => { DISPLAY.lay[c.dataset.lay] = c.checked; saveDisplay(); if (PRE_LAYERS.has(c.dataset.lay)) applyLayers(); else buildWorld();   /* calques déjà construits : affichage immédiat */ annoKey = ''; renderLegend(); if (c.dataset.lay === 'nets' && c.checked) toast((state.nets || []).length ? 'Réseaux : plans importés, et réseau présumé pour les autres types.' : 'Réseaux PRÉSUMÉS (règles de pose usuelles) : à confirmer par les réponses DT/DICT. Fichier → Importer un plan de réseaux.', 6500); });
   m.querySelector('[data-proj]').onchange = e => { projGroup.visible = e.target.checked; dirty = true; };
   m.querySelector('[data-legend]').onchange = e => { state.legend.show = e.target.checked; save(); renderLegend(); };
   m.querySelector('[data-night]').onchange = e => { DISPLAY.night = e.target.checked; saveDisplay(); applyThemeToScene(); };
@@ -7310,13 +7375,13 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {groundCheck:(rx = /Chaussées|Trottoir|Bordure|Caniveau|Marquages|Voies piétonnes/) => { const out = {}; for (const m of worldGroup.children){ if (!m.isMesh || m.isInstancedMesh || !rx.test(m.name)) continue; const P = m.geometry.attributes.position.array; const o = out[m.name] ??= {n:0, under:0, worst:0}; for (let i = 0; i < P.length; i += 9){ const x = P[i], y = P[i + 1], z = P[i + 2], d = y - H(x, -z); o.n++; if (d < -0.02){ o.under++; o.worst = Math.min(o.worst, Math.round(d * 100) / 100); } } } return out; }, objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;
       const x = P.getX(t) * a + P.getX(t + 1) * b + P.getX(t + 2) * c, y = P.getY(t) * a + P.getY(t + 1) * b + P.getY(t + 2) * c, z = P.getZ(t) * a + P.getZ(t + 1) * b + P.getZ(t + 2) * c;
       ray.set(new THREE.Vector3(x, 5000, z), dn); const h = ray.intersectObject(terr, false)[0]; if (!h) continue; tot++; const d = h.point.y - y; if (d > 0.001){ under++; worst = Math.max(worst, d); } } }
-    return {tot, under, worst:Math.round(worst * 100) / 100}; }, perf:perfRun, gl(){ let meshes = 0, lines = 0, inst = 0; scene.traverse(o => { if (!o.visible) return; if (o.isInstancedMesh) inst++; else if (o.isMesh) meshes++; else if (o.isLine) lines++; }); renderer.render(scene, cam()); return {...renderer.info.render, ...renderer.info.memory, programs:renderer.info.programs?.length, meshes, lines, inst, pr:renderer.getPixelRatio()}; }, camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst}; }); }, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+    return {tot, under, worst:Math.round(worst * 100) / 100}; }, perf:perfRun, gl(){ let meshes = 0, lines = 0, inst = 0; scene.traverse(o => { if (!o.visible) return; if (o.isInstancedMesh) inst++; else if (o.isMesh) meshes++; else if (o.isLine) lines++; }); renderer.render(scene, cam()); return {...renderer.info.render, ...renderer.info.memory, programs:renderer.info.programs?.length, meshes, lines, inst, pr:renderer.getPixelRatio()}; }, camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } let bad = 0; for (let t = 0; t < 128; t += 1) for (let i = 0; i < hs.length; i++) for (let j = i + 1; j < hs.length; j++) if (angGap(dblAng(hs[i].d), dblAng(hs[j].d)) < 0.35 && sigState(hs[i].n, hs[i].d, t) !== sigState(hs[j].n, hs[j].d, t)) bad++; return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst, opposeDiff:bad}; }); }, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 /* ---------- bouton Réglages (module commun Studio Prism) ---------- */
@@ -7335,7 +7400,7 @@ PrismSettings.init({
     {title:'Légende et repères', fields:[
       {type:'switch', label:'Légende repliée par défaut', sub:'Le bouton – / + de la légende la replie à tout moment', get:() => !!(DISPLAY.legMin ?? (isNarrow.matches || LOWPOW)), set:v => { DISPLAY.legMin = v; saveDisplay(); renderLegend(); }},
       {type:'seg', label:'Taille des bulles de panneaux', options:[[0.75, 'Petite'], [1, 'Normale'], [1.3, 'Grande']], get:() => DISPLAY.pinSz || 1, set:v => { DISPLAY.pinSz = v; saveDisplay(); document.documentElement.style.setProperty('--pin-sz', v); dirty = true; }},
-      {type:'switch', label:'Sens uniques et sens interdits', get:() => DISPLAY.lay.oneway !== false, set:v => { DISPLAY.lay.oneway = v; saveDisplay(); buildWorld(); }},
+      {type:'switch', label:'Sens uniques et sens interdits', get:() => DISPLAY.lay.oneway !== false, set:v => { DISPLAY.lay.oneway = v; saveDisplay(); applyLayers(); }},
       {type:'switch', label:'Noms des rues', get:() => DISPLAY.lay.names !== false, set:v => { DISPLAY.lay.names = v; saveDisplay(); annoKey = ''; dirty = true; }}]},
     {title:'Cotes', fields:[
       {type:'seg', label:'Unité', options:[['m', 'Mètres'], ['cm', 'Centimètres']], get:() => DISPLAY.dimUnit || 'm', set:v => { DISPLAY.dimUnit = v; saveDisplay(); rebuildProj(); annoKey = ''; dirty = true; }},

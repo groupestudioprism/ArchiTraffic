@@ -77,6 +77,7 @@ async function loadSite(force = false){
       if (tok !== loadToken) return;
       IDB.set(key, raw);
     }
+    loadUI(true, 'Construction du site en 3D', 'Matériaux et textures…', 0.76); await preloadPhotos();
     loadUI(true, 'Construction du site en 3D', 'Voirie, trottoirs, bâtiments, arbres…', 0.8); await sleep(30);
     const W = parseWorld(raw, P, size);
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
@@ -231,7 +232,7 @@ function rebuildProj(){
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
-  objInstances(); applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
+  objInstances(); applySel(); sigVisibility(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
 /* objets du chantier en instances : les copies d'un même modèle (cône, barrière, panneau AK5…) sont dessinées en un seul
    appel par pièce au lieu d'un appel par objet et par pièce (900 objets ≈ 6 000 appels → quelques dizaines) */

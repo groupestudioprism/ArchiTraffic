@@ -14,8 +14,20 @@ function sigCtl(n){ if (n._ctl) return n._ctl; let best = n, bd = nodeDeg(n) >= 
     const gx = Math.floor(n.xy[0] / 50), gy = Math.floor(n.xy[1] / 50);
     for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of NET._jg.get((gx + i) + ',' + (gy + j)) || []){ const d = Math.hypot(m.xy[0] - n.xy[0], m.xy[1] - n.xy[1]); if (d < bd){ bd = d; best = m; } } }
   return n._ctl = best; }
-function sigAxis(n0, d){ const n = sigCtl(n0); let r = n._sref; if (!r){ const e = NET.edges[n.inn?.[0]]; r = e ? V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)) : [1, 0]; n._sref = r; }
-  return Math.abs(d[0] * r[0] + d[1] * r[1]) >= Math.SQRT1_2 ? 0 : 1; }
+/* axe d'une approche : les directions des approches d'un carrefour sont regroupées en deux axes par leur ANGLE DE ROUTE
+   (sens ignoré : deux approches face à face ou dans le prolongement l'une de l'autre sont toujours sur le même axe,
+   donc toujours de la même couleur, comme dans la réalité) ; regroupement par 2 moyennes sur les angles doublés. */
+const dblAng = d => Math.atan2(2 * d[0] * d[1], d[0] * d[0] - d[1] * d[1]);   // angle doublé : d et -d donnent la même valeur
+const angGap = (a, b) => { let x = Math.abs(a - b) % (2 * Math.PI); return x > Math.PI ? 2 * Math.PI - x : x; };
+function sigAxis(n0, d){ const n = sigCtl(n0); const g = n._ax; if (!g) return 0; const a = dblAng(d); return angGap(a, g[0]) <= angGap(a, g[1]) ? 0 : 1; }
+function sigCluster(c, dirs){
+  const A = dirs.map(dblAng); let i0 = 0, i1 = 0, best = -1;
+  for (let i = 0; i < A.length; i++) for (let j = i + 1; j < A.length; j++){ const g = angGap(A[i], A[j]); if (g > best){ best = g; i0 = i; i1 = j; } }
+  if (best < 0.7){ c._ax = [A[0], A[0] + Math.PI]; c._one = true; return; }   // toutes les approches sur une même route (< 20°)
+  let g0 = A[i0], g1 = A[i1];
+  for (let it = 0; it < 6; it++){ let s0 = [0, 0], s1 = [0, 0]; for (const a of A){ const t = angGap(a, g0) <= angGap(a, g1) ? s0 : s1; t[0] += Math.cos(a); t[1] += Math.sin(a); }
+    if (s0[0] || s0[1]) g0 = Math.atan2(s0[1], s0[0]); if (s1[0] || s1[1]) g1 = Math.atan2(s1[1], s1[0]); }
+  c._ax = [g0, g1]; c._one = false; }
 /* coordination : les feux à moins de 300 m les uns des autres (OSM ou posés à la main) forment un ensemble ;
    chaque feu est décalé du feu pilote selon la distance (onde verte à 40 km/h) au lieu d'un décalage aléatoire */
 function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return o;
@@ -40,14 +52,13 @@ function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; } NET._jg = null;
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; n._ax = null; } NET._jg = null;
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
     const p = V.add(V.sub(n.xy, V.mul(d, Math.max(4, w * 0.8))), V.mul(V.perp(d), -(w / 2 + 0.6))); heads.push({n, d, p, a:Math.atan2(-d[1], -d[0])}); }
   // référence d'axe = première approche ÉQUIPÉE de feux du carrefour ; si toutes les approches équipées sont sur le même axe → cycle « un seul axe »
-  for (const h of heads){ const c = sigCtl(h.n); if (!c._sref) c._sref = h.d; c._one = true; }
-  for (const h of heads){ const c = sigCtl(h.n); if (sigAxis(h.n, h.d) === 1) c._one = false; }
+  { const by = new Map(); for (const h of heads){ const c = sigCtl(h.n); (by.get(c) || by.set(c, []).get(c)).push(h.d); } for (const [c, ds] of by) sigCluster(c, ds); }
   // mât + caisson noir à plaque de contraste jaune (feux R11v français), face aux usagers
   const pole = new THREE.CylinderGeometry(0.055, 0.065, 3.3, 8); pole.translate(0, 1.65, 0);
   const box = new THREE.BoxGeometry(0.22, 0.78, 0.3); box.translate(0, 3.0, 0);
@@ -63,15 +74,28 @@ function buildSignals(grp){
   heads.forEach((h, i) => { q.setFromAxisAngle(up, h.a); m4.compose(new THREE.Vector3(h.p[0], H(h.p[0], h.p[1]), -h.p[1]), q, one);
     body.setMatrixAt(i, m4); back.setMatrixAt(i, m4); for (const k in lamps) lamps[k].setMatrixAt(i, m4); });
   body.castShadow = true; body.name = 'Feux tricolores'; back.name = 'Feux tricolores · plaques'; grp.add(body, back);
-  SIGHEADS = {heads, lamps, last:''}; updateSignals(true);
+  heads.forEach((h, i) => { h.i = i; h.m = m4.clone().compose(new THREE.Vector3(h.p[0], H(h.p[0], h.p[1]), -h.p[1]), q.setFromAxisAngle(up, h.a), one); });
+  SIGHEADS = {heads, lamps, body, back, last:'', vis:heads}; sigVisibility(); updateSignals(true);
+}
+/* feux affichés : seulement ceux à moins de 500 m des routes barrées (de la route barrée sélectionnée s'il y en a une) ;
+   les autres continuent de régler la circulation simulée mais ne sont ni dessinés ni mis à jour à l'écran.
+   Sans aucune route barrée, tous les feux sont affichés. */
+let SIGVIS = null;
+function sigVisibility(){
+  if (!SIGHEADS) return; const cls = (state?.els || []).filter(e => e.t === 'closure' && e.pts?.length && !phOff(e)), selC = cls.find(e => e.id === sel), use = selC ? [selC] : cls;
+  const near = h => !use.length || use.some(c => c.pts.some((q, i) => { const b = c.pts[i + 1] || q; const t = segClosest(h.n.xy, q, b); return V.dist(t.pt, h.n.xy) < 500; }));
+  const vis = SIGHEADS.heads.filter(near), Z = new THREE.Matrix4().makeScale(0, 0, 0); SIGVIS = new Set(vis.map(h => sigCtl(h.n).id));
+  for (const h of SIGHEADS.heads){ const M = vis.includes(h) ? h.m : Z; SIGHEADS.body.setMatrixAt(h.i, M); SIGHEADS.back.setMatrixAt(h.i, M); for (const k in SIGHEADS.lamps) SIGHEADS.lamps[k].setMatrixAt(h.i, M); }
+  for (const im of [SIGHEADS.body, SIGHEADS.back, ...Object.values(SIGHEADS.lamps)]){ im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
+  SIGHEADS.vis = vis; SIGHEADS.last = ''; updateSignals(true); annoKey = ''; dirty = true;
 }
 /* rafraîchit les lampes allumées (appelé à chaque image ; ne redessine que si un feu a changé) */
 function updateSignals(force = false){
-  if (!SIGHEADS) return false; const t = Math.floor(SIGT() * 4) / 4; if (!force && t === SIGHEADS.tq) return false; SIGHEADS.tq = t; const _u = 0, st = SIGHEADS.heads.map(h => sigState(h.n, h.d, t)), key = st.join('');
+  if (!SIGHEADS) return false; const t = Math.floor(SIGT() * 4) / 4; if (!force && t === SIGHEADS.tq) return false; SIGHEADS.tq = t; const V_ = SIGHEADS.vis, st = V_.map(h => sigState(h.n, h.d, t)), key = st.join('');
   if (!force && key === SIGHEADS.last) return false; SIGHEADS.last = key; const c = new THREE.Color();
-  st.forEach((s, i) => { for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
+  st.forEach((s, j) => { const i = V_[j].i; for (const k of ['r', 'y', 'g']) SIGHEADS.lamps[k].setColorAt(i, c.setHex(SIGCOL[k][s === k ? 0 : 1])); });
   for (const k in SIGHEADS.lamps) if (SIGHEADS.lamps[k].instanceColor) SIGHEADS.lamps[k].instanceColor.needsUpdate = true;
   // repères carte : couleur de l'axe principal
-  for (const a of annos) if (a.sig) a.d.dataset.s = sigState(a.sn, a.sd, t);
+  for (const a of annos) if (a.sig && a.vis) a.d.dataset.s = sigState(a.sn, a.sd, t);
   return true;
 }
