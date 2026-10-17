@@ -4255,6 +4255,8 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
 const TILE = 800; let WTILES = [];
 const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : /^Façades$/.test(name) ? 5500 : Infinity;   // façades : au-delà de 5,5 km, quelques pixels
+/* tuiles de 800 m dans le cœur détaillé, de 3,2 km au-delà (seulement des routes, vues de loin) : 16 fois moins d'appels de dessin */
+const tileKey = (x, z) => { const big = typeof CORE !== 'undefined' && Math.max(Math.abs(x), Math.abs(z)) > CORE / 2 + 200, T = big ? TILE * 4 : TILE; return (big ? 'B' : '') + Math.floor(x / T) + ',' + Math.floor(z / T); };
 function tileWorld(grp){
   WTILES = [];
   for (const m of [...grp.children]){
@@ -4263,7 +4265,7 @@ function tileWorld(grp){
     if (m.isInstancedMesh){
       if (m.count < 1500){ if (lod < Infinity){ m.geometry.computeBoundingSphere(); } continue; }
       const buckets = new Map(), M = new THREE.Matrix4(), P = new THREE.Vector3(), C = new THREE.Color();
-      for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = Math.floor(P.x / TILE) + ',' + Math.floor(P.z / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
+      for (let i = 0; i < m.count; i++){ m.getMatrixAt(i, M); P.setFromMatrixPosition(M); const k = tileKey(P.x, P.z); (buckets.get(k) || buckets.set(k, []).get(k)).push(i); }
       if (buckets.size < 2) continue;
       for (const [k, ids] of buckets){ const t = new THREE.InstancedMesh(m.geometry, m.material, ids.length); t.name = m.name; t.castShadow = m.castShadow; t.receiveShadow = m.receiveShadow; t.userData = {...m.userData};
         ids.forEach((i, j) => { m.getMatrixAt(i, M); t.setMatrixAt(j, M); if (m.instanceColor){ m.getColorAt(i, C); t.setColorAt(j, C); } });
@@ -4272,7 +4274,7 @@ function tileWorld(grp){
     }
     const g = m.geometry, pos = g.attributes.position; if (g.index || pos.count < 120000) { if (lod < Infinity){ g.computeBoundingSphere(); m.userData.lod = lod; WTILES.push(m); } continue; }
     const uv = g.attributes.uv, nor = g.attributes.normal, buckets = new Map(), A = pos.array;
-    for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = Math.floor(cx / TILE) + ',' + Math.floor(cz / TILE); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
+    for (let t = 0; t < pos.count; t += 3){ const cx = (A[t * 3] + A[t * 3 + 3] + A[t * 3 + 6]) / 3, cz = (A[t * 3 + 2] + A[t * 3 + 5] + A[t * 3 + 8]) / 3, k = tileKey(cx, cz); (buckets.get(k) || buckets.set(k, []).get(k)).push(t); }
     if (buckets.size < 2) continue;
     for (const [, tris] of buckets){
       const n = tris.length * 3, gp = new Float32Array(n * 3), gn = nor ? new Float32Array(n * 3) : null, gu = uv ? new Float32Array(n * 2) : null; let o = 0;
