@@ -5672,8 +5672,24 @@ function rebuildProj(){
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
-  applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
+  objInstances(); applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
+/* objets du chantier en instances : les copies d'un même modèle (cône, barrière, panneau AK5…) sont dessinées en un seul
+   appel par pièce au lieu d'un appel par objet et par pièce (900 objets ≈ 6 000 appels → quelques dizaines) */
+const objInstGroup = new THREE.Group(); objInstGroup.name = 'Objets (instances)';
+function objInstances(){
+  if (objInstGroup.parent !== projGroup) projGroup.add(objInstGroup);
+  for (const m of objInstGroup.children) m.dispose?.(); objInstGroup.clear();
+  const bins = new Map();
+  for (const c of projCache.values()){
+    if (!c.small) continue; c.grp.updateMatrixWorld(true);
+    c.grp.traverse(m => { if (!m.isMesh || !m.userData.shared || m.isInstancedMesh) return; m.visible = false; if (!c.base) return;
+      const k = m.geometry.uuid + '|' + (Array.isArray(m.material) ? m.material.map(x => x.uuid).join() : m.material.uuid); let b = bins.get(k);
+      if (!b) bins.set(k, b = {g:m.geometry, mat:m.material, cs:m.castShadow, rs:m.receiveShadow, mats:[]}); b.mats.push(m.matrixWorld.clone()); });
+  }
+  for (const b of bins.values()){ const im = new THREE.InstancedMesh(b.g, b.mat, b.mats.length); b.mats.forEach((M, i) => im.setMatrixAt(i, M)); im.castShadow = b.cs; im.receiveShadow = b.rs; im.computeBoundingSphere(); im.userData.shared = true; objInstGroup.add(im); }
+}
+
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
 let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A, transparent:true, opacity:0.32, depthTest:false}), selLine = new THREE.LineBasicMaterial({color:0xF28A1A, depthTest:false});
@@ -7254,7 +7270,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;

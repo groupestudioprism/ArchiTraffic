@@ -231,8 +231,24 @@ function rebuildProj(){
     keep.add(e.id);
   }
   for (const [id, c] of projCache) if (!keep.has(id)){ projGroup.remove(c.grp); c.grp.traverse(o => { if (o.geometry && !o.userData.shared) o.geometry.dispose(); }); projCache.delete(id); }
-  applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
+  objInstances(); applySel(); renderLegend(); simNetworkChanged(); renderPhaseBar(); dirty = true;
 }
+/* objets du chantier en instances : les copies d'un même modèle (cône, barrière, panneau AK5…) sont dessinées en un seul
+   appel par pièce au lieu d'un appel par objet et par pièce (900 objets ≈ 6 000 appels → quelques dizaines) */
+const objInstGroup = new THREE.Group(); objInstGroup.name = 'Objets (instances)';
+function objInstances(){
+  if (objInstGroup.parent !== projGroup) projGroup.add(objInstGroup);
+  for (const m of objInstGroup.children) m.dispose?.(); objInstGroup.clear();
+  const bins = new Map();
+  for (const c of projCache.values()){
+    if (!c.small) continue; c.grp.updateMatrixWorld(true);
+    c.grp.traverse(m => { if (!m.isMesh || !m.userData.shared || m.isInstancedMesh) return; m.visible = false; if (!c.base) return;
+      const k = m.geometry.uuid + '|' + (Array.isArray(m.material) ? m.material.map(x => x.uuid).join() : m.material.uuid); let b = bins.get(k);
+      if (!b) bins.set(k, b = {g:m.geometry, mat:m.material, cs:m.castShadow, rs:m.receiveShadow, mats:[]}); b.mats.push(m.matrixWorld.clone()); });
+  }
+  for (const b of bins.values()){ const im = new THREE.InstancedMesh(b.g, b.mat, b.mats.length); b.mats.forEach((M, i) => im.setMatrixAt(i, M)); im.castShadow = b.cs; im.receiveShadow = b.rs; im.computeBoundingSphere(); im.userData.shared = true; objInstGroup.add(im); }
+}
+
 /* sélection : contour orange */
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
 let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A, transparent:true, opacity:0.32, depthTest:false}), selLine = new THREE.LineBasicMaterial({color:0xF28A1A, depthTest:false});
