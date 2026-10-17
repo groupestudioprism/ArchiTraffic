@@ -38,13 +38,17 @@ function simEntries(){
   }
   SIM.entries = ent; SIM.exits = ex;
 }
-function simNetworkChanged(){ SIM.rc.clear(); SIM.base.clear(); SIM.cKey = -1; if (!SIM.on) return; for (const a of SIM.agents) a.rr = true; }
+function simNetworkChanged(){ SIM.rc.clear(); SIM.base.clear(); SIM.jobs?.clear(); SIM.cKey = -1; if (!SIM.on) return; for (const a of SIM.agents) a.rr = true; }
 /* ré-itinéraires après une modification du chantier : étalés sur plusieurs images (budget de temps) au lieu d'un gel */
+/* calculs d'itinéraires en tâche de fond : chaque image avance les calculs en attente jusqu'à épuisement du budget (5 ms) ;
+   un itinéraire long (réseau de 20 km) se calcule ainsi sur plusieurs images sans jamais figer l'affichage */
+function simJob(key, mk, done){ SIM.jobs ??= new Map(); if (SIM.jobs.has(key) || SIM.jobs.size > 400) return; SIM.jobs.set(key, {it:mk(), done}); }
+function simJobs(){ if (!SIM.jobs?.size) return; for (const [k, j] of SIM.jobs){ for (;;){ if (performance.now() > SIM.budget) return; const r = j.it.next(); if (r.done){ SIM.jobs.delete(k); j.done(r.value); break; } } } }
 function simReroute(){
   if (!SIM.agents.some(a => a.rr)) return; if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); } const C = SIM.cSet;
   for (const a of SIM.agents){ if (!a.rr) continue; if (performance.now() > SIM.budget) return; a.rr = false;
     const e = NET.edges[a.edges[a.ei]]; if (!e) continue; if (C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)){ a.kill = true; continue; }
-    const r = route(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150, fast:true}); if (!r){ a.kill = true; continue; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }
+    simJob('a|' + a.id, () => routeGen(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), r => { if (!r){ a.kill = true; return; } if (a.ei >= a.edges.length || NET.edges[a.edges[a.ei]] !== e){ a.rr = true; return; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }); }
 }
 function simStop(clear){ SIM.on = false; $('#simPlay')?.classList.remove('on'); const b = $('#simPlay'); if (b){ b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>'; b.setAttribute('aria-label', 'Lancer la simulation'); }
   if (clear){ congReset(); SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
@@ -71,9 +75,9 @@ function simSpawn(dt){
       const type = pickType(), T = SIM_TYPES[type];
       const exits = SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80); if (!exits.length) continue;
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
-      let r = SIM.rc.get(key); if (r === undefined){ if (performance.now() > SIM.budget){ SIM.nextSpawn.set(en.id, 0.2); continue; } r = route(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}) || null; SIM.rc.set(key, r); }
+      let r = SIM.rc.get(key); if (r === undefined){ simJob(key, () => routeGen(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.rc.set(key, v || null)); SIM.nextSpawn.set(en.id, 0.3); continue; }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
-      let base = SIM.base.get(key); if (base === undefined){ base = route(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}); SIM.base.set(key, base); }
+      let base = SIM.base.get(key); if (base === undefined){ simJob('b|' + key, () => routeGen(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.base.set(key, v || null)); base = null; }
       const col = new THREE.Color(T.mix === 'bus' ? 0xF2F4F6 : T.pl && Math.random() < 0.5 ? 0xE9ECEF : BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)]);
       const v0 = Math.min(NET.edges[r.edges[0]].sp, 14);
       SIM.agents.push({id:++SIM.seq, type, len:T.len, pl:!!T.pl, edges:r.edges.slice(), ei:0, s:0, v:v0 * 0.7, from:en.id, dest, col, t0:SIM.t, free:r.time, dev:!!base && r.len > base.len + 5, wait:0});
@@ -151,7 +155,7 @@ let lastT = performance.now(), statT = 0;
 function simTick(now){
   if (!SIM.on){ lastT = now; return; }
   let dt = Math.min(0.1, (now - lastT) / 1000) * SIM.speed; lastT = now;
-  SIM.budget = performance.now() + 5; simReroute();   // 5 ms d'itinéraires au plus par image
+  SIM.budget = performance.now() + 5; simReroute(); simJobs();   // 5 ms d'itinéraires au plus par image
   // pas adaptatif : en ×10 saturé on fait au plus 4 pas par image (0,25 s max chacun) au lieu de 10 petits pas
   const n = Math.min(4, Math.ceil(dt / 0.1)); for (let i = 0; i < n && dt > 0; i++){ const st = i === n - 1 ? Math.min(0.25, dt) : Math.min(dt / (n - i), 0.25); simStep(st); dt -= st; }
   simRender(); dirty = true;

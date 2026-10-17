@@ -97,7 +97,9 @@ function closedSets(els){
   return {both, dir, slow};
 }
 /* plus court chemin (A*, état = nœud + voie d'arrivée pour respecter les interdictions de tourner) */
-function route(fromId, toId, C, opt = {}){
+/* itinéraire calculé d'un coup (déviations, outils) ; la simulation utilise routeGen par petits morceaux */
+function route(fromId, toId, C, opt = {}){ const it = routeGen(fromId, toId, C, opt); let r; do r = it.next(); while (!r.done); return r.value; }
+function* routeGen(fromId, toId, C, opt = {}){
   const S = NET.nodes.get(fromId), T = NET.nodes.get(toId); if (!S || !T) return null;
   const pen = opt.detour ? {1:1, 2:1, 3:1.05, 4:1.15, 5:1.5, 6:3, 7:4, 8:6} : {1:1, 2:1, 3:1, 4:1, 5:1.1, 6:1.4, 7:2, 8:3};
   const vmax = opt.fast ? 11 : 30, h = n => V.dist(n.xy, T.xy) / vmax;   // simulation : heuristique « gloutonne » (itinéraire quasi optimal, 5 à 20× moins de nœuds explorés)
@@ -107,6 +109,7 @@ function route(fromId, toId, C, opt = {}){
   g.set(fromId + '|-1', 0); let found = null, iter = 0;
   const avoid = opt.avoid || null;
   while (open.length && iter++ < 200000){
+    if ((iter & 1023) === 0) yield null;   // point de reprise : la simulation étale le calcul sur plusieurs images
     const [, cost, nid, inWay, inEdge] = pop(), sk = nid + '|' + inWay;
     if (cost > (g.get(sk) ?? Infinity) + 1e-9) continue;
     if (nid === toId){ found = sk; break; }
