@@ -1,8 +1,8 @@
 /* ============ Le site en 3D : relief NGF, voirie, trottoirs, bâtiments, arbres ============
    Construit à partir du « monde » chargé pour la zone (10-geo.js). Chaque calque est fusionné par matériau (peu d'appels de dessin). */
 let WORLD = null;   // {size, P, z0, elev:{N, z}, W, net, labels}
-/* altitude du terrain (m, relative à l'origine NGF z0) au point (x, y) */
-function H(x, y){
+/* altitude du relief mesuré (m, relative à l'origine NGF z0) au point (x, y) : interpolation des données IGN */
+function Hraw(x, y){
   let E = WORLD?.elev; if (!E) return 0; let S = WORLD.size;
   const E2 = WORLD.elev2; if (E2 && Math.abs(x) < E2.S / 2 && Math.abs(y) < E2.S / 2){ E = E2; S = E2.S; }   // relief fin au cœur de zone
   const N = E.N, st = S / (N - 1); let fi = (x + S / 2) / st, fj = (y + S / 2) / st;
@@ -10,7 +10,41 @@ function H(x, y){
   const i = Math.floor(fi), j = Math.floor(fj), u = fi - i, v = fj - j, z = (a, b) => E.z[b * N + a];
   return ((z(i, j) * (1 - u) + z(i + 1, j) * u) * (1 - v) + (z(i, j + 1) * (1 - u) + z(i + 1, j + 1) * u) * v) - WORLD.z0;
 }
-const NGF = (x, y) => WORLD ? WORLD.z0 + H(x, y) : null;
+/* ---------- sol affiché ----------
+   Le sol est un maillage (grille triangulée) : grossier sur toute la zone, fin dans le cœur quand le relief fin existe.
+   H() rend l'altitude EXACTE de ce maillage (mêmes triangles) : routes, trottoirs, zones barrées, panneaux, véhicules posés
+   avec H() sont donc toujours sur le sol visible, jamais dessous (avant, ils suivaient le relief brut et passaient sous le
+   maillage dans les creux). La grille fine est raccordée à la grossière sur son bord (aucune fissure). */
+const SURF_CAP = 257;
+function surfGrids(){
+  if (WORLD.surf) return WORLD.surf;
+  const S = WORLD.size, n = Math.max(2, Math.min(WORLD.elev.N, SURF_CAP)), st = S / (n - 1), z = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) z[j * n + i] = Hraw(-S / 2 + i * st, -S / 2 + j * st);
+  const G = {S, n, st, z, x0:-S / 2}, out = {G, F:null};
+  const E2 = WORLD.elev2;
+  if (E2){   // cœur fin, bord aligné sur la grille grossière
+    const c0 = Math.ceil((n - 1) / 2 - E2.S / 2 / st), c1 = (n - 1) - c0, h = (c1 - c0) / 2 * st;   // cellules c0..c1 de la grille grossière
+    if (c1 - c0 >= 2){
+      const target = LOWPOW ? 10 : 6, m = Math.min(LOWPOW ? 241 : 401, Math.max(2, Math.round(2 * h / target) + 1)), sf = 2 * h / (m - 1), zf = new Float32Array(m * m), F = {h, n:m, st:sf, z:zf, x0:-h, c0, c1};
+      for (let j = 0; j < m; j++) for (let i = 0; i < m; i++){ const x = -h + i * sf, y = -h + j * sf; zf[j * m + i] = (i === 0 || j === 0 || i === m - 1 || j === m - 1) ? triZ(G, x, y) : Hraw(x, y); }
+      out.F = F;
+    }
+  }
+  return WORLD.surf = out;
+}
+/* altitude d'une grille triangulée (diagonale a→d, comme le maillage du sol) */
+function triZ(G, x, y){
+  const n = G.n; let fi = (x - G.x0) / G.st, fj = (y - G.x0) / G.st;
+  fi = fi < 0 ? 0 : fi > n - 1.0001 ? n - 1.0001 : fi; fj = fj < 0 ? 0 : fj > n - 1.0001 ? n - 1.0001 : fj;
+  const i = fi | 0, j = fj | 0, u = fi - i, v = fj - j, Z = G.z, a = Z[j * n + i], b = Z[j * n + i + 1], c = Z[(j + 1) * n + i], d = Z[(j + 1) * n + i + 1];
+  return u >= v ? a + u * (b - a) + v * (d - b) : a + v * (c - a) + u * (d - c);
+}
+function H(x, y){
+  if (!WORLD?.elev) return 0;
+  const R = WORLD.surf || surfGrids(), F = R.F;
+  return F && x > -F.h && x < F.h && y > -F.h && y < F.h ? triZ(F, x, y) : triZ(R.G, x, y);
+}
+const NGF = (x, y) => WORLD ? WORLD.z0 + Hraw(x, y) : null;
 
 /* ---------- constructeur de géométrie (triangles, UV en mètres) ---------- */
 class GB {
@@ -29,14 +63,18 @@ function densify(pts, step = 3){
 /* bande drapée sur le relief, entre les décalages o0 et o1 (gauche > 0) ; dz = hauteur au-dessus du sol ; v en mètres */
 function bandGB(gb, pts, o0, o1, dz0, dz1 = dz0, flipV = false){
   const p = densify(pts, 3); if (p.length < 2) return;
-  const L0 = plOffset(p, o0), L1 = plOffset(p, o1); let s = 0;
+  /* bandes larges (chaussées) : une rangée de points tous les 4 m en travers, chacun posé sur le sol affiché */
+  const w = Math.abs(o1 - o0), K = Math.max(1, Math.ceil(w / 4)), rows = [];
+  for (let k = 0; k <= K; k++){ const t = k / K, o = o0 + (o1 - o0) * t, L = plOffset(p, o), dz = dz0 + (dz1 - dz0) * t, v = flipV ? w * (1 - t) : w * t;
+    rows.push({v, P:L.map(q => P3(q[0], q[1], H(q[0], q[1]) + dz))}); }
+  let s = 0;
   for (let i = 0; i + 1 < p.length; i++){
     const ds = V.dist(p[i], p[i + 1]);
-    const A = L0[i], B = L1[i], C = L1[i + 1], D = L0[i + 1];
-    const z = (q, dz) => H(q[0], q[1]) + dz, w = Math.abs(o1 - o0);
-    const va = flipV ? w : 0, vb = flipV ? 0 : w;
-    if (o1 > o0) gb.quad(P3(A[0], A[1], z(A, dz0)), P3(D[0], D[1], z(D, dz0)), P3(C[0], C[1], z(C, dz1)), P3(B[0], B[1], z(B, dz1)), [s, va], [s + ds, va], [s + ds, vb], [s, vb]);
-    else gb.quad(P3(A[0], A[1], z(A, dz0)), P3(B[0], B[1], z(B, dz1)), P3(C[0], C[1], z(C, dz1)), P3(D[0], D[1], z(D, dz0)), [s, va], [s, vb], [s + ds, vb], [s + ds, va]);
+    for (let k = 0; k < K; k++){
+      const R0 = rows[k], R1 = rows[k + 1], A = R0.P[i], D = R0.P[i + 1], C = R1.P[i + 1], B = R1.P[i];
+      if (o1 > o0) gb.quad(A, D, C, B, [s, R0.v], [s + ds, R0.v], [s + ds, R1.v], [s, R1.v]);
+      else gb.quad(A, B, C, D, [s, R0.v], [s, R1.v], [s + ds, R1.v], [s + ds, R0.v]);
+    }
     s += ds;
   }
 }
@@ -104,10 +142,14 @@ function loadOrtho(){ // photo aérienne IGN (BD ORTHO®), drapée sur le relief
   tryLayer(['HR.ORTHOIMAGERY.ORTHOPHOTOS', 'ORTHOIMAGERY.ORTHOPHOTOS']);
 }
 function buildTerrain(grp){
-  const S = WORLD.size, n = Math.min(WORLD.elev.N, 161), st = S / (n - 1), pos = [], uv = [], idx = [];
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const x = -S / 2 + i * st, y = -S / 2 + j * st; pos.push(x, H(x, y) - 0.02, -y); uv.push(i / (n - 1), j / (n - 1)); }
-  for (let j = 0; j + 1 < n; j++) for (let i = 0; i + 1 < n; i++){ const a = j * n + i, b = a + 1, c = a + n, d = c + 1; idx.push(a, b, d, a, d, c); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const R = surfGrids(), G = R.G, F = R.F, S = WORLD.size, n = G.n, st = G.st, pos = [], uv = [], idx = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){ const x = -S / 2 + i * st, y = -S / 2 + j * st; pos.push(x, G.z[j * n + i] - 0.02, -y); uv.push(i / (n - 1), j / (n - 1)); }
+  const c0 = F ? F.c0 : -1, c1 = F ? F.c1 : -1;   // cellules du cœur : remplacées par la grille fine
+  for (let j = 0; j + 1 < n; j++) for (let i = 0; i + 1 < n; i++){ if (F && i >= c0 && i < c1 && j >= c0 && j < c1) continue; const a = j * n + i, b = a + 1, c = a + n, d = c + 1; idx.push(a, b, d, a, d, c); }
+  if (F){ const m = F.n, base = pos.length / 3;
+    for (let j = 0; j < m; j++) for (let i = 0; i < m; i++){ const x = -F.h + i * F.st, y = -F.h + j * F.st; pos.push(x, F.z[j * m + i] - 0.02, -y); uv.push((x + S / 2) / S, (y + S / 2) / S); }
+    for (let j = 0; j + 1 < m; j++) for (let i = 0; i + 1 < m; i++){ const a = base + j * m + i, b = a + 1, c = a + m, d = c + 1; idx.push(a, b, d, a, d, c); } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : idx); g.computeVertexNormals();
   const aerial = DISPLAY.style === 'aerial' && orthoTex;
   const m = planLook() ? new THREE.MeshBasicMaterial({map:groundTex}) : new THREE.MeshStandardMaterial({map:aerial ? orthoTex : groundTex, roughness:1, metalness:0});
   const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; mesh.name = 'Terrain'; mesh.userData.terrain = true; grp.add(mesh);
