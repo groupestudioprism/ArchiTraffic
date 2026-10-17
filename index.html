@@ -7195,7 +7195,7 @@ $('#simReset').addEventListener('click', () => { const was = SIM.on; simStop(tru
 let PR_FULL = Math.min(devicePixelRatio, GFX().pr), prNow = PR_FULL, lastMove = 0, prLow = Math.min(PR_FULL, GFX().prLow), frameMs = 16, lastRender = 0;
 /* change la qualité à chaud (seul l'anticrénelage attend le prochain chargement) */
 function setGfx(q){ const aa0 = GFX().aa; GFXQ = q; DISPLAY.gfx = q; delete DISPLAY.shadowsUser; const G = GFX();
-  DISPLAY.shadows = G.shadows; saveDisplay(); document.documentElement.classList.toggle('gfx-eco', G === GFX_PRESETS.eco); PR_FULL = Math.min(devicePixelRatio, G.pr); prLow = Math.min(PR_FULL, G.prLow); setPR(PR_FULL);
+  DISPLAY.shadows = G.shadows; saveDisplay(); document.documentElement.classList.toggle('gfx-eco', G === GFX_PRESETS.eco); PR_FULL = Math.min(devicePixelRatio, G.pr); prLow = Math.min(PR_FULL, G.prLow); DYN.pr = PR_FULL; setPR(PR_FULL);
   renderer.shadowMap.type = G.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap; sun.shadow.mapSize.set(G.sh, G.sh); sun.shadow.map?.dispose(); sun.shadow.map = null;
   if (!SIM.on) SIM.cap = G.cap; applyThemeToScene(); if (WORLD) buildWorld(); rebuildProj?.(); dirty = true;
   toast(`Qualité graphique : ${G.n}${G.aa !== aa0 ? ' — le lissage des bords changera au prochain chargement' : ''}.`, 3500); }
@@ -7206,6 +7206,7 @@ function keepInSite(){
   if (x === t.x && z === t.z) return; const dx = x - t.x, dz = z - t.z; t.x = x; t.z = z; c.object.position.x += dx; c.object.position.z += dz;
 }
 /* mesure de performance (ATDebug.perf) : temps par poste et par image */
+const DYN = {pr:PR_FULL, ema:16, last:0};
 const PERF = {on:false, n:0, sim:0, sig:0, rnd:0, lab:0, tot:0, worst:0, last:0, orbit:0};
 function loop(now){
   requestAnimationFrame(loop);
@@ -7213,8 +7214,14 @@ function loop(now){
   if (P && PERF.orbit){ const c = ctl(); if (c.object.isPerspectiveCamera){ const o = c.target, v = c.object.position.clone().sub(o); v.applyAxisAngle(new THREE.Vector3(0, 1, 0), PERF.orbit); c.object.position.copy(o).add(v); } }
   simTick(now); const t1 = P ? performance.now() : 0;
   const moved = ctl().update() || (P && PERF.orbit); if (updateSignals()) dirty = true; if (moved && WORLD) keepInSite(); const t2 = P ? performance.now() : 0;
-  if (moved){ lastMove = now; setPR(prLow); }
-  else if (prNow !== PR_FULL && now - lastMove > 200){ setPR(PR_FULL); dirty = true; }   // y compris pendant la simulation
+  /* résolution dynamique : on mesure l'intervalle RÉEL entre deux images (temps de la carte graphique compris) ;
+     si l'on passe sous ~55 i/s, la résolution baisse un peu, puis remonte dès que la marge revient.
+     En mouvement continu (rotation, simulation) on vise 60 i/s ; à l'arrêt complet, une image pleine résolution. */
+  const busy = moved || SIM.on || (dirty && now - lastRender < 120);
+  if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
+    const tgt = 1000 / GFX().fps; if (DYN.ema > tgt * 1.12 && DYN.pr > 0.7) DYN.pr = Math.max(0.7, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
+    if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.7)) : DYN.pr) * 20) / 20); }
+  else { DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;
   let t3 = t2, t4 = t2;
   if (moved || dirty){ const t = performance.now(); lastRender = now; updateLOD(); renderer.render(scene, cam()); t3 = performance.now(); updateLabels(); updateCompass(); t4 = performance.now(); dirty = false;
