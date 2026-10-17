@@ -10,6 +10,13 @@
   const ctls = [c2, c3];
   const rc = new THREE.Raycaster(), ndc = new THREE.Vector2(), v = new THREE.Vector3(), w = new THREE.Vector3(), pl = new THREE.Plane();
   /* zoom d'un facteur k (k < 1 : rapprocher) en gardant fixe le point sous le curseur */
+  let hitP = null, hitC = null;
+  const _q = new THREE.Vector3();
+  const groundHit = (ray, maxD) => { if (typeof H !== 'function' || typeof WORLD === 'undefined' || !WORLD) return null;
+    const at = d => _q.copy(ray.direction).multiplyScalar(d).add(ray.origin), above = d => { at(d); return _q.y - H(_q.x, -_q.z); };
+    let a = 0, fa = above(0); if (fa < 0) return null; let step = Math.max(2, fa * 0.25);
+    for (let d = step; d < maxD; d += step, step = Math.min(step * 1.25, 200)){ const f = above(d); if (f < 0){ let lo = a, hi = d; for (let i = 0; i < 18; i++){ const m = (lo + hi) / 2; if (above(m) < 0) hi = m; else lo = m; } return at(hi).clone(); } a = d; }
+    return null; };
   const zoomBy = (c, k, nx, ny) => {
     const cam = c.object; ndc.set(nx, ny);
     if (cam.isOrthographicCamera){
@@ -19,11 +26,14 @@
     } else {
       /* zoom « vers ce qui est sous le curseur » : la caméra ET le point visé se rapprochent du point du sol (ou de la maquette)
          pointé — on peut donc toujours aller au plus près, quel que soit l'endroit où se trouvait le point visé */
-      rc.setFromCamera(ndc, cam); let P = null;
-      const terr = typeof worldGroup !== 'undefined' ? worldGroup.children.find(o => o.userData?.terrain) : null;
-      if (terr) P = rc.intersectObject(terr, false)[0]?.point || null;
-      if (!P){ pl.setFromNormalAndCoplanarPoint(w.set(0, 1, 0), c.target); P = rc.ray.intersectPlane(pl, new THREE.Vector3()); }
-      if (!P || P.distanceTo(cam.position) > c.maxDistance * 2) P = c.target.clone();
+      /* point visé : calculé une seule fois par geste de molette (il reste sous le curseur pendant tout le zoom) et par
+         lancer de rayon sur le relief (fonction de hauteur), pas sur le maillage du sol : sur 20 km, intersecter le
+         maillage coûtait des dizaines de millisecondes à CHAQUE image du zoom */
+      let P = c === hitC && hitP ? hitP : null;
+      if (!P){ rc.setFromCamera(ndc, cam); P = groundHit(rc.ray, c.maxDistance * 2);
+        if (!P){ pl.setFromNormalAndCoplanarPoint(w.set(0, 1, 0), c.target); P = rc.ray.intersectPlane(pl, new THREE.Vector3()); }
+        if (!P || P.distanceTo(cam.position) > c.maxDistance * 2) P = c.target.clone();
+        hitP = P.clone(); hitC = c; }
       const dC = cam.position.distanceTo(P), dT = cam.position.distanceTo(c.target); let kk = k;
       if (dC * kk < 1.5) kk = 1.5 / Math.max(dC, 1e-3);                        // jamais à moins de 1,5 m du point visé
       if (dT * kk > c.maxDistance) kk = c.maxDistance / Math.max(dT, 1e-3);     // ni plus loin que la limite
@@ -50,6 +60,7 @@
     if (ev.ctrlKey) d *= 2.5;         // pincement sur pavé tactile : petits écarts
     const n = Math.max(-1.5, Math.min(1.5, d / 100));   // au plus 1,5 cran par évènement
     const r = canvas.getBoundingClientRect();
+    if (pc !== c || Math.abs(pend) < 1e-3) hitP = null;   // nouveau geste : nouveau point visé
     if (pc !== c) pend = 0; pc = c; px = ((ev.clientX - r.left) / r.width) * 2 - 1; py = -((ev.clientY - r.top) / r.height) * 2 + 1;
     pend += Math.abs(n) * Math.log(STEP) * (n < 0 ? 1 : -1);   // < 0 : rapprocher
     pend = Math.max(-1.2, Math.min(1.2, pend));                   // molette lancée très vite : pas d'emballement
