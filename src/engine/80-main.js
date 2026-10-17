@@ -58,8 +58,8 @@ function loop(now){
      En mouvement continu (rotation, simulation) on vise 60 i/s ; à l'arrêt complet, une image pleine résolution. */
   const busy = moved || SIM.on || (dirty && now - lastRender < 120);
   if (busy){ const dt = now - (DYN.last || now); DYN.last = now; if (dt > 0 && dt < 200) DYN.ema = DYN.ema * 0.85 + dt * 0.15;
-    const tgt = 1000 / GFX().fps; if (DYN.ema > tgt * 1.12 && DYN.pr > 0.7) DYN.pr = Math.max(0.7, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
-    if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.7)) : DYN.pr) * 20) / 20); }
+    const tgt = 1000 / GFX().fps; const floor = persp.position.distanceTo(c3.target) > 2500 ? 0.5 : 0.7; /* vue d'ensemble de toute la ville : on accepte une image moins fine */ if (DYN.ema > tgt * 1.12 && DYN.pr > floor) DYN.pr = Math.max(floor, DYN.pr - 0.06); else if (DYN.ema < tgt * 0.92 && DYN.pr < PR_FULL) DYN.pr = Math.min(PR_FULL, DYN.pr + 0.03);
+    if (moved) lastMove = now; setPR(Math.round((moved ? Math.min(DYN.pr, Math.max(prLow, 0.5)) : DYN.pr) * 20) / 20); }
   { const mv = now - Math.max(lastMove, LBL.t) < 300; if (mv !== LBL.fast){ LBL.fast = mv; LBL.el?.classList.toggle('fast', mv); } }
   if (!busy){ DYN.last = 0; if (prNow !== PR_FULL && now - lastMove > 250){ setPR(PR_FULL); dirty = true; } }
   if (!moved && dirty && GFX().fps < 60 && now - lastRender < 1000 / GFX().fps - 2) return;

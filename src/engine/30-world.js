@@ -447,7 +447,7 @@ function disposeGroup(g){ g.traverse(o => { if (o.geometry) o.geometry.dispose()
    gros maillages en tuiles de 400 m (la caméra ne dessine que les tuiles visibles) et on masque les petits détails
    au loin (bordures, regards, trottoirs… au-delà de ~1 km ; façades détaillées au-delà de 3 km). */
 const TILE = 800; let WTILES = [];
-const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : Infinity;
+const lodOf = name => /Bordure|Caniveau|Regard|Avaloir|Chambre|podotact|Bande|Passage|Marquage|Trottoir|Voies piétonnes|Potelet|Banc|Poubelle|Mobilier|Troncs|Lampadaire|Feux|Mur|Haie|Clôture/i.test(name) ? 1100 : /Arbre|Fenêtre|Vitrine|Corniche|Soubassement/i.test(name) ? 3200 : /^Façades$/.test(name) ? 5500 : Infinity;   // façades : au-delà de 5,5 km, quelques pixels
 function tileWorld(grp){
   WTILES = [];
   for (const m of [...grp.children]){
