@@ -232,3 +232,9 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 
 /* caméra en mouvement : pas de fondu ni d'animation sur les centaines d'étiquettes (sinon le navigateur recalcule styles et calques à chaque image) */
 #labels.fast .anno{transition:none!important;animation:none!important}
+
+/* performance : les ombres portées (box-shadow) des étiquettes et bulles obligent le navigateur à repeindre chaque
+   étiquette à chaque image quand la vue bouge (mesuré à Rouen : 14 i/s avec, 59 i/s sans). Contour fin à la place. */
+#labels .anno{box-shadow:none!important}
+#labels .anno.pin{box-shadow:none!important;outline:1px solid rgba(0,0,0,.22);outline-offset:-1px}
+#labels .anno.pin::after{box-shadow:none!important;border-right:1px solid rgba(0,0,0,.18);border-bottom:1px solid rgba(0,0,0,.18)}
