@@ -1,6 +1,7 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="description" content="ARCHITRAFIC · Studio Prism : routes barrées, déviations automatiques et simulation du trafic en 3D, partout en France."><meta name="theme-color" content="#0B2A6B"><link rel="icon" href="assets/emblem-64.webp"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="preconnect" href="https://firestore.googleapis.com"><link rel="preconnect" href="https://identitytoolkit.googleapis.com"><link rel="preconnect" href="https://securetoken.googleapis.com"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://data.geopf.fr" crossorigin><link rel="preconnect" href="https://overpass-api.de" crossorigin><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"><style>[hidden]{display:none!important}html{overflow:hidden;overscroll-behavior:none}body{overflow:hidden;overscroll-behavior:none}*{overscroll-behavior-x:contain}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}body{margin:0}</style></head><body>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('at.theme')==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <title>ARCHITRAFIC · Studio Prism</title>
+<style id="spBg">html{background:#FAFBFC}html[data-theme="dark"]{background:#0E1320}</style>
 <link rel="preload" as="image" href="assets/logo-wide.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -499,36 +500,33 @@ body[data-mode="sec"] .vtools,body[data-mode="sec"] .hud,body[data-mode="sec"] .
   .status button::after{content:"";position:absolute;inset:-7px -1px}
   .modes button::after,.vgrp button::after{content:"";position:absolute;inset:-5px 0}
 }
-/* intro : sur une feuille de plan, un rouleau compresseur pose la route du symbole, trace la ligne centrale puis les rayures de la balise ; ARCHITRAFIC s'écrit et le cône prend sa place.
-   Le logo final est l'image officielle assets/logo-wide.webp ; la scène (src/js/intro.js) la révèle par masques. Sans JS ou une fois la scène finie : état final statique. */
-#splash{position:fixed;inset:0;z-index:60;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding-inline:16px;overflow:hidden;transition:opacity .45s ease,visibility .45s;font-family:var(--f-body)}
+/* intro : une voiture s'arrête au feu rouge, repart au vert et, sur son passage, dévoile le logo officiel (assets/logo-wide.webp).
+   Aucune réécriture du logo : l'image officielle est toujours là, simplement masquée par un rideau que la voiture « tire ». Sans JS ou une fois la scène finie : état final statique. */
+#splash{position:fixed;inset:0;z-index:60;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding-inline:16px;overflow:hidden;transition:opacity .35s ease .2s,visibility 0s .55s;font-family:var(--f-body)}
 #splash.done{opacity:0;visibility:hidden}
+#splash.done .sp-stage,#splash.done .sp-road,#splash.done .sp-msg,#splash.done .sp-skip{opacity:0;transition:opacity .2s ease}
 :root[data-theme="dark"] #splash{background:#0E1320}
 .sp-stage{position:relative;width:min(84vw,900px);aspect-ratio:1200/347;flex:none;margin-block:calc(var(--k,.6)*60px);visibility:hidden;animation:spSafe 0s 1.5s forwards}
 #splash.sp-on .sp-stage{visibility:visible;animation:none}
 #splash.sp-static .sp-stage{animation:spFade .15s ease both}
 .sp-fit{position:absolute;left:0;top:0;width:1200px;height:347px;transform-origin:0 0;transform:scale(var(--k,.6))}
-.sp-cam{position:absolute;inset:0;transform-origin:215px 175px}
-.sp-cam>*,.sp-layers>*{position:absolute;left:0;top:0}
-.sp-layers{position:absolute;inset:0;display:none}
-#splash.sp-play .sp-layers{display:block}
+.sp-fit>*{position:absolute;left:0;top:0}
 .sp-final{width:1200px;height:347px;max-width:none;display:block}
-#splash.sp-play .sp-final{opacity:0}
 .sp-sheet{left:-70px;top:-60px;width:1340px;height:467px;border-radius:34px;display:none}
 :root[data-theme="dark"] .sp-sheet{display:block;background:#FAFBFC;box-shadow:0 0 0 1px #2B3753,0 24px 70px #0009}
 .sp-grid{left:-70px;top:-60px;width:1340px;height:467px;background-image:linear-gradient(#0B4A8E14 1px,transparent 1px),linear-gradient(90deg,#0B4A8E14 1px,transparent 1px);background-size:20px 20px;background-position:10px 7px;-webkit-mask:radial-gradient(ellipse closest-side,#000 55%,transparent);mask:radial-gradient(ellipse closest-side,#000 55%,transparent)}
-.sp-sym{overflow:visible}
-.sp-layers img{display:block;max-width:none;width:1200px;height:347px}
-.sp-wordwrap>*{position:absolute;left:0;top:0}
-.sp-wordwrap{inset:0;width:1200px;height:347px;clip-path:inset(0 64% 0 0)}
-.sp-wl{clip-path:inset(94px 278px 141px 424px)}
-.sp-wr{clip-path:inset(94px 0 141px 1026px)}
-.sp-cur{position:absolute;top:96px;left:0;width:3px;height:112px;border-radius:2px;background:#F28A1A;opacity:0}
-.sp-cone{clip-path:inset(94px 174px 141px 922px)}
-.sp-tag{clip-path:inset(212px 0 92px 430px);opacity:0}
-.sp-mach{width:0;height:0;offset-anchor:0 0;offset-rotate:auto;opacity:0;pointer-events:none}
-.sp-mach svg{position:absolute;left:-70px;top:-90px;overflow:visible}
-.sp-mi{transform-origin:0 0}
+.sp-curtain,.sp-scene{display:none}
+#splash.sp-play .sp-curtain,#splash.sp-play .sp-scene{display:block}
+.sp-curtain{left:-70px;top:-60px;width:1700px;height:467px;background:linear-gradient(90deg,#FAFBFC00 0,#FAFBFC 140px);transform:translateX(-70px);will-change:transform}
+.sp-scene{inset:0;width:1200px;height:520px;pointer-events:none}
+.sp-scene>*{position:absolute}
+.sp-ground{left:-900px;top:490px;width:3000px;height:22px;background:#2B3445;border-top:2px solid #8393AE;border-radius:2px;opacity:0}
+.sp-ground i{position:absolute;left:0;right:0;top:8px;height:3px;background:repeating-linear-gradient(90deg,#fff 0 26px,transparent 26px 54px);opacity:.85}
+.sp-tl{left:140px;top:340px;overflow:visible;opacity:0;transform-origin:50% 100%}
+.sp-car{left:0;top:420px;width:190px;height:84px;will-change:transform;transform:translateX(-520px)}
+.sp-bob{display:block;transform:scale(1.3);transform-origin:0 83%}
+.sp-bob svg{display:block;overflow:visible;transform-origin:50% 90%}
+.sp-wh{transform-box:view-box;transform-origin:0 0}
 .sp-road{position:relative;width:min(220px,60vw);height:5px;border-radius:3px;background:#E6EBF1;overflow:hidden;flex:none}
 :root[data-theme="dark"] .sp-road{background:#26324A}
 .sp-road i{position:absolute;left:0;top:0;bottom:0;width:calc(100% + 120px);background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);animation:spDash 1s linear infinite}
@@ -545,7 +543,7 @@ body[data-mode="sec"] .vtools,body[data-mode="sec"] .hud,body[data-mode="sec"] .
 @keyframes spSafe{to{visibility:visible}}
 @keyframes spFade{from{opacity:0}to{opacity:1}}
 @keyframes spDash{to{transform:translateX(-120px)}}
-@media (prefers-reduced-motion:reduce){#splash.sp-play .sp-layers{display:none}#splash.sp-play .sp-final{opacity:1}#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:1}.sp-skip{display:none}.sp-road i{animation:none}}
+@media (prefers-reduced-motion:reduce){#splash.sp-play .sp-curtain,#splash.sp-play .sp-scene{display:none}#splash.sp-play .sp-final{opacity:1}#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:1}.sp-skip{display:none}.sp-road i{animation:none}}
 /* ===== Compte Studio Prism : connexion, fiche client, code PIN — écran volontairement clair, comme le logo ===== */
 #auth[hidden]{display:none!important}
 #auth{position:fixed;inset:0;z-index:55;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:#FFFFFF;color:#0F1B33;color-scheme:light;font-family:var(--f-body);overflow:auto}
@@ -1097,50 +1095,41 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 <div id="splash" role="status" aria-live="polite">
   <div class="sp-stage" role="img" aria-label="ARCHITRAFIC, outils de conception et de gestion du trafic">
     <div class="sp-fit">
-      <div class="sp-cam">
-        <div class="sp-sheet"></div>
-        <div class="sp-grid"></div>
-        <div class="sp-layers">
-          <svg class="sp-sym" viewBox="0 0 1200 347" width="1200" height="347" focusable="false">
-            <defs>
-              <clipPath id="spRib"><polygon points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314"/></clipPath>
-              <clipPath id="spLeg"><polygon points="260,199 304,169 400,313 318,314"/></clipPath>
-              <mask id="spM1" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><rect width="425" height="347" fill="#fff"/><polygon points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314" fill="#000"/><polygon points="260,199 304,169 400,313 318,314" fill="#000"/></mask>
-              <mask id="spM2" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spRib)"><path class="sp-sw1" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#fff" stroke-width="150"/></g><path d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#000" stroke-width="16"/></mask>
-              <mask id="spM3" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spRib)"><path class="sp-sw2" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#fff" stroke-width="16"/></g></mask>
-              <mask id="spM4" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spLeg)"><path class="sp-sw3" d="M262,150 L392,340" fill="none" stroke="#fff" stroke-width="150"/></g></mask>
-            </defs>
-            <image class="sp-L1" href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM1)"/>
-            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM2)"/>
-            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM3)"/>
-            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM4)"/>
-            <g class="sp-wire" fill="none" stroke-linejoin="round" stroke-width="1.6">
-              <polygon class="sp-w1" pathLength="1" points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314" stroke="#1565C0"/>
-              <polygon class="sp-w2" pathLength="1" points="260,199 304,169 400,313 318,314" stroke="#F28A1A"/>
-              <g clip-path="url(#spRib)"><path class="sp-w3" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" stroke="#0EA5C6" stroke-dasharray="7 7"/></g>
-            </g>
-          </svg>
-          <div class="sp-wordwrap">
-            <img class="sp-wl" src="assets/logo-wide.webp" alt="" width="1200" height="347">
-            <img class="sp-wr" src="assets/logo-wide.webp" alt="" width="1200" height="347">
-            <i class="sp-cur"></i>
-          </div>
-          <img class="sp-cone" src="assets/logo-wide.webp" alt="" width="1200" height="347">
-          <img class="sp-tag" src="assets/logo-wide.webp" alt="" width="1200" height="347">
-          <div class="sp-mach"><svg viewBox="-70 -90 140 100" width="140" height="100" focusable="false"><g class="sp-mi">
-            <path d="M-32,-27 h58 l12,7 v8 h-70z" fill="#F5B700"/>
-            <path d="M-32,-17 h70 v5 h-70z" fill="#F28A1A"/>
-            <path d="M8,-27 h16 l12,7 v3 h-28z" fill="#FFD24D"/>
-            <path d="M-29,-27 v-19 M-3,-27 v-19" stroke="#0B2A6B" stroke-width="3" stroke-linecap="round"/>
-            <rect x="-27" y="-45" width="22" height="17" fill="#0EA5C6" opacity=".28"/>
-            <path d="M-24,-27 v-8 h10 v8z" fill="#0B2A6B"/>
-            <rect x="-34" y="-50" width="38" height="5" rx="2.5" fill="#0B2A6B"/>
-            <circle cx="-15" cy="-55" r="3" fill="#E2541B"/>
-            <g transform="translate(-26,-13)"><g class="sp-dr"><circle r="13" fill="#CBD5E3" stroke="#0B2A6B" stroke-width="2.4"/><circle r="8.6" fill="none" stroke="#8FA1BB" stroke-width="1.6"/><circle r="3.4" fill="#0B2A6B"/><circle cy="-6.2" r="1.7" fill="#0B2A6B"/></g></g>
-            <g transform="translate(26,-15)"><g class="sp-dr"><circle r="15" fill="#CBD5E3" stroke="#0B2A6B" stroke-width="2.4"/><circle r="10" fill="none" stroke="#8FA1BB" stroke-width="1.6"/><circle r="3.8" fill="#0B2A6B"/><circle cy="-7.2" r="1.9" fill="#0B2A6B"/></g></g>
-          </g></svg></div>
-        </div>
-        <img class="sp-final" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+      <div class="sp-sheet"></div>
+      <div class="sp-grid"></div>
+      <img class="sp-final" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+      <div class="sp-curtain"></div>
+      <div class="sp-scene" aria-hidden="true">
+        <div class="sp-ground"><i></i></div>
+        <svg class="sp-tl" viewBox="-30 -150 60 150" width="60" height="150" focusable="false">
+          <rect x="-3.5" y="-84" width="7" height="84" rx="2" fill="#44506A"/>
+          <rect x="-16" y="-146" width="32" height="68" rx="7" fill="#161D2E"/>
+          <rect x="-16" y="-146" width="32" height="68" rx="7" fill="none" stroke="#5E6C89" stroke-width="1.4"/>
+          <g>
+            <circle cx="0" cy="-130" r="8.5" fill="#4A2024"/><circle cx="0" cy="-112" r="8.5" fill="#4B3A1B"/><circle cx="0" cy="-94" r="8.5" fill="#1B3A2B"/>
+          </g>
+          <circle class="sp-lr" cx="0" cy="-130" r="8.5" fill="#FF3B30"/>
+          <circle class="sp-lg" cx="0" cy="-94" r="8.5" fill="#2EE59D" opacity="0"/>
+          <circle class="sp-hr" cx="0" cy="-130" r="22" fill="#FF3B30" opacity=".22"/>
+          <circle class="sp-hg" cx="0" cy="-94" r="22" fill="#2EE59D" opacity="0"/>
+        </svg>
+        <div class="sp-car"><div class="sp-bob"><svg viewBox="0 -70 190 84" width="190" height="84" focusable="false">
+          <defs><linearGradient id="spCb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B7BD6"/><stop offset="1" stop-color="#0B4A8E"/></linearGradient>
+          <linearGradient id="spBeam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFE9A8" stop-opacity=".75"/><stop offset="1" stop-color="#FFE9A8" stop-opacity="0"/></linearGradient></defs>
+          <path class="sp-beam" d="M176,-27 L262,-48 L262,-2 Z" fill="url(#spBeam)" opacity="0"/>
+          <ellipse cx="90" cy="2" rx="86" ry="4" fill="#000" opacity=".16"/>
+          <path d="M10,-13 C6,-14 5,-24 8,-28 C10,-33 18,-35 28,-36 L52,-37 C60,-52 74,-60 92,-60 L114,-60 C128,-60 138,-48 148,-38 L168,-34 C176,-32 180,-27 180,-20 L180,-13 Z" fill="url(#spCb)"/>
+          <path d="M8,-30 L178,-30" stroke="#F28A1A" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+          <path d="M56,-38 C63,-51 76,-56 92,-56 L100,-56 L100,-38 Z" fill="#D5E9F8"/>
+          <path d="M104,-56 L114,-56 C125,-56 133,-47 141,-38 L104,-38 Z" fill="#D5E9F8"/>
+          <path d="M101.5,-57 V-31" stroke="#0B4A8E" stroke-width="3"/>
+          <path d="M60,-30 V-14 M141,-30 V-14" stroke="#0A3F7A" stroke-width="1.2" opacity=".5"/>
+          <rect x="6" y="-27" width="7" height="6" rx="2" fill="#E0242B"/>
+          <rect x="172" y="-28" width="8" height="7" rx="2.5" fill="#FFE08A"/>
+          <circle cx="40" cy="-14" r="19" fill="#101827"/><circle cx="143" cy="-14" r="19" fill="#101827"/>
+          <g transform="translate(40,-14)"><g class="sp-wh"><circle r="14.5" fill="#1B2233"/><circle r="9.5" fill="#D2DAE6"/><path d="M0,-9 V9 M-8.5,-2.8 L8.5,2.8 M-8.5,2.8 L8.5,-2.8 M-5.3,-7.3 L5.3,7.3 M5.3,-7.3 L-5.3,7.3" stroke="#0B2A6B" stroke-width="1.6" opacity=".8"/><circle r="3" fill="#0B2A6B"/><circle cy="-11.8" r="1.5" fill="#F28A1A"/></g></g>
+          <g transform="translate(143,-14)"><g class="sp-wh"><circle r="14.5" fill="#1B2233"/><circle r="9.5" fill="#D2DAE6"/><path d="M0,-9 V9 M-8.5,-2.8 L8.5,2.8 M-8.5,2.8 L8.5,-2.8 M-5.3,-7.3 L5.3,7.3 M5.3,-7.3 L-5.3,7.3" stroke="#0B2A6B" stroke-width="1.6" opacity=".8"/><circle r="3" fill="#0B2A6B"/><circle cy="-11.8" r="1.5" fill="#F28A1A"/></g></g>
+        </svg></div></div>
       </div>
     </div>
   </div>
@@ -1149,18 +1138,18 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
   <button type="button" class="sp-skip" hidden>Passer l'animation</button>
 </div>
 <script>
-/* intro ARCHITRAFIC : le rouleau compresseur pose la route du symbole (révélation par masques synchronisée sur son offset-path), puis ligne centrale, rayures, cône et nom.
+/* intro ARCHITRAFIC : une voiture s'arrête au feu rouge, repart au vert et, sur son passage, dévoile le logo officiel (aucune réécriture : l'image officielle est masquée par un rideau que la voiture « tire »).
    Web Animations API : déterministe et « seekable ». Une fois par session (sessionStorage), ?intro=1 pour rejouer. Exposé : window.__spHide() (demande de fermeture, le splash reste jusqu'à la fin de la scène). */
 (function(){
   var sp = document.getElementById('splash'); if (!sp) return;
-  var T0 = performance.now(), SW = 2500, EXIT = 2950, FADE = 450, KEY = 'prism-intro-architrafic';
+  var T0 = performance.now(), SW = 2900, EXIT = 3300, FADE = 600, KEY = 'prism-intro-architrafic';
   var EASE_IN = 'cubic-bezier(.22,.8,.2,1)', EASE_IO = 'cubic-bezier(.65,0,.35,1)', EASE_M = 'cubic-bezier(.4,0,.2,1)';
   var stage = sp.querySelector('.sp-stage'), cam = sp.querySelector('.sp-cam'), skip = sp.querySelector('.sp-skip');
   var anims = [], endAt = T0 + EXIT, hiding = false, closed = false, hideT = 0, played = false;
   function q(s){ return sp.querySelector(s); }
   function qa(s){ return [].slice.call(sp.querySelectorAll(s)); }
   function fit(){ try { stage.style.setProperty('--k', (stage.offsetWidth / 1200).toFixed(5)); } catch(e){} }
-  function A(el, kf, o){ if (!el) return null; o.fill = 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
+  function A(el, kf, o){ if (!el) return null; o.fill = o.fill || 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
   function cancelAll(){ anims.forEach(function(a){ try { a.cancel(); } catch(e){} }); anims = []; }
   function finalize(){ // état final = écran de chargement stable (logo officiel, barre, message)
     cancelAll(); sp.classList.remove('sp-play'); sp.classList.add('sp-static', 'sp-on'); if (skip) skip.hidden = true;
@@ -1170,7 +1159,7 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
     document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', fit);
     sp.classList.add('done');
     try { if (sp.contains(document.activeElement)) document.activeElement.blur(); } catch(e){}
-    setTimeout(function(){ cancelAll(); sp.remove(); }, FADE + 100);
+    setTimeout(function(){ cancelAll(); sp.remove(); var bg = document.getElementById('spBg'); if (bg) bg.remove(); }, FADE + 100);
   }
   function hide(){ if (hiding || closed) return; hiding = true; hideT = setTimeout(close, Math.max(0, endAt - performance.now())); }
   window.__spHide = hide;
@@ -1186,52 +1175,45 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
   if (reduce || (seen && !force)){ endAt = T0 + 600; sp.classList.add('sp-static', 'sp-on'); return; }
   try {
     try { sessionStorage.setItem(KEY, '1'); } catch(e){}
-    var NS = 'http://www.w3.org/2000/svg', k = stage.offsetWidth / 1200;
-    // longueurs (unités du logo) : trajet complet et début / fin de la route sur la courbe
-    var drive = q('.sp-sw1').getAttribute('d'), segs = drive.split(' C'), tmp = document.createElementNS(NS, 'path'), svg = q('.sp-sym');
-    svg.appendChild(tmp);
-    function len(n){ tmp.setAttribute('d', segs.slice(0, n).map(function(s, i){ return i ? 'C' + s : s; }).join(' ')); return tmp.getTotalLength(); }
-    var L = len(segs.length), roadA = len(4) / L, roadB = len(12) / L; svg.removeChild(tmp);
-    // cadre de caméra : le symbole d'abord en gros plan, puis recul sur le logo complet
-    var vw = innerWidth, vh = innerHeight, tgt = Math.min(vw * .78, vh * .6, 560), Z = Math.max(1.2, Math.min(3.4, tgt / (415 * k)));
-    var camFrom = 'translate(385px,0) scale(' + Z.toFixed(3) + ')';
+    var k = stage.offsetWidth / 1200, r = stage.getBoundingClientRect();
+    var right = (innerWidth - r.left) / k;                       // bord droit de l'écran, en unités du logo
+    var X0 = -720, XS = -124, D = Math.max(1300, Math.min(2000, right + 230 - 110)); // départ hors champ, arrêt au feu (avant à x=110), course complète
+    var T1 = 1050, DUR = Math.round(Math.max(1250, Math.min(1900, D * 0.95)));      // feu vert à ~1,0 s ; durée du passage
+    var TE = T1 + DUR, SWT = TE + 350;
     sp.classList.add('sp-play', 'sp-on'); if (skip){ skip.hidden = false; skip.addEventListener('click', doSkip); }
     document.addEventListener('keydown', onKey, true);
     played = true;
-    var DV = 450, DT = 1500; // départ et durée du passage de l'engin
-    A(q('.sp-grid'), [{opacity: 0}, {opacity: 1}], {duration: 600, easing: EASE_IN});
-    A(cam, [{transform: camFrom}, {transform: camFrom, offset: 0.56}, {transform: 'translate(0,0) scale(1)'}], {duration: 2450, easing: EASE_IO});
-    A(q('.sp-L1'), [{opacity: 0}, {opacity: 1}], {delay: 100, duration: 600, easing: EASE_IN});
-    [['.sp-w1', 200, 700], ['.sp-w2', 400, 600]].forEach(function(w){
-      A(q(w[0]), [{strokeDasharray: '1 1', strokeDashoffset: 1}, {strokeDasharray: '1 1', strokeDashoffset: 0}], {delay: w[1], duration: w[2], easing: EASE_IO});
-    });
-    A(q('.sp-w3'), [{opacity: 0}, {opacity: 1}], {delay: 700, duration: 400});
-    A(q('.sp-wire'), [{opacity: 1}, {opacity: 1, offset: .55}, {opacity: 0}], {delay: 0, duration: 2000, easing: 'linear'});
-    // l'engin et les révélations partagent la même durée et la même courbe : la route apparaît exactement sous lui
-    var sw = {delay: DV, duration: DT, easing: EASE_M};
-    q('.sp-sw1').style.strokeDasharray = L + ' ' + L * 2; q('.sp-sw2').style.strokeDasharray = L + ' ' + L * 2;
-    A(q('.sp-sw1'), [{strokeDashoffset: L}, {strokeDashoffset: 0}], {delay: DV + 60, duration: DT, easing: EASE_M});
-    A(q('.sp-sw2'), [{strokeDashoffset: L}, {strokeDashoffset: 0}], {delay: DV + 230, duration: DT, easing: EASE_M});
-    var mach = q('.sp-mach'); mach.style.offsetPath = "path('" + drive + "')";
-    A(mach, [{offsetDistance: '0%'}, {offsetDistance: '100%'}], sw);
-    A(mach, [{opacity: 0}, {opacity: 1, offset: .07}, {opacity: 1, offset: .9}, {opacity: 0}], sw);
-    A(q('.sp-mi'), [{transform: 'scale(1.3)'}, {transform: 'scale(1.3)', offset: roadA}, {transform: 'scale(.8)', offset: roadB}, {transform: 'scale(.72)'}], sw);
-    qa('.sp-dr').forEach(function(d, i){ var r = i ? 15 : 13; A(d, [{transform: 'rotate(0deg)'}, {transform: 'rotate(' + (L / r * 180 / Math.PI).toFixed(1) + 'deg)'}], sw); });
-    // rayures orange de la jambe droite, de haut en bas
-    q('.sp-sw3').style.strokeDasharray = '232 500';
-    A(q('.sp-sw3'), [{strokeDashoffset: 232}, {strokeDashoffset: 0}], {delay: 1700, duration: 480, easing: EASE_IO});
-    // nom : s'écrit de gauche à droite, le cône tombe à sa place dans le mot
-    A(q('.sp-wordwrap'), [{clipPath: 'inset(0 64% 0 0)'}, {clipPath: 'inset(0 0% 0 0)'}], {delay: 1850, duration: 500, easing: EASE_IO});
-    A(q('.sp-cur'), [{opacity: 1, transform: 'translateX(426px)'}, {opacity: 1, transform: 'translateX(1190px)', offset: .94}, {opacity: 0, transform: 'translateX(1192px)'}], {delay: 1850, duration: 500, easing: EASE_IO});
-    A(q('.sp-cone'), [{opacity: 0, transform: 'translateY(-70px)'}, {opacity: 1, transform: 'translateY(0)', offset: .5, easing: EASE_IN}, {transform: 'translateY(-7px)', offset: .7}, {transform: 'translateY(0)', offset: .88}, {transform: 'translateY(0)'}], {delay: 1900, duration: 480, easing: 'linear'});
-    A(q('.sp-tag'), [{opacity: 0, transform: 'translateY(8px)'}, {opacity: 1, transform: 'none'}], {delay: 2050, duration: 380, easing: EASE_IN});
-    A(q('.sp-road'), [{opacity: 0}, {opacity: 1}], {delay: 2200, duration: 300});
-    A(q('.sp-msg'), [{opacity: 0}, {opacity: 1}], {delay: 2200, duration: 300});
-    // relais : à SW ms l'empilement de calques est remplacé, à l'image près, par l'image officielle intacte
-    var D2 = SW + 1, off = SW / D2;
-    A(q('.sp-layers'), [{opacity: 1}, {opacity: 1, offset: off}, {opacity: 0}], {duration: D2, easing: 'linear'});
-    A(q('.sp-final'), [{opacity: 0}, {opacity: 0, offset: (SW - 140) / D2}, {opacity: 1, offset: off}, {opacity: 1}], {duration: D2, easing: 'linear'});
-    var master = A(stage, [{opacity: 1}, {opacity: 1}], {duration: SW});
+    var car = q('.sp-car'), bob = q('.sp-bob svg'), whs = qa('.sp-wh');
+    var ROT = 0.33 * 180 / Math.PI / 14.5;                       // rotation des roues par unité parcourue (réduite : pas d'effet stroboscopique)
+    A(q('.sp-ground'), [{opacity: 0, transform: 'scaleY(.4)'}, {opacity: 1, transform: 'none'}], {duration: 380, easing: EASE_IN});
+    A(q('.sp-tl'), [{opacity: 0, transform: 'translateY(10px)'}, {opacity: 1, transform: 'none'}], {delay: 120, duration: 360, easing: EASE_IN});
+    // 1) arrivée : la voiture freine et s'arrête avant le feu rouge
+    var arr = {delay: 100, duration: 760, easing: EASE_IN};
+    A(car, [{transform: 'translateX(' + X0 + 'px)'}, {transform: 'translateX(' + XS + 'px)'}], arr);
+    whs.forEach(function(w){ A(w, [{transform: 'rotate(0deg)'}, {transform: 'rotate(' + ((XS - X0) * ROT).toFixed(0) + 'deg)'}], arr); });
+    A(bob, [{transform: 'rotate(0deg)'}, {transform: 'rotate(0deg)', offset: .72}, {transform: 'rotate(1.6deg)', offset: .9}, {transform: 'rotate(0deg)'}], {delay: 100, duration: 900, easing: EASE_IO});
+    // 2) le feu passe au vert
+    A(q('.sp-lr'), [{opacity: 1}, {opacity: 0}], {delay: T1 - 80, duration: 140});
+    A(q('.sp-hr'), [{opacity: .22}, {opacity: 0}], {delay: T1 - 80, duration: 140});
+    A(q('.sp-lg'), [{opacity: 0}, {opacity: 1}], {delay: T1, duration: 160});
+    A(q('.sp-hg'), [{opacity: 0}, {opacity: .3}], {delay: T1, duration: 160});
+    // 3) départ : la voiture traverse la scène, le rideau se retire juste derrière son avant
+    var dep = {delay: T1 + 50, duration: DUR, easing: 'cubic-bezier(.5,.08,.78,.62)', fill: 'forwards'};
+    A(car, [{transform: 'translateX(' + XS + 'px)'}, {transform: 'translateX(' + (XS + D) + 'px)'}], dep);
+    whs.forEach(function(w){ A(w, [{transform: 'rotate(' + ((XS - X0) * ROT).toFixed(0) + 'deg)'}, {transform: 'rotate(' + ((XS - X0 + D) * ROT).toFixed(0) + 'deg)'}], dep);
+      /* la rotation d'arrivée est déjà acquise (fill both) ; le relais est exact car les deux phases se suivent sans chevauchement */ });
+    A(bob, [{transform: 'rotate(0deg)'}, {transform: 'rotate(-1.8deg)', offset: .12}, {transform: 'rotate(0deg)', offset: .3}, {transform: 'rotate(0deg)'}], {delay: T1 + 50, duration: DUR, easing: EASE_IO, fill: 'forwards'});
+    A(q('.sp-beam'), [{opacity: 0}, {opacity: .8}], {delay: T1 + 20, duration: 260});
+    var f0 = 110 - 30;                                          // rideau : bord (milieu du dégradé) = avant de la voiture - 30
+    var eb = Math.min(.95, (1320 - f0 + 0) / D);
+    A(q('.sp-curtain'), [{transform: 'translateX(-70px)', offset: 0}, {transform: 'translateX(' + Math.round(D * .1 + f0) + 'px)', offset: .1}, {transform: 'translateX(1320px)', offset: Math.min(.95, (1320 - f0) / D)}, {transform: 'translateX(1320px)', offset: 1}], dep);
+    // 4) la scène s'efface, la route devient la barre de chargement
+    A(q('.sp-ground'), [{opacity: 1}, {opacity: 0}], {delay: TE - 150, duration: 320, easing: 'linear', fill: 'forwards'});
+    A(q('.sp-tl'), [{opacity: 1}, {opacity: 0}], {delay: TE - 150, duration: 320, easing: 'linear', fill: 'forwards'});
+    A(q('.sp-road'), [{opacity: 0}, {opacity: 1}], {delay: TE + 50, duration: 300});
+    A(q('.sp-msg'), [{opacity: 0}, {opacity: 1}], {delay: TE + 50, duration: 300});
+    SW = SWT; EXIT = SWT + 400; endAt = T0 + EXIT;
+    var master = A(stage, [{opacity: 1}, {opacity: 1}], {duration: SWT});
     master.onfinish = function(){ played = false; if (skip) skip.hidden = true; };   // l'état final reste porté par les animations (fill) : aucun saut visuel
   } catch(err){ played = false; try { finalize(); } catch(e){} endAt = T0 + 600; }
 })();
