@@ -60,6 +60,42 @@ function densify(pts, step = 3){
   for (let i = 1; i < pts.length; i++){ const a = pts[i - 1], b = pts[i], L = V.dist(a, b), n = Math.max(1, Math.ceil(L / step)); for (let k = 1; k <= n; k++) out.push(V.lerp(a, b, k / n)); }
   return out;
 }
+/* drapé exact : un triangle (x, y, dz, u, v) est découpé le long des lignes de la grille du relief et de leurs diagonales
+   (celles du maillage du terrain), puis chaque morceau est posé sur le sol : il est alors dans le plan du triangle du terrain
+   et ne peut plus passer dessous, même sur un fort relief. Sur sol plan ou en pente régulière (écart < 1 cm), pas de découpe. */
+const DRAPE_TOL = 0.01;
+function drapeFlat(a, b, c){
+  const mx = (p, q) => [(p.x + q.x) / 2, (p.y + q.y) / 2], ha = H(a.x, a.y), hb = H(b.x, b.y), hc = H(c.x, c.y);
+  const m1 = mx(a, b), m2 = mx(b, c), m3 = mx(c, a), g = [(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3];
+  return Math.abs(H(m1[0], m1[1]) - (ha + hb) / 2) <= DRAPE_TOL && Math.abs(H(m2[0], m2[1]) - (hb + hc) / 2) <= DRAPE_TOL &&
+         Math.abs(H(m3[0], m3[1]) - (hc + ha) / 2) <= DRAPE_TOL && Math.abs(H(g[0], g[1]) - (ha + hb + hc) / 3) <= DRAPE_TOL;
+}
+function drapeCut(a, b, c, R){
+  const X = [a.x, b.x, c.x], Y = [a.y, b.y, c.y], D = [a.x - a.y, b.x - b.y, c.x - c.y], F = R.F, e = 1e-6;
+  const rng = v => [Math.min(...v), Math.max(...v)];
+  if (F) for (const k of [-F.h, F.h]){ for (const [ax, v] of [['x', X], ['y', Y]]){ const [lo, hi] = rng(v); if (lo < k - e && hi > k + e) return {ax, k}; } }
+  const cx = (X[0] + X[1] + X[2]) / 3, cy = (Y[0] + Y[1] + Y[2]) / 3, Gd = F && cx > -F.h && cx < F.h && cy > -F.h && cy < F.h ? F : R.G, st = Gd.st, x0 = Gd.x0;
+  for (const [ax, v, o] of [['x', X, x0], ['y', Y, x0], ['d', D, 0]]){ const [lo, hi] = rng(v), k = (Math.floor((lo - o) / st + 1e-9) + 1) * st + o; if (k < hi - e) return {ax, k}; }
+  return null;
+}
+function drapeSplit(poly, ax, k){   // découpe un polygone convexe (3 ou 4 sommets) par x = k, y = k ou x − y = k
+  const f = p => ax === 'x' ? p.x : ax === 'y' ? p.y : p.x - p.y, lo = [], hi = [];
+  for (let i = 0; i < poly.length; i++){
+    const p = poly[i], q = poly[(i + 1) % poly.length], fp = f(p) - k, fq = f(q) - k;
+    (fp < 0 ? lo : hi).push(p);
+    if ((fp < 0) !== (fq < 0)){ const t = fp / (fp - fq), m = {x:p.x + (q.x - p.x) * t, y:p.y + (q.y - p.y) * t, dz:p.dz + (q.dz - p.dz) * t, u:p.u + (q.u - p.u) * t, v:p.v + (q.v - p.v) * t}; lo.push(m); hi.push(m); }
+  }
+  return [lo, hi];
+}
+function drapeTri(gb, a, b, c){
+  const R = WORLD?.elev ? (WORLD.surf || surfGrids()) : null, st = [[a, b, c]], put = p => P3(p.x, p.y, H(p.x, p.y) + p.dz);
+  while (st.length){
+    const [p, q, r] = st.pop();
+    const cut = R && !drapeFlat(p, q, r) ? drapeCut(p, q, r, R) : null;
+    if (!cut){ gb.tri(put(p), put(q), put(r), [p.u, p.v], [q.u, q.v], [r.u, r.v]); continue; }
+    for (const poly of drapeSplit([p, q, r], cut.ax, cut.k)) for (let i = 1; i + 1 < poly.length; i++) st.push([poly[0], poly[i], poly[i + 1]]);
+  }
+}
 /* bande drapée sur le relief, entre les décalages o0 et o1 (gauche > 0) ; dz = hauteur au-dessus du sol ; v en mètres */
 function bandGB(gb, pts, o0, o1, dz0, dz1 = dz0, flipV = false){
   /* hors du cœur détaillé d'une grande zone (relief plus grossier, vu de loin) : maillage 3 à 6 fois plus léger */
@@ -68,14 +104,14 @@ function bandGB(gb, pts, o0, o1, dz0, dz1 = dz0, flipV = false){
   /* bandes larges (chaussées) : une rangée de points tous les 4 m en travers, chacun posé sur le sol affiché */
   const w = Math.abs(o1 - o0), K = far ? 1 : Math.max(1, Math.ceil(w / 4)), rows = [];
   for (let k = 0; k <= K; k++){ const t = k / K, o = o0 + (o1 - o0) * t, L = plOffset(p, o), dz = dz0 + (dz1 - dz0) * t, v = flipV ? w * (1 - t) : w * t;
-    rows.push({v, P:L.map(q => P3(q[0], q[1], H(q[0], q[1]) + dz))}); }
+    rows.push({v, L, dz}); }
   let s = 0;
   for (let i = 0; i + 1 < p.length; i++){
     const ds = V.dist(p[i], p[i + 1]);
     for (let k = 0; k < K; k++){
-      const R0 = rows[k], R1 = rows[k + 1], A = R0.P[i], D = R0.P[i + 1], C = R1.P[i + 1], B = R1.P[i];
-      if (o1 > o0) gb.quad(A, D, C, B, [s, R0.v], [s + ds, R0.v], [s + ds, R1.v], [s, R1.v]);
-      else gb.quad(A, B, C, D, [s, R0.v], [s, R1.v], [s + ds, R1.v], [s + ds, R0.v]);
+      const R0 = rows[k], R1 = rows[k + 1], mk = (R, j, u) => ({x:R.L[j][0], y:R.L[j][1], dz:R.dz, u, v:R.v}), A = mk(R0, i, s), D = mk(R0, i + 1, s + ds), C = mk(R1, i + 1, s + ds), B = mk(R1, i, s);
+      if (o1 > o0){ drapeTri(gb, A, D, C); drapeTri(gb, A, C, B); }
+      else { drapeTri(gb, A, B, C); drapeTri(gb, A, C, D); }
     }
     s += ds;
   }
