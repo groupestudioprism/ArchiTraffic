@@ -253,7 +253,18 @@ function objInstances(){
 const selBox = new THREE.Box3Helper(new THREE.Box3(), 0xF28A1A); selBox.visible = false; markGroup.add(selBox);
 let selShape = null; const selMat = new THREE.MeshBasicMaterial({color:0xF28A1A, transparent:true, opacity:0.32, depthTest:false}), selLine = new THREE.LineBasicMaterial({color:0xF28A1A, depthTest:false});
 /* tracé visible d'une route barrée : arrêté sur la ligne des barrières, à min(6 m, L/3) de chaque carrefour (voir autoSigns) */
-function closureVis(e){ const L = plLen(e.pts), t = Math.min(6, L / 3); return L > 1 ? plSlice(e.pts, t, L - t) : e.pts; }
+function closureVis(e){ const L = plLen(e.pts); return L > 1 ? plSlice(e.pts, closureTrim(e, 0), L - closureTrim(e, 1)) : e.pts; }
+/* recul de la ligne des barrières depuis le centre du carrefour d'extrémité (end 0 = début, 1 = fin) : jusqu'au bord de la rue
+   transversale (demi-largeur de la plus large rue qui croise + 1,2 m), pour que la fermeture s'arrête à la rue où elle est censée
+   s'arrêter. L'ancien recul fixe de 6 m débordait sur les rues larges (boulevards, cours lyonnais : 15 à 30 m). */
+function closureTrim(e, end){
+  const L = plLen(e.pts), ids = e.ids || [], dflt = Math.min(6, L / 3); if (ids.length < 2 || typeof NET === 'undefined') return dflt;
+  const id = end ? ids[ids.length - 1] : ids[0], nx = end ? ids[ids.length - 2] : ids[1], n = NET.nodes.get(id), m0 = NET.nodes.get(nx); if (!n || !m0) return dflt;
+  const d0 = V.norm(V.sub(m0.xy, n.xy)); let hw = -1;
+  for (const mid of n.nb){ if (mid === nx) continue; const m = NET.nodes.get(mid); if (!m) continue; const d = V.norm(V.sub(m.xy, n.xy)); if (Math.abs(V.dot(d, d0)) > 0.85) continue;   // rue dans le prolongement : pas une transversale
+    const ed = n.out.map(i => NET.edges[i]).find(x => x.to === mid) || n.inn.map(i => NET.edges[i]).find(x => x.from === mid), w = ed ? NET.roads[ed.r]?.w : 0; if (w) hw = Math.max(hw, w / 2); }
+  return hw < 0 ? dflt : Math.min(L / 3, Math.max(2, hw + 1.2));
+}
 function applySel(){
   if (typeof sigVisibility === 'function' && applySel.k !== sel + '|' + stateVer){ applySel.k = sel + '|' + stateVer; sigVisibility(); }   // feux affichés selon la route barrée sélectionnée
   if (selShape){ markGroup.remove(selShape); selShape.traverse(o => o.geometry?.dispose()); selShape = null; } selBox.visible = false;

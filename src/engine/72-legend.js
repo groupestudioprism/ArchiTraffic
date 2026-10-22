@@ -54,8 +54,12 @@ function buildAnnos(){
   const mk = (cls, txt, xy, z = 0, extra = {}) => { const d = document.createElement('div'); d.className = 'anno ' + cls; d.textContent = txt; L.appendChild(d); annos.push({d, xy, z, ...extra}); return d; };
   if (WORLD?.labels && DISPLAY.lay.names !== false) for (const s of WORLD.labels) mk('street', s.name, s.xy, 0.5, {street:true, dir:s.dir});
   // carrefours à feux : repère avec l'état du feu (axe principal), visible de loin comme les panneaux
-  if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
-    const d = mk('pin sigpin', '', n.xy, 4, {pin:true, sig:true, pri:1.5, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
+  /* une seule bulle par carrefour (à Lyon, un feu est cartographié sur chaque ligne d'arrêt : 4 à 6 points par carrefour) ;
+     pas de bulle pour les feux de passage piéton isolés ; priorité sous la signalisation du chantier */
+  const sigSeen = new Set();
+  if (WORLD && DISPLAY.lay.pins !== false) for (const n of NET.nodes.values()) if (n.sig && n.inn.length){ const c = sigCtl(n); if (nodeDeg(c) < 3 || sigSeen.has(c.id)) continue; sigSeen.add(c.id);
+    const e = NET.edges[n.inn[0]], sd = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy));
+    const d = mk('pin sigpin', '', c.xy, 4, {pin:true, sig:true, pri:0.3, sn:n, sd}); d.innerHTML = '<i></i><i></i><i></i>'; d.title = 'Carrefour à feux'; d.dataset.s = sigState(n, sd); }
   for (const e of state?.els || []){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
@@ -84,7 +88,7 @@ function updateLabels(){
   // repères de panneaux : visibles quand le panneau 3D devient trop petit à l'écran (< 18 px), sans chevauchement (priorité barrages > avertissement > déviation)
   if (annos._pk !== annoKey){ annos._pk = annoKey; annos._pins = annos.filter(a => a.pin).sort((p, q) => q.pri - p.pri); }
   const occ = new Set(), pins = annos._pins; let npin = 0; const MAXPIN = GFX().cap < 200 ? 30 : 60;   // au-delà, l'écran est saturé de bulles et chaque bulle coûte à chaque image
-  for (const a of pins){ if (npin >= MAXPIN || (a.sig && SIGVIS && !SIGVIS.has(sigCtl(a.sn).id))){ a.show = false; continue; } /* feux loin des routes barrées : pas de repère */ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
+  for (const a of pins){ if (npin >= MAXPIN || (a.sig && (!SIGPIN?.has(sigCtl(a.sn).id) || mpp > 1.6))){ a.show = false; continue; } /* repère de feu : seulement près des routes barrées, et pas en vue lointaine */ const g = (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)), A = toScreen(W3(a.xy[0], a.xy[1], g + 1.6)), B = toScreen(W3(a.xy[0], a.xy[1], g + 2.6)), px = view === '2d' ? 0.9 / mpp : Math.abs(A[1] - B[1]);   // en plan : largeur d'un panneau (≈ 0,9 m) à l'écran
     const vis = A[2] < 1 && A[2] > -1 && A[0] > -30 && A[1] > -40 && A[0] < W + 30 && A[1] < Hh + 10 && px < 22;
     a.show = false; if (!vis) continue; const ck = `${Math.round(A[0] / 56)},${Math.round(A[1] / 64)}`; if (occ.has(ck)) continue; occ.add(ck); a.show = true; npin++; a.sx = A[0]; a.sy = A[1]; }
   // écritures DOM minimales : position par la propriété « translate » (pas de recalcul de mise en page), seulement si elle a changé

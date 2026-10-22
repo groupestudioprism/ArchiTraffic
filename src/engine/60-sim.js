@@ -100,15 +100,34 @@ function simStep(dt){
     let gap = Infinity, vl = 0; const list = occ.get(a.edges[a.ei]), idx = a._i;
     if (idx + 1 < list.length){ const b = list[idx + 1]; gap = b.s - a.s - b.len; vl = b.v; }
     else { let acc = e.len - a.s; for (let k = a.ei + 1; k < Math.min(a.edges.length, a.ei + 4) && gap === Infinity; k++){ const l2 = occ.get(a.edges[k]); if (l2?.length){ const b = l2[0]; gap = acc + b.s - b.len; vl = b.v; } else acc += NET.edges[a.edges[k]].len; if (acc > 80) break; } }
-    // arrêt au bout de l'arête : feu rouge, priorité, fin de parcours
+    // feu le plus proche devant, jusqu'à 60 m et à travers les petits tronçons (à Lyon, le feu est sur la ligne d'arrêt, à 2-10 m du nœud précédent)
+    /* rouge : arrêt. Jaune : arrêt sauf si l'arrêt n'est plus possible en sécurité (décélération 3 m/s²) ; la décision est prise une
+       fois, à l'apparition du jaune, comme un conducteur (sinon, en freinant, il repasse en franchissement et brûle le rouge) ;
+       le véhicule engagé au jaune dégage le carrefour même si le rouge apparaît. */
+    let sigStop = -1;
+    for (let k = a.ei, acc = e.len - a.s; k + 1 < a.edges.length && acc < 60; ){ const E = NET.edges[a.edges[k]], sn = NET.nodes.get(E.to);
+      if (sn.sig){ const ls = sigState(sn, V.norm(V.sub(sn.xy, NET.nodes.get(E.from).xy)));
+        if (ls === 'y' && a.yn !== sn.id){ a.yn = sn.id; a.yg = !(a.v * a.v / 6 < acc - 1); }
+        if (acc > 0.3 && (ls === 'r' && !(a.yn === sn.id && a.yg) || ls === 'y' && !a.yg)) sigStop = acc;
+        break; }
+      k++; acc += NET.edges[a.edges[k]].len; }
+    if (sigStop >= 0){ gap = Math.min(gap, sigStop - 0.5); vl = 0; }
+    // arrêt au bout de l'arête : priorité, place dans la rue de sortie, fin de parcours
     const rem = e.len - a.s, n = NET.nodes.get(e.to), nextE = NET.edges[a.edges[a.ei + 1]];
     if (nextE && rem < 40){
       let stop = false;
-      if (n.sig && !sigGreen(n, e)) stop = rem > 1.5;
-      else if (nodeDeg(n) >= 3){
+      if (nodeDeg(n) >= 3){
         // ne pas s'engager dans le carrefour si la rue de sortie n'a pas la place (évite de bloquer le carrefour)
         const l2 = occ.get(a.edges[a.ei + 1]), room = !l2?.length || l2[0].s - l2[0].len > a.len + 1.5;
         if (!room) stop = rem > 1 && rem < 14;
+        else if (sigJunction(n)){   // carrefour à feux, au vert : le tourne-à-gauche cède le passage aux véhicules venant en face
+          const d1 = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)), d2 = V.norm(V.sub(NET.nodes.get(nextE.to).xy, n.xy));
+          if (V.cross(d1, d2) > 0.35 && V.dot(d1, d2) < 0.6) for (const ei of n.inn){ const oe = NET.edges[ei]; if (oe === e) continue;
+            const od = V.norm(V.sub(n.xy, NET.nodes.get(oe.from).xy)); if (V.dot(od, d1) > -0.8) continue;   // seulement le sens opposé
+            const l = occ.get(ei); if (!l?.length) continue; const b = l[l.length - 1], r2 = oe.len - b.s, bn = NET.edges[b.edges[b.ei + 1]];
+            if (bn && V.cross(od, V.norm(V.sub(NET.nodes.get(bn.to).xy, n.xy))) > 0.35) continue;   // lui aussi tourne à gauche : pas de conflit
+            if (r2 < 35 && b.v > 1.5 && r2 / b.v < 4){ stop = rem > 1 && rem < 14; break; } }
+        }
         else if (!n.sig){   // au vert, les feux règlent les conflits : les deux sens d'un même axe passent ensemble (sinon ils se bloquent l'un l'autre par la réservation et le carrefour sature)
           const r = SIM.resv.get(n.id);
           if (r && r.a !== a.id && SIM.t - r.t < 3.5 && r.from !== e.from) stop = rem > 1 && rem < 14;
@@ -118,7 +137,7 @@ function simStep(dt){
       // virage serré : ralentir
       const d1 = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)), d2 = V.norm(V.sub(NET.nodes.get(nextE.to).xy, n.xy)), cosT = V.dot(d1, d2);
       if (cosT < 0.7 && rem < 25){ const vt = cosT < 0 ? 4 : 6.5; if (a.v > vt) gap = Math.min(gap, rem + 6), vl = Math.min(vl || vt, vt); }
-      if (stop){ gap = Math.min(gap, rem - 1); vl = 0; }
+      if (stop){ gap = Math.min(gap, rem - 0.5); vl = 0; }
     }
     const s0 = 2, T = 1.2, am = a.pl ? 0.9 : 1.6, bm = 2.2, dv = a.v - vl, ss = s0 + Math.max(0, a.v * T + a.v * dv / (2 * Math.sqrt(am * bm)));
     let acc = am * (1 - Math.pow(a.v / Math.max(1, v0), 4) - (gap < Infinity ? Math.pow(ss / Math.max(0.1, gap), 2) : 0));

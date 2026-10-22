@@ -1,5 +1,8 @@
 /* ============ Feux tricolores (carrefours à feux OSM) ============
-   Cycle à la française : vert 27 s, jaune fixe 3 s, rouge intégral 2 s, par axe (deux phases en opposition).
+   Cycle à la française (IISR, 6e partie « feux de circulation permanents ») : vert 27 s, jaune fixe 3 s en agglomération
+   et 5 s hors agglomération, rouge intégral (dégagement) 2 s, par axe (deux phases en opposition) ; feux face à face = même couleur.
+   Comportement des véhicules (Code de la route) : arrêt au rouge ; au jaune, arrêt sauf si le véhicule ne peut plus s'arrêter
+   en sécurité ; au vert, le véhicule qui tourne à gauche cède le passage à ceux qui viennent en face.
    Têtes de feux R/J/V à 3 feux sur mât, allumées selon le cycle (en simulation : temps simulé ; sinon horloge),
    et repère sur la carte avec la couleur en cours. Les véhicules simulés s'arrêtent au rouge et au jaune. */
 const SIGCYC = {g:27, y:3, r:2};   // période = 2 × (vert + jaune + rouge intégral) = 64 s
@@ -39,20 +42,23 @@ function sigOffset(n){ let o = SIM.sigOff.get(n.id); if (o !== undefined) return
   return SIM.sigOff.get(n.id) ?? 0; }
 /* état du feu pour une approche de direction d (vers le carrefour) : 'g' | 'y' | 'r' */
 function sigState(n, d, t = SIGT()){
-  const per = 2 * (SIGCYC.g + SIGCYC.y + SIGCYC.r), ph = ((t + sigOffset(sigCtl(n))) % per + per) % per, half = per / 2;
-  const c = sigCtl(n);
+  const c = sigCtl(n), Y = c._y ??= sigYellow(c), per = 2 * (SIGCYC.g + Y + SIGCYC.r), ph = ((t + sigOffset(c)) % per + per) % per, half = per / 2;
   // un seul axe équipé de feux (passage piéton, feux sur une seule rue) : vert long, rouge court (phase piétons/rue transversale)
-  if (c._one){ const P = SIGCYC.g + SIGCYC.y + 10, q1 = ((t + sigOffset(c)) % P + P) % P; return q1 < SIGCYC.g ? 'g' : q1 < SIGCYC.g + SIGCYC.y ? 'y' : 'r'; }
+  if (c._one){ const P = SIGCYC.g + Y + 10, q1 = ((t + sigOffset(c)) % P + P) % P; return q1 < SIGCYC.g ? 'g' : q1 < SIGCYC.g + Y ? 'y' : 'r'; }
   const axis = sigAxis(n, d), q = (ph - axis * half + per) % per;
-  return q < SIGCYC.g ? 'g' : q < SIGCYC.g + SIGCYC.y ? 'y' : 'r';
+  return q < SIGCYC.g ? 'g' : q < SIGCYC.g + Y ? 'y' : 'r';
 }
+/* durée du jaune fixe : 3 s en agglomération, 5 s hors agglomération (bâti à moins de 30 m : même critère que la signalisation de chantier) */
+function sigYellow(c){ if (!WORLD?.W) return SIGCYC.y; const U = WORLD._urb ??= urbanIndex(WORLD.W); return U(c.xy[0], c.xy[1]) >= 2 ? 3 : 5; }
+/* carrefour réglé par des feux : feu sur le nœud, ou carrefour auquel sont rattachés les feux posés sur les lignes d'arrêt */
+function sigJunction(n){ if (n.sig) return true; if (!NET._sigJ){ NET._sigJ = new Set(); for (const m of NET.nodes.values()) if (m.sig) NET._sigJ.add(sigCtl(m).id); } return NET._sigJ.has(n.id); }
 let SIGHEADS = null;   // {heads:[{n, d}], lamps:{r,y,g:InstancedMesh}, last:''}
 const SIGCOL = {r:[0xFF2A1A, 0x3A0D0A], y:[0xFFB300, 0x3A2A06], g:[0x18E070, 0x0A2E18]};
 function buildSignals(grp){
   // carrefours à feux ajoutés à la main (feux absents d'OpenStreetMap) : repère « FEUX » posé sur le carrefour
   for (const n of NET.nodes.values()) if (n.sigUser){ n.sig = false; n.sigUser = false; }
   for (const e of state?.els || []) if (e.t === 'obj' && e.k === 'FEUX' && !phOff(e)){ let best = null, bd = 25; for (const n of NET.nodes.values()){ if (nodeDeg(n) < 3 && !n.sig) continue; const d = Math.hypot(n.xy[0] - e.x, n.xy[1] - e.y); if (d < bd){ bd = d; best = n; } } if (best && !best.sig){ best.sig = true; best.sigUser = true; } }
-  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; n._ax = null; } NET._jg = null;
+  SIM.sigOff?.clear?.(); for (const n of NET.nodes.values()){ n._sref = null; n._ctl = null; n._one = false; n._ax = null; n._y = null; } NET._jg = null; NET._sigJ = null;
   SIGHEADS = null; const sig = [...NET.nodes.values()].filter(n => n.sig); if (!sig.length) return;
   const heads = [];
   for (const n of sig) for (const ei of n.inn){ const e = NET.edges[ei], a = NET.nodes.get(e.from).xy, d = V.norm(V.sub(n.xy, a)), w = NET.roads[e.r].w;
@@ -80,13 +86,22 @@ function buildSignals(grp){
 /* feux affichés : seulement ceux à moins de 500 m des routes barrées (de la route barrée sélectionnée s'il y en a une) ;
    les autres continuent de régler la circulation simulée mais ne sont ni dessinés ni mis à jour à l'écran.
    Sans aucune route barrée, tous les feux sont affichés. */
-let SIGVIS = null;
+let SIGVIS = null, SIGPIN = null;   // SIGPIN : carrefours à feux dont la bulle peut s'afficher (près des routes barrées ; aucun sans route barrée)
+/* bulles de feux : seulement les carrefours qui comptent pour le chantier — à moins de 150 m de la route barrée
+   ou sur l'itinéraire de déviation ; aucune sans route barrée (sinon des centaines de bulles recouvrent la ville) */
+function sigPinSet(cls){
+  const S = new Set(); if (!cls.length || typeof NET === 'undefined' || !NET?.nodes) return S;
+  const ids = new Set(cls.map(c => c.id)), dets = (state?.els || []).filter(e => e.t === 'detour' && e.pts?.length > 1 && ids.has(e.cl) && !phOff(e));
+  const near = (xy, pts, d) => pts.some((q, i) => V.dist(segClosest(xy, q, pts[i + 1] || q).pt, xy) < d);
+  for (const n of NET.nodes.values()) if (n.sig){ const c = sigCtl(n); if (S.has(c.id)) continue; if (cls.some(k => near(c.xy, k.pts, 150)) || dets.some(k => near(c.xy, k.pts, 25))) S.add(c.id); }
+  return S;
+}
 function sigVisibility(){
   if (!SIGHEADS){ if (typeof NET === 'undefined' || !NET?.nodes) return; const cls0 = (state?.els || []).filter(e => e.t === 'closure' && e.pts?.length && !phOff(e)), sc = cls0.find(e => e.id === sel), u = sc ? [sc] : cls0;
-    SIGVIS = new Set([...NET.nodes.values()].filter(n => n.sig && (!u.length || u.some(c => c.pts.some((q, i) => V.dist(segClosest(n.xy, q, c.pts[i + 1] || q).pt, n.xy) < 500)))).map(n => sigCtl(n).id)); annoKey = ''; dirty = true; return; }
+    SIGVIS = new Set([...NET.nodes.values()].filter(n => n.sig && (!u.length || u.some(c => c.pts.some((q, i) => V.dist(segClosest(n.xy, q, c.pts[i + 1] || q).pt, n.xy) < 500)))).map(n => sigCtl(n).id)); SIGPIN = sigPinSet(u); annoKey = ''; dirty = true; return; }
   const cls = (state?.els || []).filter(e => e.t === 'closure' && e.pts?.length && !phOff(e)), selC = cls.find(e => e.id === sel), use = selC ? [selC] : cls;
   const near = h => !use.length || use.some(c => c.pts.some((q, i) => { const b = c.pts[i + 1] || q; const t = segClosest(h.n.xy, q, b); return V.dist(t.pt, h.n.xy) < 500; }));
-  const vis = SIGHEADS.heads.filter(near), Z = new THREE.Matrix4().makeScale(0, 0, 0); SIGVIS = new Set(vis.map(h => sigCtl(h.n).id));
+  const vis = SIGHEADS.heads.filter(near), Z = new THREE.Matrix4().makeScale(0, 0, 0); SIGVIS = new Set(vis.map(h => sigCtl(h.n).id)); SIGPIN = sigPinSet(use);
   for (const h of SIGHEADS.heads){ const M = vis.includes(h) ? h.m : Z; SIGHEADS.body.setMatrixAt(h.i, M); SIGHEADS.back.setMatrixAt(h.i, M); for (const k in SIGHEADS.lamps) SIGHEADS.lamps[k].setMatrixAt(h.i, M); }
   for (const im of [SIGHEADS.body, SIGHEADS.back, ...Object.values(SIGHEADS.lamps)]){ im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); }
   SIGHEADS.vis = vis; SIGHEADS.last = ''; updateSignals(true); annoKey = ''; dirty = true;

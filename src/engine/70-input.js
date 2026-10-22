@@ -263,7 +263,7 @@ function autoSigns(cl){
   ends.forEach(([A, B], i) => {
     if (lane && ((cl.dir === -1) === (i === 0))) return;
     const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
-    const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), sd), face = Math.atan2(-d[1], -d[0]), base = V.add(A, V.mul(d, Math.min(6, plLen(cl.pts) / 3)));
+    const d = V.norm(V.sub(B, A)), n = V.mul(V.perp(d), sd), face = Math.atan2(-d[1], -d[0]), base = plAt(i ? cl.pts.slice().reverse() : cl.pts, closureTrim(cl, i)).pt;   // ligne des barrières : au bord de la rue transversale
     const right = q => V.add(q, V.mul(n, -w / 2 - 0.8)), back = m => V.add(A, V.mul(d, -m));
     if (cl.mode === 'alternat'){ const A = alternatAdvice(cl), sp = V.add(base, V.mul(n, -w / 2 - 0.6));   // mode d'alternat selon le trafic (CEREMA)
       if (A.mode === 'B15/C18') add(i === 0 ? 'B15' : 'C18', sp, face); else if (A.mode === 'K10') add('K10', sp, face); else add('KR11', sp, face, {on:'red'});
