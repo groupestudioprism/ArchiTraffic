@@ -73,7 +73,8 @@ function simSpawn(dt){
       t = -Math.log(1 - Math.random()) / (en.rate * dens);
       const occ = SIM.lastAt?.get(en.id)?.ei === 0 && SIM.lastAt.get(en.id).s < 9 && !SIM.lastAt.get(en.id).done; if (occ){ SIM.nextSpawn.set(en.id, 1.5); continue; }
       const type = pickType(), T = SIM_TYPES[type];
-      const exits = en._ex ??= SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80);   // calculé une fois par entrée if (!exits.length) continue;
+      const exits = en._ex ??= SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80);   // calculé une fois par entrée
+      if (!exits.length) continue;
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
       let r = SIM.rc.get(key); if (r === undefined){ simJob(key, () => routeGen(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.rc.set(key, v || null)); SIM.nextSpawn.set(en.id, 0.3); continue; }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
@@ -107,10 +108,12 @@ function simStep(dt){
       else if (nodeDeg(n) >= 3){
         // ne pas s'engager dans le carrefour si la rue de sortie n'a pas la place (évite de bloquer le carrefour)
         const l2 = occ.get(a.edges[a.ei + 1]), room = !l2?.length || l2[0].s - l2[0].len > a.len + 1.5;
-        const r = SIM.resv.get(n.id);
         if (!room) stop = rem > 1 && rem < 14;
-        else if (r && r.a !== a.id && SIM.t - r.t < 3.5 && r.from !== e.from) stop = rem > 1 && rem < 14;
-        else if (rem < 9 && a.v > 0.3 || rem < 2) SIM.resv.set(n.id, {a:a.id, t:SIM.t, from:e.from});   // seul un véhicule qui avance réserve le carrefour
+        else if (!n.sig){   // au vert, les feux règlent les conflits : les deux sens d'un même axe passent ensemble (sinon ils se bloquent l'un l'autre par la réservation et le carrefour sature)
+          const r = SIM.resv.get(n.id);
+          if (r && r.a !== a.id && SIM.t - r.t < 3.5 && r.from !== e.from) stop = rem > 1 && rem < 14;
+          else if (rem < 9 && a.v > 0.3 || rem < 2) SIM.resv.set(n.id, {a:a.id, t:SIM.t, from:e.from});   // seul un véhicule qui avance réserve le carrefour
+        }
       }
       // virage serré : ralentir
       const d1 = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)), d2 = V.norm(V.sub(NET.nodes.get(nextE.to).xy, n.xy)), cosT = V.dot(d1, d2);

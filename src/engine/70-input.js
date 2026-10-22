@@ -29,7 +29,7 @@ function setTool(t){
   if (!TOOL_HELP[t]) t = 'select';
   if (t === 'site'){ openSiteDialog(); return; }
   if (t === 'place' && activeTab !== 'lib' && !isNarrow.matches) setTab('lib');
-  tool = t; cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
+  tool = t; document.body.classList.toggle('tool-edit', t === 'move' || t === 'rotate'); cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
 }
 function setPrompt(extra = ''){ $('#prompt').innerHTML = forTouch(extra || TOOL_HELP[tool] || ''); }
 function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPreview(); ctl().enabled = true; }
@@ -321,7 +321,8 @@ let down = null, drag = null;
 canvas.addEventListener('pointerdown', ev => {
   if (ev.button !== 0) return; down = {x:ev.clientX, y:ev.clientY, t:performance.now()};
   if ((tool === 'move' || tool === 'rotate') && WORLD !== undefined){
-    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
+    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue
+    if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
   }
 });
 canvas.addEventListener('pointermove', ev => {
@@ -352,6 +353,7 @@ canvas.addEventListener('pointerleave', () => { if (ghost){ previewGroup.remove(
 /* clavier */
 const KEYS = {v:'select', g:'move', o:'rotate', c:'copy', l:'site', b:'close', d:'detour', z:'zone', k:'line', p:'place', t:'note', f:'arrow', r:'measure', e:'swept'};
 window.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && !$('#engDlg').hidden){ closeEngine(); return; }
   if (ev.target.closest && ev.target.closest('input,select,textarea,[contenteditable]')) return;
   if (!$('#engDlg').hidden){ if (ev.key === 'Escape') closeEngine(); return; }
   const k = ev.key.toLowerCase();

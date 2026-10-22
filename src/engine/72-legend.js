@@ -60,12 +60,12 @@ function buildAnnos(){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))), d = mk('dimtxt', dimText(e), V.add(V.lerp(e.a, e.b, 0.5), V.mul(n, o.off)), 0.5); d.style.background = o.col; d.style.color = '#fff'; }
-    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
+    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1, {dec:true}); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
       const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
       const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; if (/^KD22[abc]$/.test(code)) { const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)];   // panneau face aux usagers : sens de circulation = -face
         annos[annos.length - 1].go = code === 'KD22c' ? din : code === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]]; annos[annos.length - 1].kdp = e.p || {}; } }
-    else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
+    else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1, {dec:true}); d.style.background = e.col; d.style.borderColor = e.col; }
   }
 }
 /* panneaux de déviation (bulles) : la flèche montre la direction RÉELLE à prendre, vue depuis la caméra
@@ -92,12 +92,17 @@ function updateLabels(){
      recalculer styles et mise en page ; des centaines par image = saccades). Les bascules se font dès que la vue se pose. */
   const frz = false;   // (le gel des étiquettes en mouvement provoquait des décalages : supprimé)
   const show = (a, v) => { if (frz && a.vis !== undefined) return; if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
+  /* étiquettes de chantier (route barrée, déviation) : décalées verticalement pour ne pas passer sous une bulle ou une autre étiquette */
+  const rc = []; for (const a of pins) if (a.show && a.vis !== false){ if (!a.pw && !a.d.hidden){ a.pw = a.d.offsetWidth; a.ph = a.d.offsetHeight; } const w = (a.pw || 62) / 2 + 2, h = a.ph || 62; rc.push([a.sx - w, a.sy - h - 9, a.sx + w, a.sy + 1]); }
+  const free = (x0, y0, x1, y1) => !rc.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]);
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
     const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!(frz ? a.vis : vis)) continue;
-    place(a, x, y);
+    let yy = y; if (a.dec){ if (!a.w){ a.w = a.d.offsetWidth; a.h = a.d.offsetHeight; } const hw = a.w / 2 + 2, hh = a.h / 2 + 2;
+      for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7]){ const c = y + k * (a.h + 4); if (free(x - hw, c - hh, x + hw, c + hh)){ yy = c; break; } } rc.push([x - hw, yy - hh, x + hw, yy + hh]); }
+    place(a, x, yy);
     if (a.street){ let tr = 'translate(-50%,-50%)'; if (view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; tr += ` rotate(${ang.toFixed(1)}deg)`; } if (a.tr !== tr){ a.tr = tr; a.d.style.transform = tr; } }
   }
 }

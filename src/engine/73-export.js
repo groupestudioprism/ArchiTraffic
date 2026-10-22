@@ -29,7 +29,10 @@ async function exportPNG(k = 2, asCanvas = false){
   downloadBlob(blob, `${safeName(state.name)}-${view === '2d' ? 'plan' : 'vue'}-${new Date().toISOString().slice(0, 10)}.png`); toast('Image enregistrée');
 }
 async function drawLegendTo(g, x, y, S){
-  const L = legendEntries(), pad = 10 * S, rowH = 22 * S, w = 250 * S, h = pad * 2 + 22 * S + L.length * rowH + 14 * S;
+  const L = legendEntries(), H0 = (20 + 22 + L.length * 22 + 14) * S, Wc = g.canvas.width, Hc = g.canvas.height, mg = 8 * S;
+  S *= Math.min(1, (Hc - 2 * mg) / H0, (Wc - 2 * mg) / (250 * S));   // légende trop haute pour l'image : on la réduit
+  const pad = 10 * S, rowH = 22 * S, w = 250 * S, h = pad * 2 + 22 * S + L.length * rowH + 14 * S;
+  x = Math.max(mg, Math.min(x, Wc - w - mg)); y = Math.max(mg, Math.min(y, Hc - h - mg));   // toujours entièrement dans le cadre
   g.save(); g.fillStyle = 'rgba(255,255,255,.96)'; g.strokeStyle = '#C9D3DE'; g.lineWidth = 1.2 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, 10 * S) : g.rect(x, y, w, h); g.fill(); g.stroke();
   g.fillStyle = '#0B2A6B'; g.font = `700 ${12 * S}px Montserrat, Arial, sans-serif`; g.textBaseline = 'middle'; g.fillText((state.legend.title || 'Légende').toUpperCase(), x + pad, y + pad + 8 * S);
   const imgs = await Promise.all(L.map(e => new Promise(res => { const m = e.html.match(/src="([^"]+)"/); if (!m) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = m[1]; })));

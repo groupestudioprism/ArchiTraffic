@@ -1090,6 +1090,8 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 #labels .anno{box-shadow:none!important}
 #labels .anno.pin{box-shadow:none!important;outline:1px solid rgba(0,0,0,.22);outline-offset:-1px}
 #labels .anno.pin::after{box-shadow:none!important;border-right:1px solid rgba(0,0,0,.18);border-bottom:1px solid rgba(0,0,0,.18)}
+
+.tool-edit .anno.pin{pointer-events:none}
 </style>
 
 <div id="splash" role="status" aria-live="polite">
@@ -5926,7 +5928,8 @@ function simSpawn(dt){
       t = -Math.log(1 - Math.random()) / (en.rate * dens);
       const occ = SIM.lastAt?.get(en.id)?.ei === 0 && SIM.lastAt.get(en.id).s < 9 && !SIM.lastAt.get(en.id).done; if (occ){ SIM.nextSpawn.set(en.id, 1.5); continue; }
       const type = pickType(), T = SIM_TYPES[type];
-      const exits = en._ex ??= SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80);   // calculé une fois par entrée if (!exits.length) continue;
+      const exits = en._ex ??= SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80);   // calculé une fois par entrée
+      if (!exits.length) continue;
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
       let r = SIM.rc.get(key); if (r === undefined){ simJob(key, () => routeGen(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.rc.set(key, v || null)); SIM.nextSpawn.set(en.id, 0.3); continue; }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
@@ -5960,10 +5963,12 @@ function simStep(dt){
       else if (nodeDeg(n) >= 3){
         // ne pas s'engager dans le carrefour si la rue de sortie n'a pas la place (évite de bloquer le carrefour)
         const l2 = occ.get(a.edges[a.ei + 1]), room = !l2?.length || l2[0].s - l2[0].len > a.len + 1.5;
-        const r = SIM.resv.get(n.id);
         if (!room) stop = rem > 1 && rem < 14;
-        else if (r && r.a !== a.id && SIM.t - r.t < 3.5 && r.from !== e.from) stop = rem > 1 && rem < 14;
-        else if (rem < 9 && a.v > 0.3 || rem < 2) SIM.resv.set(n.id, {a:a.id, t:SIM.t, from:e.from});   // seul un véhicule qui avance réserve le carrefour
+        else if (!n.sig){   // au vert, les feux règlent les conflits : les deux sens d'un même axe passent ensemble (sinon ils se bloquent l'un l'autre par la réservation et le carrefour sature)
+          const r = SIM.resv.get(n.id);
+          if (r && r.a !== a.id && SIM.t - r.t < 3.5 && r.from !== e.from) stop = rem > 1 && rem < 14;
+          else if (rem < 9 && a.v > 0.3 || rem < 2) SIM.resv.set(n.id, {a:a.id, t:SIM.t, from:e.from});   // seul un véhicule qui avance réserve le carrefour
+        }
       }
       // virage serré : ralentir
       const d1 = V.norm(V.sub(n.xy, NET.nodes.get(e.from).xy)), d2 = V.norm(V.sub(NET.nodes.get(nextE.to).xy, n.xy)), cosT = V.dot(d1, d2);
@@ -6079,7 +6084,7 @@ function setTool(t){
   if (!TOOL_HELP[t]) t = 'select';
   if (t === 'site'){ openSiteDialog(); return; }
   if (t === 'place' && activeTab !== 'lib' && !isNarrow.matches) setTab('lib');
-  tool = t; cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
+  tool = t; document.body.classList.toggle('tool-edit', t === 'move' || t === 'rotate'); cancelDraw(); $$('.tool').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t)); syncHud(); setPrompt(); dirty = true;
 }
 function setPrompt(extra = ''){ $('#prompt').innerHTML = forTouch(extra || TOOL_HELP[tool] || ''); }
 function cancelDraw(){ draw = {pts:[], cursor:draw.cursor, hover:null}; clearPreview(); ctl().enabled = true; }
@@ -6371,7 +6376,8 @@ let down = null, drag = null;
 canvas.addEventListener('pointerdown', ev => {
   if (ev.button !== 0) return; down = {x:ev.clientX, y:ev.clientY, t:performance.now()};
   if ((tool === 'move' || tool === 'rotate') && WORLD !== undefined){
-    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
+    const id = pickEl(ev) || (sel && tool === 'rotate' && ev.pointerType === 'mouse' ? sel : null);   // au doigt : il faut partir de l'élément, sinon le geste déplace la vue
+    if (id){ const e = byId(id); if (!e) return; sel = id; applySel(); beginEdit(); const q = groundAt(ev); drag = {id, start:q, orig:JSON.parse(JSON.stringify(e)), c:elCenter(e)}; ctl().enabled = false; canvas.setPointerCapture(ev.pointerId); refreshPanel(); }
   }
 });
 canvas.addEventListener('pointermove', ev => {
@@ -6402,6 +6408,7 @@ canvas.addEventListener('pointerleave', () => { if (ghost){ previewGroup.remove(
 /* clavier */
 const KEYS = {v:'select', g:'move', o:'rotate', c:'copy', l:'site', b:'close', d:'detour', z:'zone', k:'line', p:'place', t:'note', f:'arrow', r:'measure', e:'swept'};
 window.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && !$('#engDlg').hidden){ closeEngine(); return; }
   if (ev.target.closest && ev.target.closest('input,select,textarea,[contenteditable]')) return;
   if (!$('#engDlg').hidden){ if (ev.key === 'Escape') closeEngine(); return; }
   const k = ev.key.toLowerCase();
@@ -6681,12 +6688,12 @@ function buildAnnos(){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'note'){ const d = mk(e.size === 'big' ? 'big' : '', e.text, [e.x, e.y], 2.4); d.style.color = e.col || '#1565C0'; }
     else if (e.t === 'dim'){ const o = dimOpt(e), n = V.perp(V.norm(V.sub(e.b, e.a))), d = mk('dimtxt', dimText(e), V.add(V.lerp(e.a, e.b, 0.5), V.mul(n, o.off)), 0.5); d.style.background = o.col; d.style.color = '#fff'; }
-    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1); }
+    else if (e.t === 'closure' && e.pts?.length > 1){ mk('closed', e.mode === 'alternat' ? 'ALTERNAT' : e.mode === 'sens' || e.mode === 'voie' ? 'VOIE NEUTRALISÉE' : 'ROUTE BARRÉE', plAt(e.pts, plLen(e.pts) / 2).pt, 1, {dec:true}); }
     else if (e.t === 'obj' && LIBK[e.k] && !/^K5/.test(LIBK[e.k].sign || e.k) && DISPLAY.lay.pins !== false){ // repère « point d'intérêt » : le panneau reste lisible de loin
       const L = LIBK[e.k], code = L.sign || e.k, key = code + JSON.stringify(e.p || {}); if (!PIN_IMG[key] || PIN_IMG[key] === BLANK) PIN_IMG[key] = L.sign ? signThumb(code, {...(L.p || {}), ...(e.p || {})}) : thumbLazy(L);   // panneau, ou vignette de l'engin / du matériel
       const d = mk('pin', '', [e.x, e.y], 2.2, {pin:true, pri:/^(KR|K2|KC|AK|K8|K10)/.test(code) ? 2 : /^KD/.test(code) ? 1 : L.sign ? 0.5 : 0, id:e.id}); if (!L.sign) d.classList.add('eq'); d.innerHTML = `<img alt="" src="${PIN_IMG[key]}">`; d.title = L.n || L.name || code; d.onclick = () => { sel = e.id; applySel(); frameAt(e.x, e.y, 18); renderProps(); }; if (/^KD22[abc]$/.test(code)) { const a = e.a || 0, din = [-Math.cos(a), -Math.sin(a)];   // panneau face aux usagers : sens de circulation = -face
         annos[annos.length - 1].go = code === 'KD22c' ? din : code === 'KD22a' ? [-din[1], din[0]] : [din[1], -din[0]]; annos[annos.length - 1].kdp = e.p || {}; } }
-    else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1); d.style.background = e.col; d.style.borderColor = e.col; }
+    else if (e.t === 'detour' && e.pts?.length > 1){ const d = mk('detour', e.name?.split(' · ')[0] || 'Déviation', plAt(e.pts, plLen(e.pts) * 0.33).pt, 1, {dec:true}); d.style.background = e.col; d.style.borderColor = e.col; }
   }
 }
 /* panneaux de déviation (bulles) : la flèche montre la direction RÉELLE à prendre, vue depuis la caméra
@@ -6713,12 +6720,17 @@ function updateLabels(){
      recalculer styles et mise en page ; des centaines par image = saccades). Les bascules se font dès que la vue se pose. */
   const frz = false;   // (le gel des étiquettes en mouvement provoquait des décalages : supprimé)
   const show = (a, v) => { if (frz && a.vis !== undefined) return; if (a.vis !== v){ a.vis = v; clearTimeout(a.ht); if (v){ a.d.hidden = false; a.d.classList.remove('off'); } else { a.d.classList.add('off'); a.ht = setTimeout(() => { if (!a.vis) a.d.hidden = true; }, 260); } } } /* fondu au lieu d'une apparition sèche */, place = (a, x, y) => { x = Math.round(x); y = Math.round(y); if (x !== a.lx || y !== a.ly){ a.lx = x; a.ly = y; a.d.style.translate = `${x}px ${y}px`; } };
+  /* étiquettes de chantier (route barrée, déviation) : décalées verticalement pour ne pas passer sous une bulle ou une autre étiquette */
+  const rc = []; for (const a of pins) if (a.show && a.vis !== false){ if (!a.pw && !a.d.hidden){ a.pw = a.d.offsetWidth; a.ph = a.d.offsetHeight; } const w = (a.pw || 62) / 2 + 2, h = a.ph || 62; rc.push([a.sx - w, a.sy - h - 9, a.sx + w, a.sy + 1]); }
+  const free = (x0, y0, x1, y1) => !rc.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]);
   for (const a of annos){
     if (a.pin){ show(a, a.show); if (a.show){ place(a, a.sx, a.sy); if (a.go) kdOrient(a); } continue; }
     if (a.street && (far || mpp > 1.6 || (view !== '2d' && Math.hypot(a.xy[0] - c3.target.x, a.xy[1] + c3.target.z) > 220))){ show(a, false); continue; }
     const [x, y, z] = toScreen(W3(a.xy[0], a.xy[1], (a.gz ??= (WORLD ? H(a.xy[0], a.xy[1]) : 0)) + a.z));
     const vis = z < 1 && z > -1 && x > -50 && y > -20 && x < W + 50 && y < Hh + 20; show(a, vis); if (!(frz ? a.vis : vis)) continue;
-    place(a, x, y);
+    let yy = y; if (a.dec){ if (!a.w){ a.w = a.d.offsetWidth; a.h = a.d.offsetHeight; } const hw = a.w / 2 + 2, hh = a.h / 2 + 2;
+      for (const k of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7]){ const c = y + k * (a.h + 4); if (free(x - hw, c - hh, x + hw, c + hh)){ yy = c; break; } } rc.push([x - hw, yy - hh, x + hw, yy + hh]); }
+    place(a, x, yy);
     if (a.street){ let tr = 'translate(-50%,-50%)'; if (view === '2d'){ let ang = Math.atan2(-a.dir[1], a.dir[0]) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180; tr += ` rotate(${ang.toFixed(1)}deg)`; } if (a.tr !== tr){ a.tr = tr; a.d.style.transform = tr; } }
   }
 }
@@ -6756,7 +6768,10 @@ async function exportPNG(k = 2, asCanvas = false){
   downloadBlob(blob, `${safeName(state.name)}-${view === '2d' ? 'plan' : 'vue'}-${new Date().toISOString().slice(0, 10)}.png`); toast('Image enregistrée');
 }
 async function drawLegendTo(g, x, y, S){
-  const L = legendEntries(), pad = 10 * S, rowH = 22 * S, w = 250 * S, h = pad * 2 + 22 * S + L.length * rowH + 14 * S;
+  const L = legendEntries(), H0 = (20 + 22 + L.length * 22 + 14) * S, Wc = g.canvas.width, Hc = g.canvas.height, mg = 8 * S;
+  S *= Math.min(1, (Hc - 2 * mg) / H0, (Wc - 2 * mg) / (250 * S));   // légende trop haute pour l'image : on la réduit
+  const pad = 10 * S, rowH = 22 * S, w = 250 * S, h = pad * 2 + 22 * S + L.length * rowH + 14 * S;
+  x = Math.max(mg, Math.min(x, Wc - w - mg)); y = Math.max(mg, Math.min(y, Hc - h - mg));   // toujours entièrement dans le cadre
   g.save(); g.fillStyle = 'rgba(255,255,255,.96)'; g.strokeStyle = '#C9D3DE'; g.lineWidth = 1.2 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, 10 * S) : g.rect(x, y, w, h); g.fill(); g.stroke();
   g.fillStyle = '#0B2A6B'; g.font = `700 ${12 * S}px Montserrat, Arial, sans-serif`; g.textBaseline = 'middle'; g.fillText((state.legend.title || 'Légende').toUpperCase(), x + pad, y + pad + 8 * S);
   const imgs = await Promise.all(L.map(e => new Promise(res => { const m = e.html.match(/src="([^"]+)"/); if (!m) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = m[1]; })));
@@ -7398,7 +7413,7 @@ window.ATDebug = {objInst:() => objInstGroup.children.map(m => { const M = new T
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;
       const x = P.getX(t) * a + P.getX(t + 1) * b + P.getX(t + 2) * c, y = P.getY(t) * a + P.getY(t + 1) * b + P.getY(t + 2) * c, z = P.getZ(t) * a + P.getZ(t + 1) * b + P.getZ(t + 2) * c;
       ray.set(new THREE.Vector3(x, 5000, z), dn); const h = ray.intersectObject(terr, false)[0]; if (!h) continue; tot++; const d = h.point.y - y; if (d > 0.001){ under++; worst = Math.max(worst, d); } } }
-    return {tot, under, worst:Math.round(worst * 100) / 100}; }, perf:perfRun, gl(){ let meshes = 0, lines = 0, inst = 0; scene.traverse(o => { if (!o.visible) return; if (o.isInstancedMesh) inst++; else if (o.isMesh) meshes++; else if (o.isLine) lines++; }); renderer.render(scene, cam()); return {...renderer.info.render, ...renderer.info.memory, programs:renderer.info.programs?.length, meshes, lines, inst, pr:renderer.getPixelRatio()}; }, camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst}; }); }, simRun:(sec) => { for (let t = 0; t < sec; t += 0.1){ simStep(0.1); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
+    return {tot, under, worst:Math.round(worst * 100) / 100}; }, perf:perfRun, gl(){ let meshes = 0, lines = 0, inst = 0; scene.traverse(o => { if (!o.visible) return; if (o.isInstancedMesh) inst++; else if (o.isMesh) meshes++; else if (o.isLine) lines++; }); renderer.render(scene, cam()); return {...renderer.info.render, ...renderer.info.memory, programs:renderer.info.programs?.length, meshes, lines, inst, pr:renderer.getPixelRatio()}; }, camPos:() => [persp.position.x, persp.position.y, -persp.position.z, c3.target.x, c3.target.y, -c3.target.z, WORLD ? H(persp.position.x, -persp.position.z) : 0].map(v => Math.round(v * 10) / 10), renderPanel:() => renderPanel(), selId:() => sel, sigHeads:() => SIGHEADS?.heads.map(h => [h.p, h.a]), sigSeq:() => SIGHEADS ? Array.from({length:16}, (_, i) => SIGHEADS.heads.map(h => sigState(h.n, h.d, i * 4)).join('')) : null, sigLast:() => SIGHEADS?.last, sigCheck:() => { const g = new Map(); for (const h of SIGHEADS?.heads || []){ const c = sigCtl(h.n); (g.get(c) || g.set(c, []).get(c)).push(h); } return [...g.entries()].map(([c, hs]) => { let run = 0, worst = 0; for (let t = 0; t < 128; t += 0.5){ const allR = hs.every(h => sigState(h.n, h.d, t) !== 'g'); run = allR ? run + 0.5 : 0; worst = Math.max(worst, run); } return {id:c.id, heads:hs.length, nodes:new Set(hs.map(h => h.n.id)).size, worstAllRed:worst}; }); }, simRun:(sec, h = 0.1) => { for (let t = 0; t < sec; t += h){ SIM.budget = performance.now() + 40; simReroute(); simJobs(); simStep(h); if (Math.round(t * 10) % 5 === 0) congRender(); } simRender(); simStatus(); congRender(); dirty = true; }, look:(px, py, pz, tx, ty, tz) => { setView('3d'); persp.position.set(px, H(px, py) + pz, -py); c3.target.set(tx, H(tx, ty) + tz, -ty); c3.update(); dirty = true; }, meshes:() => worldGroup.children.map(o => [o.name, o.geometry?.attributes?.position?.count || 0, o.count]), annos:() => annos.slice(0, 3).map(a => ({xy:a.xy, z:a.z, street:a.street, s:toScreen(W3(a.xy[0], a.xy[1], (WORLD ? H(a.xy[0], a.xy[1]) : 0) + a.z))})), cams:() => ({zoom:ortho.zoom, mpp:mPerPx(), view, top:ortho.top, bottom:ortho.bottom}), state:() => state, world:() => WORLD, net:() => NET, sim:() => SIM, setView, setStyle, setTool, frameAt, loadSite, makeClosure, nearestRoad, sectionAt, route, closedSets, proposeDetours, buildWorld, rebuildProj, parseWorld, buildNet, exportPNG, exportGLB, exportCSV, exportGeoJSON, loadGLB:u => new GLTFLoader().loadAsync(u), LIB, LIBK, libThumb, toolopt:TOOLOPT, loadBDTopo, rebuild:() => { rebuildProj?.(); dirty = true; }, THUMBS, renderPreview,
   toScreen:(x, y) => { const [sx, sy] = toScreen(W3(x, y, WORLD ? H(x, y) : 0)); const r = canvas.getBoundingClientRect(); return [r.left + sx, r.top + sy]; }, setWorldRaw:async (raw, site) => { const P = makeProj(site.lat, site.lon), W = parseWorld(raw, P, site.size); camRange(site.size); const z = Float32Array.from(raw.elev.z), N = raw.elev.N; const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null; WORLD = {size:site.size, P, z0:z[(N >> 1) * N + (N >> 1)], elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:Date.now()}}; buildNet(W); buildWorld(); rebuildProj(); fit(); refreshPanel(); }};
 
 /* ---------- bouton Réglages (module commun Studio Prism) ---------- */
