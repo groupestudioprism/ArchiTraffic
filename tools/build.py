@@ -30,7 +30,7 @@ CONFIG = '''const FIREBASE_CONFIG = {
 def rd(p): return (S / p).read_text(encoding='utf-8')
 def assemble(engine_dir='engine', css=CSS_ORDER, body='parts/body.html', cloud='js/cloud.js'):
     engine = ''.join(f'/* ==== {f.name} ==== */\n' + f.read_text(encoding='utf-8') + '\n' for f in sorted((S / engine_dir).glob('*.js')))
-    return (rd('parts/head.html') + '<style>\n' + ''.join(rd('css/' + c) for c in css) + '</style>\n' + rd(body)
+    return (rd('parts/head.html') + '<style>\n' + ''.join(rd('css/' + c) for c in css) + '</style>\n' + rd(body).replace('<!--INTRO-->', '<script>\n' + rd('js/intro.js') + '</script>')
             + '<script>\n' + rd('js/auth.js') + rd(cloud) + rd('js/auth-end.js') + '</script>\n'
             + rd('parts/importmap.html') + '<script type="module">\n' + engine + '</script>\n')
 HEAD = ('<!doctype html><html lang="fr"><head><meta charset="utf-8">'

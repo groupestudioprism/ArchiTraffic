@@ -1,6 +1,7 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="description" content="ARCHITRAFIC · Studio Prism : routes barrées, déviations automatiques et simulation du trafic en 3D, partout en France."><meta name="theme-color" content="#0B2A6B"><link rel="icon" href="assets/emblem-64.webp"><link rel="preconnect" href="https://www.gstatic.com" crossorigin><link rel="preconnect" href="https://firestore.googleapis.com"><link rel="preconnect" href="https://identitytoolkit.googleapis.com"><link rel="preconnect" href="https://securetoken.googleapis.com"><link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin><link rel="preconnect" href="https://data.geopf.fr" crossorigin><link rel="preconnect" href="https://overpass-api.de" crossorigin><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"><link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"><style>[hidden]{display:none!important}html{overflow:hidden;overscroll-behavior:none}body{overflow:hidden;overscroll-behavior:none}*{overscroll-behavior-x:contain}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}body{margin:0}</style></head><body>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('at.theme')==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
 <title>ARCHITRAFIC · Studio Prism</title>
+<link rel="preload" as="image" href="assets/logo-wide.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -498,31 +499,53 @@ body[data-mode="sec"] .vtools,body[data-mode="sec"] .hud,body[data-mode="sec"] .
   .status button::after{content:"";position:absolute;inset:-7px -1px}
   .modes button::after,.vgrp button::after{content:"";position:absolute;inset:-5px 0}
 }
-/* intro : le symbole apparaît sur la grille du plan, la route se trace, puis ARCHI (bleu) et TRAFIC (orange) s'écrivent */
-#splash{position:fixed;inset:0;z-index:60;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding-inline:24px;transition:opacity .55s ease,visibility .55s;font-family:var(--f-body)}
+/* intro : sur une feuille de plan, un rouleau compresseur pose la route du symbole, trace la ligne centrale puis les rayures de la balise ; ARCHITRAFIC s'écrit et le cône prend sa place.
+   Le logo final est l'image officielle assets/logo-wide.webp ; la scène (src/js/intro.js) la révèle par masques. Sans JS ou une fois la scène finie : état final statique. */
+#splash{position:fixed;inset:0;z-index:60;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding-inline:16px;overflow:hidden;transition:opacity .45s ease,visibility .45s;font-family:var(--f-body)}
 #splash.done{opacity:0;visibility:hidden}
 :root[data-theme="dark"] #splash{background:#0E1320}
-.sp-stage{position:relative;display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto auto;column-gap:clamp(14px,3vw,30px);align-items:center;width:min(760px,92vw)}
-.sp-grid{position:absolute;inset:-30% -12%;background-image:linear-gradient(#0B4A8E12 1px,transparent 1px),linear-gradient(90deg,#0B4A8E12 1px,transparent 1px);background-size:28px 28px;-webkit-mask:radial-gradient(closest-side,#000 40%,transparent);mask:radial-gradient(closest-side,#000 40%,transparent);opacity:0;animation:spFade .8s .05s ease forwards}
-.sp-mark{grid-row:1 / span 3;width:clamp(96px,22vw,190px);height:auto;opacity:0;transform:translateY(10px) scale(.94);animation:spIn .9s .15s cubic-bezier(.2,.8,.2,1) forwards;position:relative}
-.sp-word{font:900 clamp(34px,7.4vw,76px)/1 "Montserrat",var(--f-display);letter-spacing:.01em;display:flex;position:relative;align-self:end}
-.sp-word b{display:inline-block;background:linear-gradient(90deg,#0B2A6B,#1565C0 55%,#0EA5C6);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;clip-path:inset(0 100% 0 0);animation:spWrite .7s .75s cubic-bezier(.6,0,.2,1) forwards}
-.sp-word b.t{background-image:linear-gradient(90deg,#F5B700,#F28A1A 55%,#E2541B);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;animation-delay:1.25s}
-:root[data-theme="dark"] .sp-word b:not(.t){background:linear-gradient(90deg,#7DB7FF,#3FA0E8 55%,#2CC3D9);-webkit-background-clip:text;background-clip:text}
-.sp-tag{margin:8px 0 0;font:500 clamp(12px,1.9vw,17px)/1.3 var(--f-body);letter-spacing:.06em;color:#24324F;opacity:0;animation:spFade .6s 1.8s ease forwards;position:relative}
-:root[data-theme="dark"] .sp-tag{color:#B7C3D8}
-.sp-road{position:relative;height:6px;border-radius:3px;background:#E6EBF1;overflow:hidden;margin-top:14px;grid-column:2}
-:root[data-theme="dark"] .sp-road{background:#1F2838}
-.sp-road i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);background-size:120px 100%;width:0;animation:spRoad 2.6s .4s ease forwards,spDash 1s linear infinite}
+.sp-stage{position:relative;width:min(84vw,900px);aspect-ratio:1200/347;flex:none;margin-block:calc(var(--k,.6)*60px);visibility:hidden;animation:spSafe 0s 1.5s forwards}
+#splash.sp-on .sp-stage{visibility:visible;animation:none}
+#splash.sp-static .sp-stage{animation:spFade .15s ease both}
+.sp-fit{position:absolute;left:0;top:0;width:1200px;height:347px;transform-origin:0 0;transform:scale(var(--k,.6))}
+.sp-cam{position:absolute;inset:0;transform-origin:215px 175px}
+.sp-cam>*,.sp-layers>*{position:absolute;left:0;top:0}
+.sp-layers{position:absolute;inset:0;display:none}
+#splash.sp-play .sp-layers{display:block}
+.sp-final{width:1200px;height:347px;max-width:none;display:block}
+#splash.sp-play .sp-final{opacity:0}
+.sp-sheet{left:-70px;top:-60px;width:1340px;height:467px;border-radius:34px;display:none}
+:root[data-theme="dark"] .sp-sheet{display:block;background:#FAFBFC;box-shadow:0 0 0 1px #2B3753,0 24px 70px #0009}
+.sp-grid{left:-70px;top:-60px;width:1340px;height:467px;background-image:linear-gradient(#0B4A8E14 1px,transparent 1px),linear-gradient(90deg,#0B4A8E14 1px,transparent 1px);background-size:20px 20px;background-position:10px 7px;-webkit-mask:radial-gradient(ellipse closest-side,#000 55%,transparent);mask:radial-gradient(ellipse closest-side,#000 55%,transparent)}
+.sp-sym{overflow:visible}
+.sp-layers img{display:block;max-width:none;width:1200px;height:347px}
+.sp-wordwrap>*{position:absolute;left:0;top:0}
+.sp-wordwrap{inset:0;width:1200px;height:347px;clip-path:inset(0 64% 0 0)}
+.sp-wl{clip-path:inset(94px 278px 141px 424px)}
+.sp-wr{clip-path:inset(94px 0 141px 1026px)}
+.sp-cur{position:absolute;top:96px;left:0;width:3px;height:112px;border-radius:2px;background:#F28A1A;opacity:0}
+.sp-cone{clip-path:inset(94px 174px 141px 922px)}
+.sp-tag{clip-path:inset(212px 0 92px 430px);opacity:0}
+.sp-mach{width:0;height:0;offset-anchor:0 0;offset-rotate:auto;opacity:0;pointer-events:none}
+.sp-mach svg{position:absolute;left:-70px;top:-90px;overflow:visible}
+.sp-mi{transform-origin:0 0}
+.sp-road{position:relative;width:min(220px,60vw);height:5px;border-radius:3px;background:#E6EBF1;overflow:hidden;flex:none}
+:root[data-theme="dark"] .sp-road{background:#26324A}
+.sp-road i{position:absolute;left:0;top:0;bottom:0;width:calc(100% + 120px);background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);animation:spDash 1s linear infinite}
+#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:0}
 .sp-msg{margin:0;font-size:13px;color:#56637C;min-height:1.3em;text-align:center}
+:root[data-theme="dark"] .sp-msg{color:#B7C3D8}
 .sp-msg.err{color:#B3261E;font-weight:600}
-@keyframes spIn{to{opacity:1;transform:none}}
-@keyframes spFade{to{opacity:1}}
-@keyframes spWrite{to{clip-path:inset(0 0 0 0)}}
-@keyframes spRoad{to{width:100%}}
-@keyframes spDash{to{background-position:120px 0}}
-@media (max-width:560px){.sp-stage{grid-template-columns:1fr;justify-items:center;text-align:center}.sp-mark{grid-row:auto;margin-bottom:10px}.sp-road{grid-column:1;width:80%}}
-@media (prefers-reduced-motion:reduce){.sp-mark,.sp-word b,.sp-tag,.sp-grid{animation:none;opacity:1;transform:none;clip-path:none}.sp-road i{animation:none;width:100%}}
+:root[data-theme="dark"] .sp-msg.err{color:#FF8A80}
+.sp-skip{position:absolute;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);font:600 13px/1 var(--f-body);color:#0B2A6B;background:#fff;border:1px solid #B9C5D8;border-radius:999px;padding:10px 18px;cursor:pointer;white-space:nowrap}
+.sp-skip:hover{border-color:#1565C0}
+.sp-skip:focus-visible{outline:3px solid #1565C0;outline-offset:2px}
+:root[data-theme="dark"] .sp-skip{color:#E6ECF7;background:#1A2335;border-color:#44577A}
+:root[data-theme="dark"] .sp-skip:focus-visible{outline-color:#7DB7FF}
+@keyframes spSafe{to{visibility:visible}}
+@keyframes spFade{from{opacity:0}to{opacity:1}}
+@keyframes spDash{to{transform:translateX(-120px)}}
+@media (prefers-reduced-motion:reduce){#splash.sp-play .sp-layers{display:none}#splash.sp-play .sp-final{opacity:1}#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:1}.sp-skip{display:none}.sp-road i{animation:none}}
 /* ===== Compte Studio Prism : connexion, fiche client, code PIN — écran volontairement clair, comme le logo ===== */
 #auth[hidden]{display:none!important}
 #auth{position:fixed;inset:0;z-index:55;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);background:#FFFFFF;color:#0F1B33;color-scheme:light;font-family:var(--f-body);overflow:auto}
@@ -1073,14 +1096,146 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 
 <div id="splash" role="status" aria-live="polite">
   <div class="sp-stage" role="img" aria-label="ARCHITRAFIC, outils de conception et de gestion du trafic">
-    <div class="sp-grid"></div>
-    <img class="sp-mark" src="assets/emblem-320.webp" alt="" width="320" height="264">
-    <div class="sp-word"><b>ARCHI</b><b class="t">TRAFIC</b></div>
-    <p class="sp-tag">Outils de conception et de gestion du trafic</p>
-    <div class="sp-road" aria-hidden="true"><i></i></div>
+    <div class="sp-fit">
+      <div class="sp-cam">
+        <div class="sp-sheet"></div>
+        <div class="sp-grid"></div>
+        <div class="sp-layers">
+          <svg class="sp-sym" viewBox="0 0 1200 347" width="1200" height="347" focusable="false">
+            <defs>
+              <clipPath id="spRib"><polygon points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314"/></clipPath>
+              <clipPath id="spLeg"><polygon points="260,199 304,169 400,313 318,314"/></clipPath>
+              <mask id="spM1" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><rect width="425" height="347" fill="#fff"/><polygon points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314" fill="#000"/><polygon points="260,199 304,169 400,313 318,314" fill="#000"/></mask>
+              <mask id="spM2" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spRib)"><path class="sp-sw1" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#fff" stroke-width="150"/></g><path d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#000" stroke-width="16"/></mask>
+              <mask id="spM3" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spRib)"><path class="sp-sw2" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" fill="none" stroke="#fff" stroke-width="16"/></g></mask>
+              <mask id="spM4" maskUnits="userSpaceOnUse" x="0" y="0" width="1200" height="347"><g clip-path="url(#spLeg)"><path class="sp-sw3" d="M262,150 L392,340" fill="none" stroke="#fff" stroke-width="150"/></g></mask>
+            </defs>
+            <image class="sp-L1" href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM1)"/>
+            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM2)"/>
+            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM3)"/>
+            <image href="assets/logo-wide.webp" width="1200" height="347" mask="url(#spM4)"/>
+            <g class="sp-wire" fill="none" stroke-linejoin="round" stroke-width="1.6">
+              <polygon class="sp-w1" pathLength="1" points="86,312 97,262 132,220 185,184 250,157 300,138 350,121 382,117 382,129 335,160 268,197 202,235 152,281 137,314" stroke="#1565C0"/>
+              <polygon class="sp-w2" pathLength="1" points="260,199 304,169 400,313 318,314" stroke="#F28A1A"/>
+              <g clip-path="url(#spRib)"><path class="sp-w3" d="M-40,322 C-26.7,322 18.7,323 40,322 C61.3,321 76,320.3 88,316 C100,311.7 105.3,304.3 112,296 C118.7,287.7 120,277.5 128,266 C136,254.5 150.2,236.8 160,227 C169.8,217.2 176.7,213.5 187,207 C197.3,200.5 211.5,193.7 222,188 C232.5,182.3 238.7,177.7 250,173 C261.3,168.3 275.8,165 290,160 C304.2,155 318.7,149.2 335,143 C351.3,136.8 372.2,128.8 388,123 C403.8,117.2 416.3,112.7 430,108 C443.7,103.3 463.3,97.2 470,95" stroke="#0EA5C6" stroke-dasharray="7 7"/></g>
+            </g>
+          </svg>
+          <div class="sp-wordwrap">
+            <img class="sp-wl" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+            <img class="sp-wr" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+            <i class="sp-cur"></i>
+          </div>
+          <img class="sp-cone" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+          <img class="sp-tag" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+          <div class="sp-mach"><svg viewBox="-70 -90 140 100" width="140" height="100" focusable="false"><g class="sp-mi">
+            <path d="M-32,-27 h58 l12,7 v8 h-70z" fill="#F5B700"/>
+            <path d="M-32,-17 h70 v5 h-70z" fill="#F28A1A"/>
+            <path d="M8,-27 h16 l12,7 v3 h-28z" fill="#FFD24D"/>
+            <path d="M-29,-27 v-19 M-3,-27 v-19" stroke="#0B2A6B" stroke-width="3" stroke-linecap="round"/>
+            <rect x="-27" y="-45" width="22" height="17" fill="#0EA5C6" opacity=".28"/>
+            <path d="M-24,-27 v-8 h10 v8z" fill="#0B2A6B"/>
+            <rect x="-34" y="-50" width="38" height="5" rx="2.5" fill="#0B2A6B"/>
+            <circle cx="-15" cy="-55" r="3" fill="#E2541B"/>
+            <g transform="translate(-26,-13)"><g class="sp-dr"><circle r="13" fill="#CBD5E3" stroke="#0B2A6B" stroke-width="2.4"/><circle r="8.6" fill="none" stroke="#8FA1BB" stroke-width="1.6"/><circle r="3.4" fill="#0B2A6B"/><circle cy="-6.2" r="1.7" fill="#0B2A6B"/></g></g>
+            <g transform="translate(26,-15)"><g class="sp-dr"><circle r="15" fill="#CBD5E3" stroke="#0B2A6B" stroke-width="2.4"/><circle r="10" fill="none" stroke="#8FA1BB" stroke-width="1.6"/><circle r="3.8" fill="#0B2A6B"/><circle cy="-7.2" r="1.9" fill="#0B2A6B"/></g></g>
+          </g></svg></div>
+        </div>
+        <img class="sp-final" src="assets/logo-wide.webp" alt="" width="1200" height="347">
+      </div>
+    </div>
   </div>
+  <div class="sp-road" aria-hidden="true"><i></i></div>
   <p class="sp-msg" id="spMsg">Ouverture du chantier…</p>
+  <button type="button" class="sp-skip" hidden>Passer l'animation</button>
 </div>
+<script>
+/* intro ARCHITRAFIC : le rouleau compresseur pose la route du symbole (révélation par masques synchronisée sur son offset-path), puis ligne centrale, rayures, cône et nom.
+   Web Animations API : déterministe et « seekable ». Une fois par session (sessionStorage), ?intro=1 pour rejouer. Exposé : window.__spHide() (demande de fermeture, le splash reste jusqu'à la fin de la scène). */
+(function(){
+  var sp = document.getElementById('splash'); if (!sp) return;
+  var T0 = performance.now(), SW = 2500, EXIT = 2950, FADE = 450, KEY = 'prism-intro-architrafic';
+  var EASE_IN = 'cubic-bezier(.22,.8,.2,1)', EASE_IO = 'cubic-bezier(.65,0,.35,1)', EASE_M = 'cubic-bezier(.4,0,.2,1)';
+  var stage = sp.querySelector('.sp-stage'), cam = sp.querySelector('.sp-cam'), skip = sp.querySelector('.sp-skip');
+  var anims = [], endAt = T0 + EXIT, hiding = false, closed = false, hideT = 0, played = false;
+  function q(s){ return sp.querySelector(s); }
+  function qa(s){ return [].slice.call(sp.querySelectorAll(s)); }
+  function fit(){ try { stage.style.setProperty('--k', (stage.offsetWidth / 1200).toFixed(5)); } catch(e){} }
+  function A(el, kf, o){ if (!el) return null; o.fill = 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
+  function cancelAll(){ anims.forEach(function(a){ try { a.cancel(); } catch(e){} }); anims = []; }
+  function finalize(){ // état final = écran de chargement stable (logo officiel, barre, message)
+    cancelAll(); sp.classList.remove('sp-play'); sp.classList.add('sp-static', 'sp-on'); if (skip) skip.hidden = true;
+  }
+  function close(){
+    if (closed) return; closed = true;
+    document.removeEventListener('keydown', onKey, true); window.removeEventListener('resize', fit);
+    sp.classList.add('done');
+    try { if (sp.contains(document.activeElement)) document.activeElement.blur(); } catch(e){}
+    setTimeout(function(){ cancelAll(); sp.remove(); }, FADE + 100);
+  }
+  function hide(){ if (hiding || closed) return; hiding = true; hideT = setTimeout(close, Math.max(0, endAt - performance.now())); }
+  window.__spHide = hide;
+  function doSkip(){ if (closed || !played) return; played = false; finalize(); endAt = performance.now(); if (hiding){ clearTimeout(hideT); close(); } }
+  function onKey(e){
+    if (!played) return;
+    if (e.key === 'Escape' || (e.key === 'Enter' && (e.target === document.body || sp.contains(e.target)) && e.target !== skip)){ e.preventDefault(); doSkip(); }
+  }
+  fit(); window.addEventListener('resize', fit);
+  var seen = false, force = /[?&]intro=1(&|$)/.test(location.search);
+  try { seen = sessionStorage.getItem(KEY) === '1'; } catch(e){}
+  var reduce = false; try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  if (reduce || (seen && !force)){ endAt = T0 + 600; sp.classList.add('sp-static', 'sp-on'); return; }
+  try {
+    try { sessionStorage.setItem(KEY, '1'); } catch(e){}
+    var NS = 'http://www.w3.org/2000/svg', k = stage.offsetWidth / 1200;
+    // longueurs (unités du logo) : trajet complet et début / fin de la route sur la courbe
+    var drive = q('.sp-sw1').getAttribute('d'), segs = drive.split(' C'), tmp = document.createElementNS(NS, 'path'), svg = q('.sp-sym');
+    svg.appendChild(tmp);
+    function len(n){ tmp.setAttribute('d', segs.slice(0, n).map(function(s, i){ return i ? 'C' + s : s; }).join(' ')); return tmp.getTotalLength(); }
+    var L = len(segs.length), roadA = len(4) / L, roadB = len(12) / L; svg.removeChild(tmp);
+    // cadre de caméra : le symbole d'abord en gros plan, puis recul sur le logo complet
+    var vw = innerWidth, vh = innerHeight, tgt = Math.min(vw * .78, vh * .6, 560), Z = Math.max(1.2, Math.min(3.4, tgt / (415 * k)));
+    var camFrom = 'translate(385px,0) scale(' + Z.toFixed(3) + ')';
+    sp.classList.add('sp-play', 'sp-on'); if (skip){ skip.hidden = false; skip.addEventListener('click', doSkip); }
+    document.addEventListener('keydown', onKey, true);
+    played = true;
+    var DV = 450, DT = 1500; // départ et durée du passage de l'engin
+    A(q('.sp-grid'), [{opacity: 0}, {opacity: 1}], {duration: 600, easing: EASE_IN});
+    A(cam, [{transform: camFrom}, {transform: camFrom, offset: 0.56}, {transform: 'translate(0,0) scale(1)'}], {duration: 2450, easing: EASE_IO});
+    A(q('.sp-L1'), [{opacity: 0}, {opacity: 1}], {delay: 100, duration: 600, easing: EASE_IN});
+    [['.sp-w1', 200, 700], ['.sp-w2', 400, 600]].forEach(function(w){
+      A(q(w[0]), [{strokeDasharray: '1 1', strokeDashoffset: 1}, {strokeDasharray: '1 1', strokeDashoffset: 0}], {delay: w[1], duration: w[2], easing: EASE_IO});
+    });
+    A(q('.sp-w3'), [{opacity: 0}, {opacity: 1}], {delay: 700, duration: 400});
+    A(q('.sp-wire'), [{opacity: 1}, {opacity: 1, offset: .55}, {opacity: 0}], {delay: 0, duration: 2000, easing: 'linear'});
+    // l'engin et les révélations partagent la même durée et la même courbe : la route apparaît exactement sous lui
+    var sw = {delay: DV, duration: DT, easing: EASE_M};
+    q('.sp-sw1').style.strokeDasharray = L + ' ' + L * 2; q('.sp-sw2').style.strokeDasharray = L + ' ' + L * 2;
+    A(q('.sp-sw1'), [{strokeDashoffset: L}, {strokeDashoffset: 0}], {delay: DV + 60, duration: DT, easing: EASE_M});
+    A(q('.sp-sw2'), [{strokeDashoffset: L}, {strokeDashoffset: 0}], {delay: DV + 230, duration: DT, easing: EASE_M});
+    var mach = q('.sp-mach'); mach.style.offsetPath = "path('" + drive + "')";
+    A(mach, [{offsetDistance: '0%'}, {offsetDistance: '100%'}], sw);
+    A(mach, [{opacity: 0}, {opacity: 1, offset: .07}, {opacity: 1, offset: .9}, {opacity: 0}], sw);
+    A(q('.sp-mi'), [{transform: 'scale(1.3)'}, {transform: 'scale(1.3)', offset: roadA}, {transform: 'scale(.8)', offset: roadB}, {transform: 'scale(.72)'}], sw);
+    qa('.sp-dr').forEach(function(d, i){ var r = i ? 15 : 13; A(d, [{transform: 'rotate(0deg)'}, {transform: 'rotate(' + (L / r * 180 / Math.PI).toFixed(1) + 'deg)'}], sw); });
+    // rayures orange de la jambe droite, de haut en bas
+    q('.sp-sw3').style.strokeDasharray = '232 500';
+    A(q('.sp-sw3'), [{strokeDashoffset: 232}, {strokeDashoffset: 0}], {delay: 1700, duration: 480, easing: EASE_IO});
+    // nom : s'écrit de gauche à droite, le cône tombe à sa place dans le mot
+    A(q('.sp-wordwrap'), [{clipPath: 'inset(0 64% 0 0)'}, {clipPath: 'inset(0 0% 0 0)'}], {delay: 1850, duration: 500, easing: EASE_IO});
+    A(q('.sp-cur'), [{opacity: 1, transform: 'translateX(426px)'}, {opacity: 1, transform: 'translateX(1190px)', offset: .94}, {opacity: 0, transform: 'translateX(1192px)'}], {delay: 1850, duration: 500, easing: EASE_IO});
+    A(q('.sp-cone'), [{opacity: 0, transform: 'translateY(-70px)'}, {opacity: 1, transform: 'translateY(0)', offset: .5, easing: EASE_IN}, {transform: 'translateY(-7px)', offset: .7}, {transform: 'translateY(0)', offset: .88}, {transform: 'translateY(0)'}], {delay: 1900, duration: 480, easing: 'linear'});
+    A(q('.sp-tag'), [{opacity: 0, transform: 'translateY(8px)'}, {opacity: 1, transform: 'none'}], {delay: 2050, duration: 380, easing: EASE_IN});
+    A(q('.sp-road'), [{opacity: 0}, {opacity: 1}], {delay: 2200, duration: 300});
+    A(q('.sp-msg'), [{opacity: 0}, {opacity: 1}], {delay: 2200, duration: 300});
+    // relais : à SW ms l'empilement de calques est remplacé, à l'image près, par l'image officielle intacte
+    var D2 = SW + 1, off = SW / D2;
+    A(q('.sp-layers'), [{opacity: 1}, {opacity: 1, offset: off}, {opacity: 0}], {duration: D2, easing: 'linear'});
+    A(q('.sp-final'), [{opacity: 0}, {opacity: 0, offset: (SW - 140) / D2}, {opacity: 1, offset: off}, {opacity: 1}], {duration: D2, easing: 'linear'});
+    var master = A(stage, [{opacity: 1}, {opacity: 1}], {duration: SW});
+    master.onfinish = function(){ played = false; if (skip) skip.hidden = true; };   // l'état final reste porté par les animations (fill) : aucun saut visuel
+  } catch(err){ played = false; try { finalize(); } catch(e){} endAt = T0 + 600; }
+})();
+</script>
 <div id="auth" hidden>
   <aside class="ap-side">
     <div class="ap-logo" role="img" aria-label="ARCHITRAFIC, outils de conception et de gestion du trafic"></div>
@@ -1961,6 +2116,7 @@ function afterIntro(){ return new Promise(res => { const t0 = performance.now();
   if ((!sp || sp.classList.contains('done')) && ready) setTimeout(res, sp ? 700 : 250); else setTimeout(tick, 120); }; tick(); }); }
 function hideSplashSoon(){ // l'écran de compte n'attend pas le moteur 3D
   if (splashT) return; const sp = $a('#splash'); if (!sp) return;
+  if (window.__spHide){ splashT = 1; window.__spHide(); return; }   // intro (src/js/intro.js) : ferme à la fin de la scène, ou tout de suite si « Passer »
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   splashT = setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(0, (reduce ? 600 : 2900) - performance.now()));
 }
@@ -7352,7 +7508,7 @@ window.APModel = {
 };
 window.dispatchEvent(new Event('ap:ready'));
 window.__apReady = true;
-(() => { const sp = document.getElementById('splash'); if (!sp) return; const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+(() => { const sp = document.getElementById('splash'); if (!sp) return; if (window.__spHide){ window.__spHide(); return; } const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
 window.ATDebug = {objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
