@@ -514,7 +514,6 @@ function buildWorld(){
   buildTrees(worldGroup);
   if (!planLook()) buildWalls(worldGroup);
   if (!planLook()){ buildFurniture(worldGroup); buildUtilities(worldGroup); }
-  if (DISPLAY.lay.nets){ buildNetworks(worldGroup); applyCutaway(worldGroup); } else NETBUILT.types.clear();
   buildStreetLabels();
   for (const m of worldGroup.children) m.userData.layer = layerOf(m.name || '');
   tileWorld(worldGroup); applyLayers(); applyNight(); worldGroup.userData.ms = Math.round(performance.now() - t0);

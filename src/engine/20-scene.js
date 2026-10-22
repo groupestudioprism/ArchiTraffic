@@ -57,7 +57,7 @@ const previewGroup = new THREE.Group(), markGroup = new THREE.Group();
 scene.add(worldGroup, projGroup, simGroup, previewGroup, markGroup);
 
 /* Réglages d'affichage, par appareil */
-const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, nets:false, ngf:false, pins:true, oneway:true}};
+const DISPLAY = {style:'textured', bg:'', shadows:true, sunAz:215, sunEl:46, lay:{bld:true, trees:true, marks:true, names:true, sidewalks:true, areas:true, terrain:true, walls:true, lamps:true, ngf:false, pins:true, oneway:true}};
 try { const d = JSON.parse(localStorage.getItem('at.display') || '{}'); Object.assign(DISPLAY, d, {lay:{...DISPLAY.lay, ...(d.lay || {})}}); } catch(e){}
 /* affichage de base : style « Plan », calques de détail décochés (ils sont tout de même préparés au chargement et
    s'affichent instantanément quand on les coche). Appliqué une fois aux réglages existants. */

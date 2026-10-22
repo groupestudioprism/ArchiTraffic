@@ -22,7 +22,7 @@ function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !
 
 /* ---------- chargement de la zone du chantier ---------- */
 const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
-const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier, réseaux), puis réseau routier seul jusqu'à la taille demandée
+const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier), puis réseau routier seul jusqu'à la taille demandée
 /* barre de chargement fluide : elle avance toujours un peu (progression « d'attente ») sans jamais dépasser
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
