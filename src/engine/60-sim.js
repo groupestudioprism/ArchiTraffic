@@ -42,13 +42,16 @@ function simNetworkChanged(){ SIM.rc.clear(); SIM.base.clear(); SIM.jobs?.clear(
 /* ré-itinéraires après une modification du chantier : étalés sur plusieurs images (budget de temps) au lieu d'un gel */
 /* calculs d'itinéraires en tâche de fond : chaque image avance les calculs en attente jusqu'à épuisement du budget (5 ms) ;
    un itinéraire long (réseau de 20 km) se calcule ainsi sur plusieurs images sans jamais figer l'affichage */
-function simJob(key, mk, done){ SIM.jobs ??= new Map(); if (SIM.jobs.has(key) || SIM.jobs.size > 400) return; SIM.jobs.set(key, {it:mk(), done}); }
+function simJob(key, mk, done){ SIM.jobs ??= new Map(); if (SIM.jobs.has(key)) return true; if (SIM.jobs.size > 400) return false; SIM.jobs.set(key, {it:mk(), done}); return true; }
+/* tronçon fermé (route barrée, ou sens fermé) */
+const simClosed = (e, C) => !!e && (C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`));
 function simJobs(){ if (!SIM.jobs?.size) return; for (const [k, j] of SIM.jobs){ for (;;){ if (performance.now() > SIM.budget) return; const r = j.it.next(); if (r.done){ SIM.jobs.delete(k); j.done(r.value); break; } } } }
 function simReroute(){
   if (!SIM.agents.some(a => a.rr)) return; if (SIM.cKey !== stateVer){ SIM.cKey = stateVer; SIM.cSet = closedSets(state.els); } const C = SIM.cSet;
   for (const a of SIM.agents){ if (!a.rr) continue; if (performance.now() > SIM.budget) return; a.rr = false;
-    const e = NET.edges[a.edges[a.ei]]; if (!e) continue; if (C.both.has(e.key) || C.dir.has(`${e.from}>${e.to}`)){ a.kill = true; continue; }
-    simJob('a|' + a.id, () => routeGen(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), r => { if (!r){ a.kill = true; return; } if (a.ei >= a.edges.length || NET.edges[a.edges[a.ei]] !== e){ a.rr = true; return; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; }); }
+    const e = NET.edges[a.edges[a.ei]]; if (!e) continue; if (simClosed(e, C)){ a.kill = true; continue; }
+    const ok = simJob('a|' + a.id, () => routeGen(e.to, a.dest, C, {vtype:a.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), r => { if (a.kill || a.done) return; if (!r){ a.kill = true; return; } if (a.ei >= a.edges.length || NET.edges[a.edges[a.ei]] !== e){ a.rr = true; return; } a.edges = [...a.edges.slice(0, a.ei + 1), ...r.edges]; a.dev = true; });
+    if (!ok) a.rr = true; }   // file de calcul pleine : on réessaiera à l'image suivante (avant, la demande était perdue et le véhicule gardait son ancien itinéraire)
 }
 function simStop(clear){ SIM.on = false; $('#simPlay')?.classList.remove('on'); const b = $('#simPlay'); if (b){ b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>'; b.setAttribute('aria-label', 'Lancer la simulation'); }
   if (clear){ congReset(); SIM.agents = []; SIM.t = 0; SIM.stats = {n:0, done:0, sumT:0, sumT0:0, dev:0}; SIM.occ.clear(); SIM.resv.clear(); if (SIM.inst) for (const ms of Object.values(SIM.inst)) for (const m of ms) m.count = 0; simStatus(); } dirty = true; }
@@ -112,6 +115,9 @@ function simStep(dt){
         break; }
       k++; acc += NET.edges[a.edges[k]].len; }
     if (sigStop >= 0){ gap = Math.min(gap, sigStop - 0.5); vl = 0; }
+    /* route barrée sur l'itinéraire (fermeture posée pendant la simulation, nouvel itinéraire pas encore calculé) :
+       le véhicule s'arrête avant la barrière au lieu de la traverser, et demande un nouvel itinéraire */
+    for (let k = a.ei + 1, acc2 = e.len - a.s; k < a.edges.length && acc2 < 150; k++){ const E = NET.edges[a.edges[k]]; if (simClosed(E, C)){ gap = Math.min(gap, acc2 - 1); vl = 0; if (!SIM.jobs?.has('a|' + a.id)) a.rr = true; break; } acc2 += E.len; }
     // arrêt au bout de l'arête : priorité, place dans la rue de sortie, fin de parcours
     const rem = e.len - a.s, n = NET.nodes.get(e.to), nextE = NET.edges[a.edges[a.ei + 1]];
     if (nextE && rem < 40){
@@ -146,7 +152,9 @@ function simStep(dt){
     // interblocage : un véhicule immobile depuis 2 minutes est retiré (comme les « téléportations » des simulateurs pro)
     if (a.st > 120){ a.kill = true; SIM.stats.stuck = (SIM.stats.stuck || 0) + 1; continue; }
     congSample(a.edges[a.ei], a.v / Math.max(1, e.sp), dt, a.v < 1 ? a.len + 2 : 0);
-    while (a.s >= NET.edges[a.edges[a.ei]].len){ a.s -= NET.edges[a.edges[a.ei]].len; a.ei++; if (a.ei >= a.edges.length){ a.done = true; break; } }
+    while (a.s >= NET.edges[a.edges[a.ei]].len){
+      if (a.ei + 1 < a.edges.length && simClosed(NET.edges[a.edges[a.ei + 1]], C)){ a.s = NET.edges[a.edges[a.ei]].len - 0.05; a.v = 0; a.rr = true; break; }   // jamais d'entrée dans une section barrée
+      a.s -= NET.edges[a.edges[a.ei]].len; a.ei++; if (a.ei >= a.edges.length){ a.done = true; break; } }
     if (a.done){ SIM.stats.done++; SIM.stats.sumT += SIM.t - a.t0; SIM.stats.sumT0 += a.free; }
   }
   SIM.agents = SIM.agents.filter(a => !a.done && !a.kill);
