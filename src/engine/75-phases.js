@@ -5,7 +5,15 @@
    « Phasage automatique » répartit les routes barrées dans le moins de phases possible, sans jamais fermer en même temps
    deux rues voisines ni une rue qui sert de déviation à une autre (coloration de graphe des conflits). */
 const curPh = () => state?.phase && state.phase !== 'all' ? state.phase : null;
-const phOff = e => !!(curPh() && e?.ph && e.ph !== curPh());
+/* « hors service » : d'une autre phase que celle affichée, ou barrage levé (clic droit → Lever le barrage) avec ses déviations et panneaux */
+const phOff = e => !!(curPh() && e?.ph && e.ph !== curPh()) || liftedEl(e);
+let _liftV = -1, _liftS = null, _liftIds = new Set();
+function liftedEl(e){
+  if (!e || !state) return false; if (e.t === 'closure') return !!e.off;
+  const p = e.cl || e.auto; if (typeof p !== 'string') return false;
+  if (_liftV !== stateVer || _liftS !== state){ _liftV = stateVer; _liftS = state; _liftIds = new Set(state.els.filter(x => x.t === 'closure' && x.off).map(x => x.id)); }
+  return _liftIds.has(p);
+}
 const phName = id => state.phases?.find(p => p.id === id)?.name || 'Phase';
 function setPhase(id){ state.phase = id || 'all'; save(); sel = null; rebuildProj(); refreshPanel(); renderPhaseBar(); annoKey = ''; dirty = true; }
 function addPhase(){ edit(() => { state.phases = state.phases || []; const n = state.phases.length + 1; state.phases.push({id:uid8(), name:`Phase ${n}`, from:'', to:''}); }); setPhase(state.phases.at(-1).id); }

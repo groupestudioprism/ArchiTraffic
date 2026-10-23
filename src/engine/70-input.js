@@ -86,7 +86,7 @@ function pickShape(q){
 function pickEl(ev){
   const q = groundAt(ev); if (q){ const id = pickShape(q); if (id) return id; }
   setNdc(ev); const hits = ray.intersectObjects(projGroup.children, true);
-  for (const h of hits){ let o = h.object; while (o && !o.userData.id) o = o.parent; if (o?.userData.id && byId(o.userData.id)) return o.userData.id; }
+  for (const h of hits){ let o = h.object; while (o && !o.userData.id) o = o.parent; if (o?.userData.id && byId(o.userData.id) && !phOff(byId(o.userData.id))) return o.userData.id; }
   return null;
 }
 /* accroche : sur l'axe ou le bord des voies, sur les éléments posés, ortho */

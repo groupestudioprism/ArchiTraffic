@@ -52,7 +52,7 @@ function phasePlanning(){
 function exportWaze(){
   const P = WORLD?.P; if (!P){ toast('Chargez d\'abord le lieu du chantier.'); return; } const m = state.meta || {};
   const iso = (d, end) => d ? new Date(d + (end ? 'T20:00:00' : 'T07:00:00')).toISOString().replace('.000Z', '+00:00') : undefined;
-  const incidents = state.els.filter(e => e.t === 'closure').map((c, i) => { const ph = state.phases?.find(p => p.id === c.ph), ll = c.pts.map(q => P.toLL(q[0], q[1]));
+  const incidents = state.els.filter(e => e.t === 'closure' && !e.off).map((c, i) => { const ph = state.phases?.find(p => p.id === c.ph), ll = c.pts.map(q => P.toLL(q[0], q[1]));
     return {id:`architrafic-${c.id}`, type:c.mode === 'total' ? 'ROAD_CLOSED' : 'HAZARD', subtype:c.mode === 'total' ? 'ROAD_CLOSED_CONSTRUCTION' : 'HAZARD_ON_ROAD_CONSTRUCTION', polyline:ll.map(q => `${q[1].toFixed(6)} ${q[0].toFixed(6)}`).join(' '),
       street:c.name || '', starttime:iso(ph?.from || m.from), endtime:iso(ph?.to || m.to, true), description:`${c.mode === 'total' ? 'Route barrée' : c.mode === 'alternat' ? 'Circulation alternée' : 'Voie neutralisée'} — ${state.name}`, direction:c.mode === 'total' || c.mode === 'alternat' ? 'BOTH_DIRECTIONS' : 'ONE_DIRECTION', reference:m.arrete || undefined}; });
   if (!incidents.length){ toast('Aucune route barrée à transmettre.'); return; }
