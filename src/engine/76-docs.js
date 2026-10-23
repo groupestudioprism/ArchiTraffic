@@ -74,7 +74,7 @@ async function exportA3(){
   openDoc(html, `${safeName(state.name)}-plan-A3.html`);
 }
 /* ---------- projet d'arrêté de circulation ---------- */
-function exportArrete(){
+function exportArrete(ret = false){
   const m = state.meta || {}, phases = state.phases?.length ? state.phases : [null], art = [];
   const fmtD = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}) : '…';
   const modeTxt = c => c.mode === 'alternat' ? `la circulation sera alternée${c.len ? ` sur ${Math.round(c.len)} m` : ''}, réglée par feux tricolores de chantier (KR11) ou piquets K10` : c.mode === 'voie' ? 'une file de circulation sera neutralisée, la circulation étant maintenue sur la file restante' : c.mode === 'sens' ? `la circulation sera interdite dans le sens ${c.dir === -1 ? 'inverse' : 'du tracé'} et maintenue dans l'autre sens` : `la circulation sera interdite à tous les véhicules${c.riv ? ', sauf riverains, véhicules de secours et de service' : ', sauf véhicules de secours et de service'}`;
@@ -103,6 +103,7 @@ function exportArrete(){
     <h3>Article ${n++} — Infractions</h3><p>Les infractions au présent arrêté seront constatées et poursuivies conformément aux lois et règlements en vigueur.</p>
     <h3>Article ${n++} — Exécution</h3><p>Le présent arrêté sera affiché aux extrémités des sections concernées. Ampliation en sera adressée aux services de police ou de gendarmerie, au SDIS, aux services de transport en commun concernés et à ${esc(m.entreprise || "l'entreprise")}, chargés chacun en ce qui le concerne de son exécution.</p>
     <p class="sig">Fait à …………………, le ………………<br><br>L'autorité compétente</p></body></html>`;
+  if (ret === true) return html;
   openDoc(html, `${safeName(state.name)}-projet-arrete.html`);
 }
 function signSummary(){ const c = {}; for (const e of state.els) if (e.t === 'obj'){ const s = LIBK[e.k]?.sign; if (s) c[s.replace(/_.*/, '')] = (c[s.replace(/_.*/, '')] || 0) + 1; }
