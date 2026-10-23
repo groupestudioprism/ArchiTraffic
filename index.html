@@ -1332,6 +1332,7 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
   <button data-act="new"><b>Nouveau chantier</b><span>Enregistré automatiquement dans le cloud</span></button>
   <button data-act="open"><b>Importer un projet…</b><span>Fichier ARCHITRAFIC .json</span></button>
   <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button>
+  <button data-act="apin"><b>Importer l'emprise d'un projet ARCHIPLAN…</b><span>Fichier .archiplan : contour et hauteur du bâtiment, posés comme emprise de chantier</span></button>
   <button data-act="check"><b>Contrôler le chantier</b><span>Signalisation, distances, déviations : ce qui manque ou ne va pas</span></button>
   <button data-act="sample"><b>Charger l'exemple</b><span>Rue barrée avec déviation, en centre-ville</span></button>
 </div>
@@ -1399,6 +1400,7 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 <div id="toast" hidden></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <input type="file" id="glbIn" accept=".glb,model/gltf-binary" hidden>
+<input type="file" id="apIn" accept=".archiplan,.json,application/json" hidden>
 <script>
 (() => {
 'use strict';
@@ -5764,6 +5766,10 @@ function buildEl(e){
     if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), MAT.zone ??= new THREE.MeshBasicMaterial({map:zoneTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-5, polygonOffsetUnits:-5})); m.userData.id = e.id; m.renderOrder = 1; g.add(m); }
     const ring = [...e.pts, e.pts[0]], ob = ribbonMesh(ring, 0.25, matCol(0xF28A1A, {po:-7}), 0.13); if (ob){ ob.userData.id = e.id; g.add(ob); }
     if (e.fence){ const mod = herasModule(); lineModules(g, ring, mod.grp, mod.len, e.id); }
+    if (e.bld?.h > 0){   // bâtiment ARCHIPLAN : volume translucide à la hauteur du projet, posé au point le plus bas du terrain
+      const z0 = Math.min(...e.pts.map(q => H(q[0], q[1]))), sh = new THREE.Shape(e.pts.map(q => new THREE.Vector2(q[0], q[1]))), geo = new THREE.ExtrudeGeometry(sh, {depth:e.bld.h, bevelEnabled:false}); geo.rotateX(-Math.PI / 2); geo.translate(0, z0, 0);
+      const vm = new THREE.Mesh(geo, MAT.bldAP ??= new THREE.MeshStandardMaterial({color:0x8FB3D9, transparent:true, opacity:0.55, roughness:0.6, depthWrite:false})); vm.userData.id = e.id; vm.renderOrder = 2; g.add(vm);
+      const ed = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), MAT.bldAPe ??= new THREE.LineBasicMaterial({color:0x1F4FA3})); ed.userData.id = e.id; g.add(ed); }
     return g;
   }
   if (e.t === 'line' && e.pts?.length > 1){
@@ -6728,6 +6734,9 @@ canvas.addEventListener('pointermove', ev => {
   if (drag && q0){
     const e = byId(drag.id); if (!e) return;
     if (tool === 'move'){ const d = V.sub(q0, drag.start), o = drag.orig; if (o.x != null){ const p = snapPt(V.add([o.x, o.y], d), {obj:false}); e.x = p[0]; e.y = p[1]; if (e.t === 'obj' && LIBK[e.k]?.sign && !e.manualA){ const a = autoOrient(e.x, e.y); if (a != null) e.a = a; } } else { const c = JSON.parse(JSON.stringify(o)); shiftEl(c, d); Object.assign(e, c); } }
+    else if (drag.orig.pts && drag.orig.x == null && (e.t === 'zone' || e.t === 'line' || e.t === 'arrow')){   // emprise, balisage : on fait pivoter le contour autour de son centre
+      let da = Math.atan2(q0[1] - drag.c[1], q0[0] - drag.c[0]) - Math.atan2(drag.start[1] - drag.c[1], drag.start[0] - drag.c[0]); if (ev.shiftKey) da = Math.round(da / (Math.PI / 12)) * (Math.PI / 12);
+      const cs = Math.cos(da), sn = Math.sin(da); e.pts = drag.orig.pts.map(q => { const x = q[0] - drag.c[0], y = q[1] - drag.c[1]; return [drag.c[0] + x * cs - y * sn, drag.c[1] + x * sn + y * cs]; }); }
     else { let a = Math.atan2(q0[1] - drag.c[1], q0[0] - drag.c[0]); if (ev.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12); e.a = a; e.manualA = true; }
     rebuildProj(); return;
   }
@@ -6865,7 +6874,7 @@ function renderElProps(e){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
   } else if (e.t === 'zone'){
-    h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f rchk wide"><input type="checkbox" id="eFence"${e.fence ? ' checked' : ''}> Clôturer l'emprise (clôture de chantier)</label></div><dl class="kv" style="margin-top:10px"><dt>Surface</dt><dd>${nf(Math.abs(ringArea(e.pts)), 1)} m²</dd><dt>Périmètre</dt><dd>${fmtM(plLen([...e.pts, e.pts[0]]))}</dd></dl>`;
+    h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f rchk wide"><input type="checkbox" id="eFence"${e.fence ? ' checked' : ''}> Clôturer l'emprise (clôture de chantier)</label></div>${e.bld ? `<p class="hint" style="margin:6px 0 0">Bâtiment importé d'ARCHIPLAN : volume de ${nf(e.bld.h, 1)} m de haut. Déplacez-le (G) ou faites-le pivoter (O) pour le caler sur la parcelle.</p>` : ''}<dl class="kv" style="margin-top:10px"><dt>Surface</dt><dd>${nf(Math.abs(ringArea(e.pts)), 1)} m²</dd><dt>Périmètre</dt><dd>${fmtM(plLen([...e.pts, e.pts[0]]))}</dd></dl>`;
   } else if (e.t === 'line'){
     const T = LINE_TYPES[e.k]; h += `<div class="fields">${selF('eLine', 'Type', Object.entries(LINE_TYPES).map(([k, t]) => [k, t.n]), e.k)}${T?.item ? fld('eSp', 'Espacement (m)', e.sp || T.sp, 'number', 'step="0.5" min="1"') : ''}</div><dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(plLen(e.pts))}</dd></dl>`;
   } else if (e.t === 'note'){
@@ -7233,7 +7242,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.t
 $('#fileBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#fileMenu'), e.currentTarget); });
 $('#exportBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#exportMenu'), e.currentTarget); });
 $('#fileMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#fileMenu').hidden = true;
-  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
+  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
 $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#exportMenu').hidden = true; if (!canExport()) return;
   ({a3:exportA3, dossier:exportDossier, arrete:() => exportArrete(), avis:exportAvis, terrain:exportTerrain, devis:exportDevis, waze:exportWaze, dxf:exportDXF, png:() => exportPNG(2), png4:() => exportPNG(4), glb:exportGLB, csv:exportCSV, geojson:exportGeoJSON, json:exportJSON})[b.dataset.act]?.(); });
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
@@ -7253,6 +7262,50 @@ function renderViewMenu(){
   m.querySelectorAll('[data-gfx]').forEach(b => b.onclick = () => { setGfx(b.dataset.gfx); renderViewMenu(); });
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); window.PrismSettings?.themeChanged(); renderViewMenu(); });
 }
+
+/* ==== 74b-archiplan.js ==== */
+/* ============ Lien ARCHIPLAN : emprise d'un projet de bâtiment ============
+   Fichier → « Importer l'emprise d'un projet ARCHIPLAN » : on lit le projet (.archiplan / .json enregistré par ARCHIPLAN),
+   on calcule l'emprise au sol du bâtiment (murs avec leur épaisseur, dalles, poteaux, volumes) et sa hauteur, puis on la pose
+   comme emprise de chantier : à l'adresse du projet si ARCHIPLAN la connaît, sinon au centre de la vue. Elle se déplace et
+   pivote ensuite comme toute emprise (outils Déplacer et Rotation). */
+function hull2(P){
+  const p = [...new Map(P.map(q => [q[0].toFixed(3) + ',' + q[1].toFixed(3), q])).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]); if (p.length < 3) return p;
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+  for (const q of p){ while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.slice().reverse()){ while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function archiplanFootprint(s){
+  const lib = s.lib?.compos || {}, T = w => { const L = lib[w.type]?.layers; return L ? L.reduce((a, l) => a + (+l[1] || 0), 0) : /^CLO/.test(w.type || '') ? 0.07 : 0.3; };
+  const lz = i => +(s.levels?.[i]?.z) || 0, pts = []; let top = 0, n = 0;
+  for (const e of s.els || []){
+    const z0 = lz(e.lvl | 0) + (+e.off || 0);
+    if (e.kind === 'wall' && e.a && e.b){ const d = V.norm(V.sub(e.b, e.a)), nn = V.mul(V.perp(d), T(e) / 2); pts.push(V.add(e.a, nn), V.sub(e.a, nn), V.add(e.b, nn), V.sub(e.b, nn)); top = Math.max(top, z0 + (+e.h || 0)); n++; }
+    else if ((e.kind === 'slab' || e.kind === 'vol' || e.kind === 'roof') && e.p && e.q){ const P = e.poly?.length >= 3 ? e.poly : [e.p, [e.q[0], e.p[1]], e.q, [e.p[0], e.q[1]]]; const ov = e.kind === 'roof' ? +(e.ov ?? 0.4) : 0;
+      const xs = P.map(q => q[0]), ys = P.map(q => q[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      P.forEach(q => pts.push(ov ? [q[0] + Math.sign(q[0] - cx) * ov, q[1] + Math.sign(q[1] - cy) * ov] : q)); const span = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)), ridge = e.shape === '0' ? 0.3 : Math.tan((+e.pitch || 35) * Math.PI / 180) * span / (e.shape === '1' ? 1 : 2);   // faîtage du toit
+      top = Math.max(top, z0 + (e.kind === 'roof' ? ridge : e.kind === 'slab' ? 0.3 : +e.h || 0.3)); n++; }
+    else if (e.kind === 'col' && e.c){ const hw = (+e.w || 0.25) / 2, hd = (+e.d || 0.25) / 2; pts.push([e.c[0] - hw, e.c[1] - hd], [e.c[0] + hw, e.c[1] + hd], [e.c[0] - hw, e.c[1] + hd], [e.c[0] + hw, e.c[1] - hd]); top = Math.max(top, z0 + (+e.h || 0)); n++; }
+  }
+  const H = hull2(pts); return H.length >= 3 ? {pts:H, h:Math.round(Math.max(2.5, top) * 100) / 100, n, area:Math.abs(ringArea(H))} : null;
+}
+async function importArchiplan(file){
+  if (!state.site || !WORLD){ toast('Choisissez d\'abord le lieu du chantier.'); return; }
+  let s; try { s = JSON.parse(await file.text()); } catch(e){ toast('Fichier illisible : ce n\'est pas un projet ARCHIPLAN.'); return; }
+  if (s?.app === 'architrafic'){ toast('C\'est un chantier ARCHITRAFIC : utilisez « Importer un projet ».'); return; }
+  if (!Array.isArray(s?.els) || !(s.format === 'archiplan' || s.levels)){ toast('Ce fichier n\'est pas un projet ARCHIPLAN (.archiplan).'); return; }
+  const F = archiplanFootprint(s); if (!F){ toast('Le projet ne contient ni mur ni dalle : pas d\'emprise à poser.'); return; }
+  let o = [0, 0], where = 'au centre de la vue';
+  const lat = +(s.site?.lat ?? s.site?.latitude), lon = +(s.site?.lon ?? s.site?.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)){ const q = WORLD.P.toXY(lon, lat); if (Math.max(Math.abs(q[0]), Math.abs(q[1])) < WORLD.size){ o = q; where = 'à l\'adresse du projet'; } }
+  if (where !== 'à l\'adresse du projet'){ const t = view === '2d' ? c2.target : c3.target; const cx = F.pts.reduce((a, q) => a + q[0], 0) / F.pts.length, cy = F.pts.reduce((a, q) => a + q[1], 0) / F.pts.length; o = [t.x - cx, -t.z - cy]; }
+  const id = uid8(), name = s.name || file.name.replace(/\.(archiplan|json)$/i, '');
+  addEl({id, t:'zone', name:`Bâtiment · ${name}`, pts:F.pts.map(q => [Math.round((q[0] + o[0]) * 100) / 100, Math.round((q[1] + o[1]) * 100) / 100]), fence:false, bld:{h:F.h, src:'archiplan', n:F.n}});
+  sel = id; applySel(); refreshPanel(); const c = elCenter(byId(id)); frameAt(c[0], c[1], Math.max(30, Math.sqrt(F.area) * 1.5));
+  toast(`Emprise du bâtiment « ${name} » posée ${where} (${nf(F.area, 0)} m², ${nf(F.h, 1)} m de haut). Outils Déplacer (G) et Rotation (O) pour l'ajuster.`, 6500);
+}
+$('#apIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importArchiplan(f); });
 
 /* ==== 75-phases.js ==== */
 /* ============ Phasage des travaux ============

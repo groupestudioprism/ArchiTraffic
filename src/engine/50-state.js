@@ -182,6 +182,10 @@ function buildEl(e){
     if (!gb.empty){ const m = new THREE.Mesh(gb.geo(), MAT.zone ??= new THREE.MeshBasicMaterial({map:zoneTex(), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-5, polygonOffsetUnits:-5})); m.userData.id = e.id; m.renderOrder = 1; g.add(m); }
     const ring = [...e.pts, e.pts[0]], ob = ribbonMesh(ring, 0.25, matCol(0xF28A1A, {po:-7}), 0.13); if (ob){ ob.userData.id = e.id; g.add(ob); }
     if (e.fence){ const mod = herasModule(); lineModules(g, ring, mod.grp, mod.len, e.id); }
+    if (e.bld?.h > 0){   // bâtiment ARCHIPLAN : volume translucide à la hauteur du projet, posé au point le plus bas du terrain
+      const z0 = Math.min(...e.pts.map(q => H(q[0], q[1]))), sh = new THREE.Shape(e.pts.map(q => new THREE.Vector2(q[0], q[1]))), geo = new THREE.ExtrudeGeometry(sh, {depth:e.bld.h, bevelEnabled:false}); geo.rotateX(-Math.PI / 2); geo.translate(0, z0, 0);
+      const vm = new THREE.Mesh(geo, MAT.bldAP ??= new THREE.MeshStandardMaterial({color:0x8FB3D9, transparent:true, opacity:0.55, roughness:0.6, depthWrite:false})); vm.userData.id = e.id; vm.renderOrder = 2; g.add(vm);
+      const ed = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), MAT.bldAPe ??= new THREE.LineBasicMaterial({color:0x1F4FA3})); ed.userData.id = e.id; g.add(ed); }
     return g;
   }
   if (e.t === 'line' && e.pts?.length > 1){

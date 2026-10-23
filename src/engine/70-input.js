@@ -331,6 +331,9 @@ canvas.addEventListener('pointermove', ev => {
   if (drag && q0){
     const e = byId(drag.id); if (!e) return;
     if (tool === 'move'){ const d = V.sub(q0, drag.start), o = drag.orig; if (o.x != null){ const p = snapPt(V.add([o.x, o.y], d), {obj:false}); e.x = p[0]; e.y = p[1]; if (e.t === 'obj' && LIBK[e.k]?.sign && !e.manualA){ const a = autoOrient(e.x, e.y); if (a != null) e.a = a; } } else { const c = JSON.parse(JSON.stringify(o)); shiftEl(c, d); Object.assign(e, c); } }
+    else if (drag.orig.pts && drag.orig.x == null && (e.t === 'zone' || e.t === 'line' || e.t === 'arrow')){   // emprise, balisage : on fait pivoter le contour autour de son centre
+      let da = Math.atan2(q0[1] - drag.c[1], q0[0] - drag.c[0]) - Math.atan2(drag.start[1] - drag.c[1], drag.start[0] - drag.c[0]); if (ev.shiftKey) da = Math.round(da / (Math.PI / 12)) * (Math.PI / 12);
+      const cs = Math.cos(da), sn = Math.sin(da); e.pts = drag.orig.pts.map(q => { const x = q[0] - drag.c[0], y = q[1] - drag.c[1]; return [drag.c[0] + x * cs - y * sn, drag.c[1] + x * sn + y * cs]; }); }
     else { let a = Math.atan2(q0[1] - drag.c[1], q0[0] - drag.c[0]); if (ev.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12); e.a = a; e.manualA = true; }
     rebuildProj(); return;
   }
