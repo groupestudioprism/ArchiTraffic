@@ -16,7 +16,7 @@ async function exportDossier(){
     if (view !== '2d') setView('2d');
     for (const p of sheets){
       setPhase(p ? p.id : 'all'); await sleep(60);
-      const els = state.els.filter(e => !phOff(e) && !e.hidden), cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1), dets = els.filter(e => e.t === 'detour' && e.pts?.length > 1);
+      const els = state.els.filter(e => !phOff(e) && !e.hidden), cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1), dets = els.filter(e => (e.t === 'detour' || e.t === 'pdetour') && e.pts?.length > 1);
       // cadrage : fermetures et déviations de la phase
       const pts = [...cls, ...dets].flatMap(e => e.pts); if (pts.length){ const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]); frameAt((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, Math.max(60, (Math.max(...xs) - Math.min(...xs)) / 2 * 1.15 + 25, (Math.max(...ys) - Math.min(...ys)) / 2 * 1.15 + 25)); }
       await sleep(450);

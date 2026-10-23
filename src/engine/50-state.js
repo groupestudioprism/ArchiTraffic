@@ -169,6 +169,10 @@ function buildEl(e){
     if (e.mode === 'sens'){ const p = e.dir === -1 ? e.pts.slice().reverse() : e.pts, mid = plAt(p, plLen(p) / 2), a = Math.atan2(mid.dir[1], mid.dir[0]), ar = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 3), matCol(0xD32F2F)); ar.rotation.set(0, a, -Math.PI / 2); ar.position.set(mid.pt[0], H(mid.pt[0], mid.pt[1]) + 0.3, -mid.pt[1]); ar.scale.y = 0.3; g.add(ar); }
     return g;
   }
+  if (e.t === 'pdetour' && e.pts?.length > 1){   // cheminement piéton dévié : chevrons verts, étroits, sur le trottoir
+    const m = ribbonMesh(e.pts, 0.9, MAT.pdet ??= new THREE.MeshBasicMaterial({map:chevronTex(PED_COL), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8}), 0.17, -(e.off ?? 3.4));
+    if (m){ m.userData.id = e.id; g.add(m); } return g;
+  }
   if (e.t === 'detour' && e.pts?.length > 1){
     const col = e.col || '#F28A1A', m = ribbonMesh(e.pts, 1.6, MAT['det|' + col] ??= new THREE.MeshBasicMaterial({map:chevronTex(col), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8}), 0.16, -(e.off ?? 1.4));
     if (m){ m.userData.id = e.id; g.add(m); } return g;

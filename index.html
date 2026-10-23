@@ -5751,6 +5751,10 @@ function buildEl(e){
     if (e.mode === 'sens'){ const p = e.dir === -1 ? e.pts.slice().reverse() : e.pts, mid = plAt(p, plLen(p) / 2), a = Math.atan2(mid.dir[1], mid.dir[0]), ar = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 3), matCol(0xD32F2F)); ar.rotation.set(0, a, -Math.PI / 2); ar.position.set(mid.pt[0], H(mid.pt[0], mid.pt[1]) + 0.3, -mid.pt[1]); ar.scale.y = 0.3; g.add(ar); }
     return g;
   }
+  if (e.t === 'pdetour' && e.pts?.length > 1){   // cheminement piéton dévié : chevrons verts, étroits, sur le trottoir
+    const m = ribbonMesh(e.pts, 0.9, MAT.pdet ??= new THREE.MeshBasicMaterial({map:chevronTex(PED_COL), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8}), 0.17, -(e.off ?? 3.4));
+    if (m){ m.userData.id = e.id; g.add(m); } return g;
+  }
   if (e.t === 'detour' && e.pts?.length > 1){
     const col = e.col || '#F28A1A', m = ribbonMesh(e.pts, 1.6, MAT['det|' + col] ??= new THREE.MeshBasicMaterial({map:chevronTex(col), transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-8, polygonOffsetUnits:-8}), 0.16, -(e.off ?? 1.4));
     if (m){ m.userData.id = e.id; g.add(m); } return g;
@@ -6303,6 +6307,93 @@ function compareDoc(c){
     ${compareHTML(c)}</body></html>`;
 }
 
+/* ==== 64-pietons.js ==== */
+/* ============ Piétons, cycles et bus ============
+   Une route barrée peut fermer aussi ses trottoirs (« piétons déviés ») : l'itinéraire piéton est alors calculé sur le
+   réseau marchable (trottoirs, chemins, rues piétonnes, pistes cyclables, rues circulées hors voies rapides), sans le tronçon
+   fermé ni les trottoirs tracés le long de lui. Les arrêts de bus situés sur une section barrée sont signalés (arrêt
+   provisoire à créer, transporteur à prévenir) ; un modèle « Arrêt de bus provisoire » est ajouté à la bibliothèque. */
+const PED_COL = '#2E7D32';
+let WALK = null;
+function walkGraph(){
+  if (WALK && WALK.W === WORLD?.W) return WALK;
+  const W = WORLD.W, adj = new Map(), segs = [];
+  const add = (a, b, len, ri) => { (adj.get(a) || adj.set(a, []).get(a)).push({to:b, len, key:segKey(a, b), ri}); };
+  W.roads.forEach((r, ri) => {
+    if (/^(elevator|corridor|platform|bridleway)$/.test(r.hw)) return;
+    const walk = r.foot || (r.drive && r.cls >= 2 && !r.tunnel && !(r.tags?.sidewalk === 'no' && r.tags?.foot !== 'yes' && r.cls <= 4)) || r.psv;
+    if (!walk) return;
+    for (let k = 0; k + 1 < r.nodes.length; k++){ const a = r.nodes[k], b = r.nodes[k + 1], A = W.nodes.get(a), B = W.nodes.get(b); if (!A || !B || a === b) continue;
+      const len = V.dist(A, B); add(a, b, len, ri); add(b, a, len, ri); if (r.foot) segs.push({a, b, A, B, ri}); }
+  });
+  return WALK = {W, adj, segs};
+}
+/* segments fermés aux piétons : la section barrée + les trottoirs tracés à part le long d'elle (parallèles, à moins de 12 m) */
+function pedClosedKeys(c){
+  const G = walkGraph(), keys = new Set();
+  for (let i = 0; i + 1 < c.ids.length; i++) keys.add(segKey(c.ids[i], c.ids[i + 1]));
+  for (const s of G.segs){
+    const m = V.mul(V.add(s.A, s.B), 0.5), d = V.norm(V.sub(s.B, s.A)); const q = plClosest(c.pts, m); if (!q || V.dist(q.pt, m) > 12) continue;
+    const L = plLen(c.pts); if (q.s < 3 || q.s > L - 3) continue;   // les traversées aux carrefours restent ouvertes
+    const cd = plAt(c.pts, q.s).dir; if (Math.abs(V.dot(d, cd)) > 0.8) keys.add(segKey(s.a, s.b));
+  }
+  return keys;
+}
+function walkRoute(from, to, closed){
+  const G = walkGraph(), T = WORLD.W.nodes.get(to); if (!G.adj.has(from) || !T) return null;
+  const g = new Map([[from, 0]]), prev = new Map(), open = [[V.dist(WORLD.W.nodes.get(from), T), 0, from]]; let it = 0;
+  while (open.length && it++ < 60000){
+    let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+    const [, c, n] = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    if (c > (g.get(n) ?? Infinity) + 1e-9) continue; if (n === to) break;
+    for (const e of G.adj.get(n) || []){ if (closed.has(e.key)) continue; const nc = c + e.len * (NET.roads?.[e.ri]?.foot ? 0.9 : 1); if (nc < (g.get(e.to) ?? Infinity)){ g.set(e.to, nc); prev.set(e.to, n); open.push([nc + V.dist(WORLD.W.nodes.get(e.to), T), nc, e.to]); } }
+  }
+  if (!g.has(to)) return null;
+  const ids = [to]; while (ids[0] !== from) ids.unshift(prev.get(ids[0]));
+  const pts = ids.map(id => WORLD.W.nodes.get(id)); return {ids, pts, len:plLen(pts)};
+}
+/* (re)calcule le cheminement piéton dévié d'une fermeture */
+function pedDetour(c){
+  state.els = state.els.filter(e => !(e.t === 'pdetour' && e.cl === c.id && e.auto) && !(e.t === 'obj' && e.pauto === c.id));
+  if (c.ped !== 'devie' || !WORLD || !(c.ids?.length > 1) || c.mode === 'alternat' || c.mode === 'voie') return null;
+  const r = walkRoute(c.ids[0], c.ids[c.ids.length - 1], pedClosedKeys(c));
+  if (!r){ c.pedFail = true; return null; } delete c.pedFail;
+  const names = [...new Set(r.ids.slice(1).map((id, k) => NET.segIdx.get(segKey(r.ids[k], id))?.ri).filter(x => x != null).map(ri => NET.roads[ri]?.name).filter(Boolean))].filter(n => n !== c.name);
+  state.els.push({id:uid8(), t:'pdetour', cl:c.id, ph:c.ph, auto:true, ids:r.ids, pts:r.pts, len:r.len, extra:Math.max(0, r.len - (c.len || plLen(c.pts))), via:names.join(', '), name:`Cheminement piéton dévié${c.name ? ' · ' + c.name : ''}`});
+  // panneaux « accès interdit aux piétons » (B9g) sur les trottoirs, aux deux extrémités
+  const w = closureWidth(c) / 2 + 1.2;
+  for (const [p, q] of [[c.pts[0], c.pts[1]], [c.pts[c.pts.length - 1], c.pts[c.pts.length - 2]]]){ const d = V.norm(V.sub(q, p)), n = V.perp(d);
+    for (const s of [1, -1]){ const o = V.add(V.add(p, V.mul(d, 4)), V.mul(n, s * w)); state.els.push({id:uid8(), t:'obj', k:'B9g', x:o[0], y:o[1], a:Math.atan2(-d[1], -d[0]), pauto:c.id, auto:c.id, ph:c.ph}); } }
+  return r;
+}
+/* arrêts de bus sur les sections barrées */
+function busStopsOn(c){
+  if (!WORLD || !(c.pts?.length > 1) || c.mode === 'alternat' || c.mode === 'voie') return [];
+  return WORLD.W.points.filter(p => p.k === 'bus_stop' || p.tags?.public_transport === 'platform' && p.tags?.bus === 'yes').filter(p => { const q = plClosest(c.pts, [p.x, p.y]); return q && V.dist(q.pt, [p.x, p.y]) < 22; })
+    .map(p => ({name:p.tags?.name || 'Arrêt sans nom', x:p.x, y:p.y, lines:p.tags?.route_ref || p.tags?.['bus_routes'] || ''}));
+}
+function pedChecks(add, els){
+  for (const c of els.filter(e => e.t === 'closure' && e.pts?.length > 1)){
+    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, nm = c.name || 'Rue';
+    if (c.ped === 'devie'){ const pd = els.find(d => d.t === 'pdetour' && d.cl === c.id); if (!pd) add('err', `${nm} : piétons déviés mais aucun cheminement possible (à aménager : passage protégé provisoire)`, mid); else add('ok', `${nm} : cheminement piéton dévié (${fmtM(pd.len)}, +${fmtM(pd.extra || 0)})`, mid); }
+    else if (c.mode === 'total') add('info', `${nm} : cheminement piéton maintenu le long du chantier (largeur ≥ 1,40 m, séparé de l'emprise)`, mid);
+    for (const s of busStopsOn(c)){ const prov = els.some(o => o.t === 'obj' && o.k === 'arretBus' && Math.hypot(o.x - s.x, o.y - s.y) < 250);
+      add(prov ? 'ok' : 'err', prov ? `Arrêt de bus « ${s.name} » : arrêt provisoire posé` : `Arrêt de bus « ${s.name} »${s.lines ? ` (lignes ${s.lines})` : ''} sur la section barrée : arrêt provisoire à créer et transporteur à prévenir`, [s.x, s.y]); }
+  }
+}
+/* modèle : arrêt de bus provisoire (poteau, plaque « BUS · arrêt provisoire », socle lesté) */
+function arretBusProv(){
+  const g = new THREE.Group();
+  g.add(part(new THREE.CylinderGeometry(0.04, 0.04, 2.6, 10), C.galva, 0, 1.3, 0));
+  g.add(part(new THREE.BoxGeometry(0.62, 0.14, 0.62), C.concrete, 0, 0.07, 0));
+  const tex = TEX.busProv ??= canvasTex(256, 384, (c, w, h) => { c.fillStyle = '#F2B705'; c.fillRect(0, 0, w, h); c.fillStyle = '#0B3D91'; c.fillRect(14, 14, w - 28, 170); c.fillStyle = '#fff'; c.font = '800 118px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('BUS', w / 2, 102);
+    c.fillStyle = '#111'; c.font = '700 40px Arial'; c.fillText('ARRÊT', w / 2, 236); c.fillText('PROVISOIRE', w / 2, 284); c.font = '500 26px Arial'; c.fillText('travaux', w / 2, 334); });
+  const m = MAT.busProv ??= new THREE.MeshStandardMaterial({map:tex, roughness:0.5});
+  g.add(part(new THREE.BoxGeometry(0.5, 0.75, 0.03), [C.white, C.white, C.white, C.white, m, m], 0, 2.15, 0));
+  return g;
+}
+libAdd('chan', 'arretBus', 'Arrêt de bus provisoire', arretBusProv, {ref:'Arrêt provisoire'}); LIBK.arretBus = LIB[LIB.length - 1];
+
 /* ==== 70-input.js ==== */
 /* ============ Outils et saisie (souris, doigt, clavier) ============ */
 const CLOSE_MODES = [['total', 'Deux sens de circulation'], ['droite', 'Voie de droite'], ['gauche', 'Voie de gauche'], ['alternat', 'Alternat (chaussée rétrécie)']];
@@ -6556,7 +6647,7 @@ function addDetoursFor(cl){
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
     state.els.push({id:uid8(), t:'detour', cl:cl.id, ph:cl.ph, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
-  cl.plWarn = list.some(r => r.vl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
+  cl.plWarn = list.some(r => r.vl); if (cl.ped) pedDetour(cl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
@@ -6686,20 +6777,21 @@ $('#scrim').addEventListener('click', () => { $('#panel').classList.remove('open
 let panelT = 0;
 function refreshPanel(){ if (panelT) return; panelT = setTimeout(() => { panelT = 0; renderPanel(); }, 16); }   // jamais repoussé indéfiniment par des appels répétés
 function renderPanel(){ if (!state) return; ({props:renderProps, lib:renderLib, traffic:renderTraffic, legend:renderLegendTab})[activeTab]?.(); }
-const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
+const EL_NAME = {obj:'Élément', line:'Balisage', zone:'Emprise de chantier', closure:'Route barrée', detour:'Déviation', pdetour:'Cheminement piéton dévié', note:'Annotation', arrow:'Flèche', dim:'Cote', swept:'Épure de giration', model:'Maquette ARCHIPLAN'};
 function elLabel(e){
   if (e.t === 'obj') return LIBK[e.k]?.name || e.k; if (e.t === 'line') return LINE_TYPES[e.k]?.n || 'Balisage';
   if (e.t === 'closure') return `${cap(e.name || 'Rue')} · ${e.mode === 'voie' ? (e.side === -1 ? 'file de gauche' : 'file de droite') : e.mode === 'sens' ? (e.dir === -1 ? 'voie de gauche' : 'voie de droite') : e.mode === 'alternat' ? 'alternat' : 'barrée'}`;
-  if (e.t === 'detour') return e.name || 'Déviation'; if (e.t === 'zone') return e.name || 'Emprise'; if (e.t === 'note') return (e.text || '').split('\n')[0].slice(0, 40) || 'Annotation';
+  if (e.t === 'detour' || e.t === 'pdetour') return e.name || EL_NAME[e.t]; if (e.t === 'zone') return e.name || 'Emprise'; if (e.t === 'note') return (e.text || '').split('\n')[0].slice(0, 40) || 'Annotation';
   if (e.t === 'dim') return `Cote ${fmtM(V.dist(e.a, e.b))}`; if (e.t === 'swept') return `Giration · ${SWEPT_VEH[e.veh]?.n || e.veh}`; if (e.t === 'model') return e.name || 'Maquette'; return EL_NAME[e.t] || e.t;
 }
 function elIcon(e){
   if (e.t === 'obj'){ const L = LIBK[e.k]; const th = L ? thumbLazy(L) : ''; return th ? `<img src="${th}" alt="">` : ''; }
-  const col = e.t === 'closure' ? '#D32F2F' : e.t === 'detour' ? (e.col || '#F28A1A') : e.t === 'zone' ? '#F28A1A' : e.t === 'line' ? (LINE_TYPES[e.k]?.col || '#F06A12') : e.t === 'swept' ? '#7B1FA2' : e.t === 'arrow' ? (e.col || '#1565C0') : '#5B6B7F';
+  const col = e.t === 'closure' ? '#D32F2F' : e.t === 'pdetour' ? PED_COL : e.t === 'detour' ? (e.col || '#F28A1A') : e.t === 'zone' ? '#F28A1A' : e.t === 'line' ? (LINE_TYPES[e.k]?.col || '#F06A12') : e.t === 'swept' ? '#7B1FA2' : e.t === 'arrow' ? (e.col || '#1565C0') : '#5B6B7F';
   return `<i style="background:${col}"></i>`;
 }
 function elSub(e){
   if (e.t === 'closure') return `${fmtM(e.len || plLen(e.pts || []))}${e.riv ? ' · sauf riverains' : ''}`;
+  if (e.t === 'pdetour') return `${fmtM(e.len || plLen(e.pts || []))}${e.extra ? ` · +${fmtM(e.extra)}` : ''} · piétons et cycles`;
   if (e.t === 'detour') return `${fmtM(e.len || plLen(e.pts || []))}${e.extra ? ` · +${fmtM(e.extra)}` : ''}${e.extraT ? ` · +${fmtDur(e.extraT)}` : ''}`;
   if (e.t === 'line'){ const L = plLen(e.pts), T = LINE_TYPES[e.k]; return `${fmtM(L)}${T?.item ? ` · ${Math.floor(L / (e.sp || T.sp)) + 1} u.` : ''}`; }
   if (e.t === 'zone') return `${nf(Math.abs(ringArea(e.pts)), 0)} m²${e.fence ? ' · clôturée' : ''}`;
@@ -6719,7 +6811,7 @@ function renderProps(){
       <dl class="kv"><dt>Zone chargée</dt><dd>${(s.size || 1000) >= 5000 ? `${s.size / 1000} × ${s.size / 1000} km` : `${s.size || 1000} × ${s.size || 1000} m`}</dd>${W ? `<dt>Altitude NGF à l'origine</dt><dd class="big">${nf(W.z0, 2)} m</dd><dt>Voies circulées</dt><dd>${n0(W.W.roads.filter(r => r.drive).length)}</dd><dt>Bâtiments</dt><dd>${n0(W.W.bld.length)}</dd>` : '<dt>État</dt><dd>non chargée</dd>'}</dl>
       <div class="btns"><button class="btn" id="pSite">Changer de lieu</button><button class="btn" id="pReload" title="Télécharger à nouveau les rues, les bâtiments et le relief">Mettre à jour les données</button></div>
       ${W ? `<p class="src">Sources : relief ${esc(src.elev || 'IGN')} (NGF-IGN69) · bâtiments ${esc(src.bld || '')} · voirie, sens uniques et arbres © contributeurs OpenStreetMap (ODbL)${src.ortho ? ' · photo aérienne IGN BD ORTHO®' : ''} · textures Poly Haven (CC0). Données du ${new Date(src.at || Date.now()).toLocaleDateString('fr-FR')}.</p>` : ''}</div>`;
-    const groups = [['closure', 'Routes barrées'], ['detour', 'Déviations'], ['zone', 'Emprises'], ['obj', 'Signalisation, balisage, véhicules'], ['line', 'Balisage en ligne'], ['swept', 'Épures de giration'], ['note', 'Annotations'], ['arrow', 'Flèches'], ['dim', 'Cotes'], ['model', 'Maquettes ARCHIPLAN']];
+    const groups = [['closure', 'Routes barrées'], ['detour', 'Déviations'], ['pdetour', 'Cheminements piétons déviés'], ['zone', 'Emprises'], ['obj', 'Signalisation, balisage, véhicules'], ['line', 'Balisage en ligne'], ['swept', 'Épures de giration'], ['note', 'Annotations'], ['arrow', 'Flèches'], ['dim', 'Cotes'], ['model', 'Maquettes ARCHIPLAN']];
     const any = state.els.length;
     h += `<div class="grp"><h3>Éléments du chantier</h3>${any ? '' : '<p class="hint">Barrez une rue (outil <b>Route barrée</b>, touche <kbd>B</kbd>) : la déviation et les panneaux sont proposés automatiquement. Puis complétez avec la bibliothèque.</p>'}`;
     for (const [t, n] of groups){ const L = state.els.filter(x => x.t === t); if (!L.length) continue;
@@ -6765,6 +6857,8 @@ function renderElProps(e){
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(L)}</dd><dt>Dénivelé</dt><dd>${dz >= 0 ? '+' : '−'}${Math.abs(dz).toFixed(2).replace('.', ',')} m</dd><dt>Pente</dt><dd>${(Math.abs(dz) / Math.max(0.01, L) * 100).toFixed(1).replace('.', ',')} %</dd><dt>Orientation</dt><dd>${Math.round(az)}° (nord = 0°)</dd></dl>`;
   } else if (e.t === 'closure'){
     h += `<div class="fields">${fld('eName', 'Nom de la voie', e.name)}${selF('eMode', 'Fermeture', CLOSE_MODES, modeKey(e))}${e.mode !== 'total' ? '' : `<label class="f rchk wide"><input type="checkbox" id="eRiv"${e.riv ? ' checked' : ''}> Sauf riverains (panneaux « Rue barrée sauf riverains »)</label>`}${e.mode === 'voie' ? '<p class="hint wide" style="margin:4px 0 0">Sens unique à deux files : la circulation est maintenue sur l\'autre file.</p>' : ''}${e.mode === 'alternat' ? (() => { const A = alternatAdvice(e); return `<label class="f"><span>Trafic de pointe (véh/h)</span><span class="in"><input id="eVph" type="number" min="0" step="50" value="${A.vph}"></span></label><p class="hint wide" style="margin:4px 0 0;color:${A.mode === 'impossible' ? '#C62828' : 'inherit'}"><b>${esc(A.mode === 'impossible' ? 'Alternat déconseillé' : 'Régulation conseillée : ' + A.mode)}</b> — ${esc(A.txt)}</p>`; })() : ''}</div>
+      ${(() => { if (['alternat', 'voie'].includes(e.mode)) return ''; const st = busStopsOn(e), pd = state.els.find(x => x.t === 'pdetour' && x.cl === e.id);
+        return `<div class="fields">${selF('ePed', 'Piétons et cycles', [['', 'Cheminement maintenu le long du chantier'], ['devie', 'Trottoirs fermés : piétons et cycles déviés']], e.ped || '')}</div>${e.ped === 'devie' ? (pd ? `<p class="hint" style="margin:2px 0 8px">Cheminement piéton : ${fmtM(pd.len)} (+${fmtM(pd.extra || 0)})${pd.via ? ' par ' + esc(pd.via) : ''}.</p>` : '<p class="hint" style="margin:2px 0 8px;color:#C62828">Aucun cheminement piéton possible : prévoir un passage protégé provisoire.</p>') : ''}${st.length ? `<div class="chk err" style="margin:4px 0 8px"><b>🚌</b><span>${st.length > 1 ? st.length + ' arrêts de bus' : 'Arrêt de bus'} sur la section barrée (${st.map(s => esc(s.name)).join(', ')}) : arrêt provisoire à créer (Bibliothèque → Chantier et piétons) et transporteur à prévenir.</span></div>` : ''}`; })()}
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
       <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `<p class="eyebrow" style="margin:14px 0 4px">Règles de déviation appliquées</p><ul class="hint" style="margin:0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}${e.plWarn ? '<li><b>Aucun itinéraire PL dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></li>' : ''}</ul>` : ''}${closureVariants(e)}`;
   } else if (e.t === 'detour'){
@@ -6797,7 +6891,7 @@ function bindElProps(){
   ch('eVph', el => { e.vph = +el.value || 0; if (TOOLOPT.autoSigns) autoSigns(e); }); ch('eName', el => { e.name = el.value; }); ch('eMode', el => { const m = modeOf(el.value), ow = sectionOneway(e.ids); e.mode = m.mode; delete e.side; if (m.dir) e.dir = m.dir; if (m.mode === 'sens' && ow !== 0){ e.side = m.dir; e.dir = ow; if (closureWidth(e) >= 5.5) e.mode = 'voie'; }
     // le mode change la déviation et la signalisation : tout est recalculé
     if (['alternat', 'voie'].includes(e.mode)) state.els = state.els.filter(x => !(x.t === 'detour' && x.cl === e.id && x.auto)); else addDetoursFor(e);
-    autoSigns(e); refreshOtherDetours?.(e.id); }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; });
+    autoSigns(e); refreshOtherDetours?.(e.id); }); ch('eDir', el => { e.dir = +el.value; }); ch('eRiv', el => { e.riv = el.checked; }); ch('ePed', el => { e.ped = el.value || undefined; pedDetour(e); });
   ch('eCol2', el => { e.col = el.value; }); ch('eCls', el => { e.cls = el.value; }); ch('eFence', el => { e.fence = el.checked; });
   ch('eLine', el => { e.k = el.value; e.sp = undefined; }); ch('eSp', el => { e.sp = +el.value || undefined; });
   ch('eText', el => { e.text = el.value; }); ch('eCol3', el => { e.col = el.value; }); ch('eSize', el => { e.size = el.value; });
@@ -6887,6 +6981,7 @@ function legendEntries(){
   for (const e of state.els){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'voie' ? 'File neutralisée (circulation maintenue)' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
+    else if (e.t === 'pdetour') add('pdetour', `<i class="lg-line" style="border-color:${PED_COL}"></i>`, 'Cheminement piéton et cycles dévié');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
     else if (e.t === 'line'){ const T = LINE_TYPES[e.k]; add('line|' + e.k, `<i class="lg-line dash" style="border-color:${T?.col || '#F06A12'}"></i>`, T?.legend || 'Balisage'); }
@@ -7271,7 +7366,7 @@ function siteChecks(){
     }
   }
   for (const c of cls) if (c.mode === 'alternat'){ const A = alternatAdvice(c); add(A.mode === 'impossible' ? 'err' : 'info', `${c.name} — alternat : ${A.txt}`, plAt(c.pts, plLen(c.pts) / 2).pt); }
-  extraChecks(add, els);
+  extraChecks(add, els); pedChecks(add, els);
   // panneaux trop proches les uns des autres (lisibilité : ≥ 10 m entre deux panneaux successifs d'un même côté)
   const signs = objs.filter(o => LIBK[o.k]?.sign && !/^K5|^K2$/.test(o.k)); let close = 0;
   for (let i = 0; i < signs.length; i++) for (let j = i + 1; j < signs.length; j++){ const d = Math.hypot(signs[i].x - signs[j].x, signs[i].y - signs[j].y); if (d > 0.5 && d < 4 && Math.abs(((signs[i].a - signs[j].a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.5) close++; }
@@ -7367,7 +7462,7 @@ async function exportDossier(){
     if (view !== '2d') setView('2d');
     for (const p of sheets){
       setPhase(p ? p.id : 'all'); await sleep(60);
-      const els = state.els.filter(e => !phOff(e) && !e.hidden), cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1), dets = els.filter(e => e.t === 'detour' && e.pts?.length > 1);
+      const els = state.els.filter(e => !phOff(e) && !e.hidden), cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1), dets = els.filter(e => (e.t === 'detour' || e.t === 'pdetour') && e.pts?.length > 1);
       // cadrage : fermetures et déviations de la phase
       const pts = [...cls, ...dets].flatMap(e => e.pts); if (pts.length){ const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]); frameAt((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, Math.max(60, (Math.max(...xs) - Math.min(...xs)) / 2 * 1.15 + 25, (Math.max(...ys) - Math.min(...ys)) / 2 * 1.15 + 25)); }
       await sleep(450);

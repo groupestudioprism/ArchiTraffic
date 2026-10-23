@@ -5,6 +5,7 @@ function legendEntries(){
   for (const e of state.els){
     if (e.hidden || phOff(e)) continue;
     if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'voie' ? 'File neutralisée (circulation maintenue)' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
+    else if (e.t === 'pdetour') add('pdetour', `<i class="lg-line" style="border-color:${PED_COL}"></i>`, 'Cheminement piéton et cycles dévié');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
     else if (e.t === 'zone') add('zone', `<i class="lg-zone" style="border-color:#F28A1A;background:#F28A1A33"></i>`, 'Emprise de chantier');
     else if (e.t === 'line'){ const T = LINE_TYPES[e.k]; add('line|' + e.k, `<i class="lg-line dash" style="border-color:${T?.col || '#F06A12'}"></i>`, T?.legend || 'Balisage'); }

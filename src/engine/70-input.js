@@ -250,7 +250,7 @@ function addDetoursFor(cl){
   routes.forEach((r, i) => { ok++; list.push(r); const n = state.els.filter(e => e.t === 'detour').length;
     const names = [...new Set(r.edges.map(ei => NET.roads[NET.edges[ei].r].name).filter(Boolean))];
     state.els.push({id:uid8(), t:'detour', cl:cl.id, ph:cl.ph, auto:true, ids:r.ids, pts:r.pts, inDir0:r.inDir0, inDirEnd:r.inDirEnd, both, name:`Déviation ${both ? '(deux sens)' : routes.length > 1 ? (i ? 'sens 2' : 'sens 1') : ''}`.trim() + (cl.name ? ` · ${cl.name}` : '') + (r.vl ? ' — véhicules légers' : ''), via:names.slice(0, 4).join(', '), col:DETOUR_COLS[n % DETOUR_COLS.length], cls:r.vl ? 'VL' : 'tous', len:Math.round(r.len), extra:Math.round(r.extra), extraT:Math.round(r.extraT), time:Math.round(r.time)}); });
-  cl.plWarn = list.some(r => r.vl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
+  cl.plWarn = list.some(r => r.vl); if (cl.ped) pedDetour(cl);   // aucun itinéraire apte aux PL dans la zone : PL à dévier en amont, sur le réseau départemental
   return {ok, fail, list};
 }
 /* signalisation automatique : barrières K2 + panneaux « route barrée » aux extrémités, flèches de déviation aux carrefours */
