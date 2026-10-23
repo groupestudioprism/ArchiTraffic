@@ -73,7 +73,7 @@ function simSpawn(dt){
   for (const en of SIM.entries){
     let t = SIM.nextSpawn.get(en.id) ?? Math.random() * 6; t -= dt;
     if (t <= 0 && SIM.agents.length < SIM.cap - 4){
-      t = -Math.log(1 - Math.random()) / (en.rate * dens);
+      t = Math.min(4 / (en.rate * dens), -Math.log(1 - Math.random()) / (en.rate * dens * Math.max(0.02, simProfile())));   // profil horaire (heures de pointe) ; attente plafonnée pour que le trafic reprenne dès la remontée du profil
       const occ = SIM.lastAt?.get(en.id)?.ei === 0 && SIM.lastAt.get(en.id).s < 9 && !SIM.lastAt.get(en.id).done; if (occ){ SIM.nextSpawn.set(en.id, 1.5); continue; }
       const type = pickType(), T = SIM_TYPES[type];
       const exits = en._ex ??= SIM.exits.filter(x => x.id !== en.id && V.dist(NET.nodes.get(x.id).xy, NET.nodes.get(en.id).xy) > 80);   // calculé une fois par entrée
@@ -81,7 +81,8 @@ function simSpawn(dt){
       const dest = pickWeighted(exits).id, key = `${en.id}|${dest}|${T.pl ? 'pl' : ''}`;
       let r = SIM.rc.get(key); if (r === undefined){ simJob(key, () => routeGen(en.id, dest, C, {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.rc.set(key, v || null)); SIM.nextSpawn.set(en.id, 0.3); continue; }
       if (!r || !r.edges.length) { SIM.nextSpawn.set(en.id, t); continue; }
-      let base = SIM.base.get(key); if (base === undefined){ simJob('b|' + key, () => routeGen(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.base.set(key, v || null)); base = null; }
+      let base = SIM.base.get(key); if (base === undefined && SIM.batch){ base = route(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}) || null; SIM.base.set(key, base); }
+      if (base === undefined){ simJob('b|' + key, () => routeGen(en.id, dest, SIM.cOpen || (SIM.cOpen = closedSets([])), {vtype:T.pl ? 'pl' : '', box:simHalf() + 150, fast:true}), v => SIM.base.set(key, v || null)); base = null; }
       const col = new THREE.Color(T.mix === 'bus' ? 0xF2F4F6 : T.pl && Math.random() < 0.5 ? 0xE9ECEF : BODY_COLORS[Math.floor(Math.random() * BODY_COLORS.length)]);
       const v0 = Math.min(NET.edges[r.edges[0]].sp, 14);
       SIM.agents.push({id:++SIM.seq, type, len:T.len, pl:!!T.pl, edges:r.edges.slice(), ei:0, s:0, v:v0 * 0.7, from:en.id, dest, col, t0:SIM.t, free:r.time, dev:!!base && r.len > base.len + 5, wait:0});
@@ -155,7 +156,7 @@ function simStep(dt){
     while (a.s >= NET.edges[a.edges[a.ei]].len){
       if (a.ei + 1 < a.edges.length && simClosed(NET.edges[a.edges[a.ei + 1]], C)){ a.s = NET.edges[a.edges[a.ei]].len - 0.05; a.v = 0; a.rr = true; break; }   // jamais d'entrée dans une section barrée
       a.s -= NET.edges[a.edges[a.ei]].len; a.ei++; if (a.ei >= a.edges.length){ a.done = true; break; } }
-    if (a.done){ SIM.stats.done++; SIM.stats.sumT += SIM.t - a.t0; SIM.stats.sumT0 += a.free; }
+    if (a.done){ SIM.stats.done++; SIM.stats.sumT += SIM.t - a.t0; SIM.stats.sumT0 += a.free; SIM.batch?.trip(a); }
   }
   SIM.agents = SIM.agents.filter(a => !a.done && !a.kill);
 }
@@ -175,7 +176,7 @@ function simRender(){
   for (const [k, ms] of Object.entries(SIM.inst)) for (const m of ms){ m.count = Math.min(cnt[k], SIM.cap); m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
 }
 function simStatus(){
-  const n = SIM.agents.length, h = 7 * 3600 + 30 * 60 + SIM.t, hh = String(Math.floor(h / 3600) % 24).padStart(2, '0'), mm = String(Math.floor(h % 3600 / 60)).padStart(2, '0'), ss = String(Math.floor(h % 60)).padStart(2, '0');
+  const n = SIM.agents.length, h = simStartSec() + SIM.t, hh = String(Math.floor(h / 3600) % 24).padStart(2, '0'), mm = String(Math.floor(h % 3600 / 60)).padStart(2, '0'), ss = String(Math.floor(h % 60)).padStart(2, '0');
   const vm = n ? SIM.agents.reduce((s, a) => s + a.v, 0) / n * 3.6 : 0, dev = SIM.agents.filter(a => a.dev).length, stopped = SIM.agents.filter(a => a.v < 0.5).length;
   $('#simClock').textContent = SIM.t > 0 ? `${hh}:${mm}:${ss}` : 'Simulation';
   $('#simStat').textContent = SIM.t > 0 ? `${n} véhicule${n > 1 ? 's' : ''} · ${Math.round(vm)} km/h moy.${dev ? ` · ${dev} dévié${dev > 1 ? 's' : ''}` : ''}${stopped > n * 0.4 && n > 10 ? ' · ralentissements' : ''}` : 'Trafic à l\'arrêt';

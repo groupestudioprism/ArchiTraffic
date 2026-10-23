@@ -177,7 +177,9 @@ function renderTraffic(){
   const free = dts.filter(d => !d.cl); if (free.length) h += `<p class="lsec">Itinéraires tracés</p>` + free.map(d => `<div class="erow" data-el="${d.id}"><span class="ei"><i style="background:${esc(d.col)}"></i></span><span><b>${esc(d.name)}</b><small>${esc(elSub(d))}</small></span><button class="x" data-del="${d.id}">×</button></div>`).join('');
   h += `</div><div class="grp"><h3>Simulation du trafic</h3><p class="hint" style="margin-top:0">Les véhicules entrent par les rues en bordure de zone, choisissent une destination et suivent les déviations. Lancez la simulation avec ▶ en bas de la vue ou la touche <kbd>Espace</kbd>.</p>
     <div class="fields"><label class="f wide"><span>Densité</span><span class="in"><select id="tDens">${[['0.4', 'Calme'], ['1', 'Normal'], ['1.8', 'Heure de pointe'], ['3', 'Saturé']].map(([v, n]) => `<option value="${v}"${String(state.sim.dens) === v ? ' selected' : ''}>${n}</option>`).join('')}</select></span></label>
+    ${profileFields()}
     ${[['vl', 'Voitures (%)'], ['vul', 'Utilitaires (%)'], ['pl', 'Poids lourds (%)'], ['bus', 'Bus (%)'], ['r2', 'Deux-roues (%)']].map(([k, n]) => `<label class="f"><span>${n}</span><span class="in"><input type="number" min="0" max="100" step="1" data-mix="${k}" value="${m[k]}"></span></label>`).join('')}</div>
+    <div class="btns" style="margin-top:8px"><button class="btn primary" id="tCmp">Comparer avant / après</button></div>
     <div id="tStats"></div></div>`;
   pb().innerHTML = h;
   pb().querySelectorAll('[data-el]').forEach(r => r.onclick = ev => { if (ev.target.closest('[data-del]')) return; sel = r.dataset.el; applySel(); const e = byId(sel); const c = elCenter(e); frameAt(c[0], c[1], Math.max(40, plLen(e.pts || []) / 2)); setTab('props'); });
@@ -185,6 +187,7 @@ function renderTraffic(){
   pb().querySelectorAll('[data-redet]').forEach(b => b.onclick = () => { const c = byId(b.dataset.redet); let r; edit(() => { r = addDetoursFor(c); autoSigns(c); }); toast(r.ok ? 'Déviation proposée' : 'Aucune déviation possible depuis ce tronçon.'); renderTraffic(); });
   $('#tDens').onchange = e => { state.sim.dens = +e.target.value; $('#simDens').value = e.target.value; save(); };
   pb().querySelectorAll('[data-mix]').forEach(i => i.onchange = () => { state.sim.mix[i.dataset.mix] = clamp(+i.value || 0, 0, 100); save(); });
+  bindProfileFields(); $('#tCmp').onclick = compareDialog;
   renderTrafficStats();
 }
 function renderTrafficStats(){

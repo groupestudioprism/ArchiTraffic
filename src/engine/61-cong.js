@@ -4,7 +4,7 @@
 const CONG = {r:new Map(), q:new Map(), qmax:new Map(), mesh:null, show:true};
 function congReset(){ CONG.r.clear(); CONG.q.clear(); CONG.qmax.clear(); if (CONG.mesh){ CONG.mesh.parent?.remove(CONG.mesh); CONG.mesh.geometry.dispose(); CONG.mesh = null; } }
 function congSample(ei, ratio, dt, qlen){
-  const k = NET.edges[ei]?.key; if (!k) return; const w = Math.min(1, dt / 30), o = CONG.r.get(k); CONG.r.set(k, o === undefined ? ratio : o + (Math.min(1, ratio) - o) * w);
+  const k = NET.edges[ei]?.key; if (!k) return; if (SIM.batch){ SIM.batch.edge(ei, ratio, dt, qlen); return; } const w = Math.min(1, dt / 30), o = CONG.r.get(k); CONG.r.set(k, o === undefined ? ratio : o + (Math.min(1, ratio) - o) * w);
   if (qlen) CONG.q.set(k, (CONG.q.get(k) || 0) + qlen);
 }
 function congRender(){
