@@ -45,7 +45,7 @@ function renderGuide(){
   g.querySelectorAll('li.ok').forEach(li => li.onclick = () => GUIDE[+li.dataset.i].go?.());
   const setM = (id, k) => { const el = g.querySelector('#' + id); if (el) el.onchange = () => { edit(() => { state.meta[k] = el.value.trim(); }); save(); renderGuide(); }; };
   setM('gFrom', 'from'); setM('gTo', 'to'); setM('gMoa', 'moa'); setM('gEnt', 'entreprise');
-  g.querySelector('#gTour').onclick = startTour;
+  g.querySelector('#gTour').onclick = () => startTour();
 }
 
 /* ---------- visite guidée (bulles sur l'interface) ---------- */
@@ -57,16 +57,23 @@ const TOUR = [
   ['#modeBtn', 'Mode simple ou expert', 'Le mode expert ajoute le balisage, les emprises, les cotes, la giration, la simulation du trafic et tous les formats d\'export.'],
   ['#guideBtn', 'L\'assistant', 'Il vous accompagne étape par étape. Rouvrez-le ici à tout moment.'],
 ];
-function startTour(){
+const TOUR_HOME = [
+  ['#homeNewP', 'Créer un chantier', 'Commencez ici : un nouveau chantier, puis l\'adresse. Tout s\'enregistre automatiquement dans le cloud.'],
+  ['#homeSample', 'Voir un exemple', 'Un chantier déjà préparé (rue barrée, déviations, panneaux) pour découvrir l\'application sans rien casser.'],
+  ['#homeBody', 'Vos chantiers', 'Vos chantiers et dossiers apparaissent ici. Cliquez sur un chantier pour le rouvrir.'],
+  ['#homeUser', 'Votre compte', 'Licence, code PIN, thème et déconnexion.'],
+];
+function startTour(steps = TOUR, lsKey = 'at.tour'){
+  const TOUR_ = steps;
   let i = 0; const ov = document.createElement('div'); ov.className = 'tour'; ov.innerHTML = '<i class="t-hole"></i><div class="t-bub" role="dialog" aria-live="polite"></div>'; document.body.appendChild(ov);
   const hole = ov.querySelector('.t-hole'), bub = ov.querySelector('.t-bub');
-  const end = () => { ov.remove(); LS.set('at.tour', '1'); removeEventListener('keydown', key); };
-  const key = e => { if (e.key === 'Escape') end(); else if (e.key === 'ArrowRight' || e.key === 'Enter') next(); };
+  const end = () => { ov.remove(); LS.set(lsKey, '1'); window.removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Escape'){ e.stopPropagation(); end(); } else if (e.key === 'ArrowRight' || e.key === 'Enter') next(); };
   const show = () => {
-    const [q, t, d] = TOUR[i], el = $(q), r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
-    if (!r){ i++; return i < TOUR.length ? show() : end(); }
+    const [q, t, d] = TOUR_[i], el = $(q), r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+    if (!r){ i++; return i < TOUR_.length ? show() : end(); }
     const pad = 6; Object.assign(hole.style, {left:r.left - pad + 'px', top:r.top - pad + 'px', width:r.width + pad * 2 + 'px', height:r.height + pad * 2 + 'px'});
-    bub.innerHTML = `<small>${i + 1} / ${TOUR.length}</small><b>${t}</b><p>${d}</p><div><button type="button" class="btn" data-t="skip">Passer</button><button type="button" class="btn primary" data-t="next">${i === TOUR.length - 1 ? 'Terminer' : 'Suivant'}</button></div>`;
+    bub.innerHTML = `<small>${i + 1} / ${TOUR_.length}</small><b>${t}</b><p>${d}</p><div><button type="button" class="btn" data-t="skip">Passer</button><button type="button" class="btn primary" data-t="next">${i === TOUR_.length - 1 ? 'Terminer' : 'Suivant'}</button></div>`;
     const bw = 300, bh = bub.offsetHeight || 160; let x = r.right + 14, y = r.top;
     if (x + bw > innerWidth - 10){ x = Math.max(10, r.left - bw - 14); }
     if (r.width > innerWidth * 0.5 || x < 10){ x = Math.min(innerWidth - bw - 10, Math.max(10, r.left)); y = r.bottom + 14; }
@@ -74,8 +81,8 @@ function startTour(){
     Object.assign(bub.style, {left:x + 'px', top:y + 'px'});
     bub.querySelector('[data-t=skip]').onclick = end; bub.querySelector('[data-t=next]').onclick = next;
   };
-  const next = () => { i++; if (i >= TOUR.length) end(); else show(); };
-  addEventListener('keydown', key); show();
+  const next = () => { i++; if (i >= TOUR_.length) end(); else show(); };
+  window.addEventListener('keydown', key, true); show();
 }
 
 /* ---------- boutons d'en-tête et démarrage ---------- */
@@ -85,11 +92,13 @@ function startTour(){
   mk('guideBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span>Guide</span>', 'Assistant pas à pas').onclick = () => { GUIDE_OPEN = !GUIDE_OPEN; LS.set('at.guide', GUIDE_OPEN ? '1' : '0'); guideKey = ''; renderGuide(); };
   mk('modeBtn', 'Mode simple', '').onclick = () => setSimple(!SIMPLE);
   applySimple();
-  let wasOpen = false;
+  let wasOpen = false, sawHome = false, homeTourT = 0;
   setInterval(() => {   // suivi léger de l'avancement (pas d'abonnement aux nombreux points de modification du projet)
-    const open = !!state && !$('#app')?.hidden && $('#home')?.hidden !== false;
+    const authed = $('#auth')?.hidden !== false && (!$('#app')?.inert || ($('#home')?.hidden === false && !$('#home')?.inert)), homeOn = $('#home')?.hidden === false && !$('#home')?.inert;   // connecté et code PIN saisi
+    if (authed && homeOn){ sawHome = true; if (LS.get('at.tourHome', '') !== '1' && !homeTourT && window.__apReady) homeTourT = setTimeout(() => { if ($('#home')?.hidden === false && !$('#home')?.inert && !$('.tour')) startTour(TOUR_HOME, 'at.tourHome'); }, 1200); }
+    const open = !!state && authed && $('#home')?.hidden !== false && (sawHome || !!state.site);   // un projet est ouvert après la connexion
     if (open) renderGuide(); else if ($('#guide')) $('#guide').hidden = true;
-    if (open && !wasOpen && LS.get('at.tour', '') !== '1' && window.__apReady) setTimeout(startTour, 900);
+    if (open && !wasOpen && LS.get('at.tour', '') !== '1' && window.__apReady) setTimeout(() => { if (!$('.tour')) startTour(); }, 900);
     if (open !== wasOpen){ guideChecked = guideExported = false; guideKey = ''; }
     wasOpen = open;
     document.body.classList.toggle('has-ph', !!state?.phases?.length);

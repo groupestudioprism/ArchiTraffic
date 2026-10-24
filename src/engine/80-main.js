@@ -157,6 +157,9 @@ PrismSettings.init({
       {type:'seg', label:'Taille des bulles de panneaux', options:[[0.75, 'Petite'], [1, 'Normale'], [1.3, 'Grande']], get:() => DISPLAY.pinSz || 1, set:v => { DISPLAY.pinSz = v; saveDisplay(); document.documentElement.style.setProperty('--pin-sz', v); dirty = true; }},
       {type:'switch', label:'Sens uniques et sens interdits', get:() => DISPLAY.lay.oneway !== false, set:v => { DISPLAY.lay.oneway = v; saveDisplay(); applyLayers(); }},
       {type:'switch', label:'Noms des rues', get:() => DISPLAY.lay.names !== false, set:v => { DISPLAY.lay.names = v; saveDisplay(); annoKey = ''; dirty = true; }}]},
+    {title:'Aide', fields:[
+      {type:'switch', label:'Assistant pas à pas', sub:'Les 6 étapes du plan de déviation, en bas à gauche', get:() => GUIDE_OPEN, set:v => { GUIDE_OPEN = v; LS.set('at.guide', v ? '1' : '0'); guideKey = ''; renderGuide(); }},
+      {type:'switch', label:'Revoir le tutoriel', sub:'La visite guidée se relance à la fermeture des réglages', get:() => LS.get('at.tour', '') !== '1', set:v => { LS.set('at.tour', v ? '' : '1'); LS.set('at.tourHome', v ? '' : '1'); if (v) setTimeout(() => { const h = $('#home'); if (h && !h.hidden) startTour(TOUR_HOME, 'at.tourHome'); else startTour(); }, 400); }}]},
     {title:'Cotes', fields:[
       {type:'seg', label:'Unité', options:[['m', 'Mètres'], ['cm', 'Centimètres']], get:() => DISPLAY.dimUnit || 'm', set:v => { DISPLAY.dimUnit = v; saveDisplay(); rebuildProj(); annoKey = ''; dirty = true; }},
       {type:'seg', label:'Précision par défaut des nouvelles cotes', options:[[0, '1 m'], [1, '0,1 m'], [2, '1 cm'], [3, '1 mm']], get:() => DIM_DEF.dec, set:v => { DIM_DEF.dec = v; DISPLAY.dimDec = v; saveDisplay(); }}]}],
