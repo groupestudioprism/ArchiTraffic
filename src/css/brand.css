@@ -245,3 +245,33 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 #labels .anno.pin::after{box-shadow:none!important;border-right:1px solid rgba(0,0,0,.18);border-bottom:1px solid rgba(0,0,0,.18)}
 
 .tool-edit .anno.pin{pointer-events:none}
+/* ===== Mode simple : l'essentiel pour un plan de déviation ===== */
+body.simple .tool[data-tool="move"],body.simple .tool[data-tool="rotate"],body.simple .tool[data-tool="copy"],body.simple .tool[data-tool="zone"],body.simple .tool[data-tool="line"],body.simple .tool[data-tool="arrow"],body.simple .tool[data-tool="measure"],body.simple .tool[data-tool="swept"]{display:none}
+body.simple #simBar,body.simple .status,body.simple .vgrp.cams,body.simple .tabs [data-tab="traffic"],body.simple #coords,body.simple #exportMenu .adv{display:none!important}
+body.simple:not(.has-ph) .phbar{display:none}
+body.simple #hAutoDet,body.simple #hAutoSig{pointer-events:auto}
+.g-hdr{display:inline-flex;align-items:center;gap:6px}.g-hdr svg{width:18px;height:18px}
+#modeBtn{font-size:12.5px}#modeBtn[aria-pressed="true"]{background:var(--ink);color:#fff}
+#guideBtn[aria-pressed="true"]{color:var(--accent,#1565C0)}
+details.rules{margin-top:12px}details.rules summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mut)}
+/* assistant */
+.guide{position:absolute;left:12px;bottom:12px;z-index:7;width:310px;max-height:calc(100% - 120px);overflow:auto;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 14px 40px -16px rgba(20,30,60,.45);font-size:13px;color:var(--ink)}
+.guide header{display:flex;align-items:center;gap:8px;padding:12px 12px 6px 14px}.guide header b{flex:1;font:700 13.5px var(--f-display)}.guide header span{color:var(--mut);font-size:12px;font-variant-numeric:tabular-nums}
+.guide .g-x{border:0;background:none;font-size:20px;line-height:1;color:var(--mut);cursor:pointer;padding:0 4px}
+.guide .g-bar{display:block;height:4px;margin:0 14px 6px;border-radius:4px;background:rgba(0,0,0,.07);overflow:hidden}.guide .g-bar i{display:block;height:100%;background:var(--grad);transition:width .4s}
+.guide ol{list-style:none;margin:0;padding:4px 8px 6px}.guide li{display:flex;gap:10px;padding:7px 6px;border-radius:10px;align-items:flex-start}
+.guide li.ok{cursor:pointer;color:var(--mut)}.guide li.ok:hover{background:rgba(0,0,0,.04)}.guide li.cur{background:rgba(21,101,192,.07)}
+.guide .g-n{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 11.5px var(--f-body);background:rgba(0,0,0,.07);color:var(--mut)}
+.guide li.ok .g-n{background:#18A058;color:#fff}.guide li.cur .g-n{background:var(--grad);color:#fff}
+.guide li b{display:block;font-weight:600;margin-top:2px}.guide li p{margin:4px 0 8px;color:var(--mut);line-height:1.45;font-size:12.5px}
+.guide .g-acts{display:flex;flex-wrap:wrap;gap:6px}.guide .g-acts .btn{font-size:12.5px;padding:6px 10px}
+.guide .g-form{display:grid;grid-template-columns:1fr 1fr;gap:6px}.guide .g-form label{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--mut)}.guide .g-form .w{grid-column:1/-1}
+.guide .g-form input{font:inherit;font-size:12.5px;padding:5px 7px;border:1px solid rgba(0,0,0,.15);border-radius:7px;background:#fff;color:var(--ink);min-width:0}
+.guide .g-end{margin:0 14px 8px;color:#18A058;font-weight:600}.guide footer{padding:4px 14px 12px}.guide .g-link{border:0;background:none;padding:0;color:var(--mut);font-size:12px;text-decoration:underline;cursor:pointer}
+:root[data-theme="dark"] .guide{background:rgba(30,38,54,.95);border-color:rgba(255,255,255,.1)}:root[data-theme="dark"] .guide .g-form input{background:#1b2333;border-color:rgba(255,255,255,.15)}
+@media (max-width:760px){.guide{left:8px;right:8px;width:auto;bottom:8px;max-height:45%}.g-hdr span{display:none}}
+/* visite guidée */
+.tour{position:fixed;inset:0;z-index:9000}.tour .t-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(8,16,36,.55);transition:all .25s;pointer-events:none}
+.tour .t-bub{position:fixed;width:300px;background:#fff;color:#111827;border-radius:14px;padding:14px 16px;box-shadow:0 20px 50px -12px rgba(0,0,0,.5);transition:left .25s,top .25s}
+.tour .t-bub small{color:#6b7280;font-size:11.5px}.tour .t-bub b{display:block;font:700 15px var(--f-display);margin:2px 0 6px}.tour .t-bub p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#374151}
+.tour .t-bub div{display:flex;justify-content:flex-end;gap:8px}

@@ -1107,6 +1107,36 @@ html.gfx-eco .anno{box-shadow:none}html.gfx-eco .anno.pin{box-shadow:0 0 0 1px r
 #labels .anno.pin::after{box-shadow:none!important;border-right:1px solid rgba(0,0,0,.18);border-bottom:1px solid rgba(0,0,0,.18)}
 
 .tool-edit .anno.pin{pointer-events:none}
+/* ===== Mode simple : l'essentiel pour un plan de déviation ===== */
+body.simple .tool[data-tool="move"],body.simple .tool[data-tool="rotate"],body.simple .tool[data-tool="copy"],body.simple .tool[data-tool="zone"],body.simple .tool[data-tool="line"],body.simple .tool[data-tool="arrow"],body.simple .tool[data-tool="measure"],body.simple .tool[data-tool="swept"]{display:none}
+body.simple #simBar,body.simple .status,body.simple .vgrp.cams,body.simple .tabs [data-tab="traffic"],body.simple #coords,body.simple #exportMenu .adv{display:none!important}
+body.simple:not(.has-ph) .phbar{display:none}
+body.simple #hAutoDet,body.simple #hAutoSig{pointer-events:auto}
+.g-hdr{display:inline-flex;align-items:center;gap:6px}.g-hdr svg{width:18px;height:18px}
+#modeBtn{font-size:12.5px}#modeBtn[aria-pressed="true"]{background:var(--ink);color:#fff}
+#guideBtn[aria-pressed="true"]{color:var(--accent,#1565C0)}
+details.rules{margin-top:12px}details.rules summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mut)}
+/* assistant */
+.guide{position:absolute;left:12px;bottom:12px;z-index:7;width:310px;max-height:calc(100% - 120px);overflow:auto;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 14px 40px -16px rgba(20,30,60,.45);font-size:13px;color:var(--ink)}
+.guide header{display:flex;align-items:center;gap:8px;padding:12px 12px 6px 14px}.guide header b{flex:1;font:700 13.5px var(--f-display)}.guide header span{color:var(--mut);font-size:12px;font-variant-numeric:tabular-nums}
+.guide .g-x{border:0;background:none;font-size:20px;line-height:1;color:var(--mut);cursor:pointer;padding:0 4px}
+.guide .g-bar{display:block;height:4px;margin:0 14px 6px;border-radius:4px;background:rgba(0,0,0,.07);overflow:hidden}.guide .g-bar i{display:block;height:100%;background:var(--grad);transition:width .4s}
+.guide ol{list-style:none;margin:0;padding:4px 8px 6px}.guide li{display:flex;gap:10px;padding:7px 6px;border-radius:10px;align-items:flex-start}
+.guide li.ok{cursor:pointer;color:var(--mut)}.guide li.ok:hover{background:rgba(0,0,0,.04)}.guide li.cur{background:rgba(21,101,192,.07)}
+.guide .g-n{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 11.5px var(--f-body);background:rgba(0,0,0,.07);color:var(--mut)}
+.guide li.ok .g-n{background:#18A058;color:#fff}.guide li.cur .g-n{background:var(--grad);color:#fff}
+.guide li b{display:block;font-weight:600;margin-top:2px}.guide li p{margin:4px 0 8px;color:var(--mut);line-height:1.45;font-size:12.5px}
+.guide .g-acts{display:flex;flex-wrap:wrap;gap:6px}.guide .g-acts .btn{font-size:12.5px;padding:6px 10px}
+.guide .g-form{display:grid;grid-template-columns:1fr 1fr;gap:6px}.guide .g-form label{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--mut)}.guide .g-form .w{grid-column:1/-1}
+.guide .g-form input{font:inherit;font-size:12.5px;padding:5px 7px;border:1px solid rgba(0,0,0,.15);border-radius:7px;background:#fff;color:var(--ink);min-width:0}
+.guide .g-end{margin:0 14px 8px;color:#18A058;font-weight:600}.guide footer{padding:4px 14px 12px}.guide .g-link{border:0;background:none;padding:0;color:var(--mut);font-size:12px;text-decoration:underline;cursor:pointer}
+:root[data-theme="dark"] .guide{background:rgba(30,38,54,.95);border-color:rgba(255,255,255,.1)}:root[data-theme="dark"] .guide .g-form input{background:#1b2333;border-color:rgba(255,255,255,.15)}
+@media (max-width:760px){.guide{left:8px;right:8px;width:auto;bottom:8px;max-height:45%}.g-hdr span{display:none}}
+/* visite guidée */
+.tour{position:fixed;inset:0;z-index:9000}.tour .t-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(8,16,36,.55);transition:all .25s;pointer-events:none}
+.tour .t-bub{position:fixed;width:300px;background:#fff;color:#111827;border-radius:14px;padding:14px 16px;box-shadow:0 20px 50px -12px rgba(0,0,0,.5);transition:left .25s,top .25s}
+.tour .t-bub small{color:#6b7280;font-size:11.5px}.tour .t-bub b{display:block;font:700 15px var(--f-display);margin:2px 0 6px}.tour .t-bub p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#374151}
+.tour .t-bub div{display:flex;justify-content:flex-end;gap:8px}
 /* Menu contextuel Studio Prism (clic droit / appui long) — même rendu dans toutes les apps ; couleurs reprises des variables du thème */
 .pctx{position:fixed;z-index:90;min-width:220px;max-width:min(340px,calc(100vw - 12px));max-height:calc(100vh - 12px);overflow:auto;padding:5px;border-radius:12px;
   background:var(--panel,#fff);color:var(--ink,#111827);border:1px solid var(--line,#DCE7EF);box-shadow:0 14px 38px rgb(7 27 85 / .22),0 2px 6px rgb(7 27 85 / .10);
@@ -6876,7 +6906,7 @@ function renderElProps(e){
       ${(() => { if (['alternat', 'voie'].includes(e.mode)) return ''; const st = busStopsOn(e), pd = state.els.find(x => x.t === 'pdetour' && x.cl === e.id);
         return `<div class="fields">${selF('ePed', 'Piétons et cycles', [['', 'Cheminement maintenu le long du chantier'], ['devie', 'Trottoirs fermés : piétons et cycles déviés']], e.ped || '')}</div>${e.ped === 'devie' ? (pd ? `<p class="hint" style="margin:2px 0 8px">Cheminement piéton : ${fmtM(pd.len)} (+${fmtM(pd.extra || 0)})${pd.via ? ' par ' + esc(pd.via) : ''}.</p>` : '<p class="hint" style="margin:2px 0 8px;color:#C62828">Aucun cheminement piéton possible : prévoir un passage protégé provisoire.</p>') : ''}${st.length ? `<div class="chk err" style="margin:4px 0 8px"><b>🚌</b><span>${st.length > 1 ? st.length + ' arrêts de bus' : 'Arrêt de bus'} sur la section barrée (${st.map(s => esc(s.name)).join(', ')}) : arrêt provisoire à créer (Bibliothèque → Chantier et piétons) et transporteur à prévenir.</span></div>` : ''}`; })()}
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
-      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `<p class="eyebrow" style="margin:14px 0 4px">Règles de déviation appliquées</p><ul class="hint" style="margin:0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}${e.plWarn ? '<li><b>Aucun itinéraire PL dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></li>' : ''}</ul>` : ''}${closureVariants(e)}`;
+      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `${e.plWarn ? '<p class="hint" style="margin:10px 0 0"><b>⚠ Aucun itinéraire poids lourds dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></p>' : ''}<details class="rules"><summary>Pourquoi cette déviation ?</summary><ul class="hint" style="margin:6px 0 0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}${closureVariants(e)}`;
   } else if (e.t === 'detour'){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
@@ -7996,6 +8026,105 @@ document.addEventListener('contextmenu', ev => {
 })();
 /* la molette au-dessus d'une bulle ou d'une étiquette zoome quand même la vue */
 document.getElementById('labels')?.addEventListener('wheel', ev => { ev.preventDefault(); canvas.dispatchEvent(new WheelEvent('wheel', ev)); }, {passive:false});
+
+/* ==== 79b-guide.js ==== */
+/* ============ Mode simple, assistant pas à pas et visite guidée ============
+   Mode simple (par défaut) : seuls les outils et exports utiles à un plan de déviation classique sont affichés.
+   Mode expert : tout (balisage, emprises, cotes, giration, simulation, calques, tous les exports).
+   L'assistant suit l'avancement du chantier : lieu → route barrée → déviation → signalisation → dates → dossier. */
+const LS = {get(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : v; } catch(e){ return d; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }};
+let SIMPLE = LS.get('at.simple', '1') === '1', GUIDE_OPEN = LS.get('at.guide', '1') === '1';
+const SIMPLE_EXPORTS = new Set(['dossier', 'a3', 'png', 'pngd', 'avis', 'arrete']);
+function applySimple(){
+  document.body.classList.toggle('simple', SIMPLE);
+  $$('#exportMenu [data-act]').forEach(b => b.classList.toggle('adv', !SIMPLE_EXPORTS.has(b.dataset.act)));
+  const m = $('#modeBtn'); if (m){ m.textContent = SIMPLE ? 'Mode simple' : 'Mode expert'; m.title = SIMPLE ? 'Passer en mode expert : tous les outils, la simulation et tous les exports' : 'Revenir au mode simple : l\'essentiel pour un plan de déviation'; m.setAttribute('aria-pressed', !SIMPLE); }
+  if (SIMPLE && ['move', 'rotate', 'copy', 'zone', 'line', 'arrow', 'measure', 'swept'].includes(tool)) setTool('select');
+  if (SIMPLE && activeTab === 'traffic') setTab('props');
+  if (SIMPLE && SIM.on) $('#simPlay')?.click();
+}
+function setSimple(on){ SIMPLE = on; LS.set('at.simple', on ? '1' : '0'); applySimple(); toast(on ? 'Mode simple : l\'essentiel pour un plan de déviation.' : 'Mode expert : tous les outils, la simulation et tous les exports.', 2600); }
+
+/* ---------- assistant ---------- */
+const nOf = t => state?.els?.filter(e => e.t === t && !e.hidden).length || 0;
+const GUIDE = [
+  {k:'site', t:'Lieu du chantier', d:'Cherchez l\'adresse du chantier : le quartier (rues, bâtiments, relief) se charge tout seul.', done:() => !!state?.site, go:() => setTool('site'), btn:'Choisir l\'adresse'},
+  {k:'close', t:'Barrer la rue', d:'Survolez la rue puis cliquez : le tronçon entre deux carrefours est barré. Cliquez sur d\'autres tronçons pour allonger.', done:() => nOf('closure') > 0, go:() => { if (view !== '2d') setView('2d'); setTool('close'); }, btn:'Outil route barrée'},
+  {k:'det', t:'Vérifier la déviation', d:'La déviation est calculée automatiquement (poids lourds, écoles, zones 30…). Vérifiez son tracé ; vous pouvez la recalculer ou la redessiner.', done:() => nOf('detour') > 0 || state?.els?.some(e => e.t === 'closure' && ['alternat', 'voie'].includes(e.mode)), go:guideShowWork, btn:'Voir le chantier'},
+  {k:'sig', t:'Contrôler la signalisation', d:'Les panneaux réglementaires sont posés automatiquement. Le contrôle signale ce qui manque ou ne va pas.', done:() => guideChecked, go:() => { guideChecked = true; checkDialog(); renderGuide(); }, btn:'Contrôler le chantier'},
+  {k:'info', t:'Dates et intervenants', d:'Ils apparaissent sur le cartouche, l\'arrêté et l\'avis aux riverains.', done:() => !!(state?.meta?.from && state?.meta?.to), form:true},
+  {k:'exp', t:'Sortir le dossier', d:'Un PDF prêt à signer : plan de chaque phase, routes barrées, déviations, panneaux et projet d\'arrêté.', done:() => guideExported, go:() => { guideExported = true; if (canExport()) exportDossier(); renderGuide(); }, btn:'Dossier d\'arrêté (PDF)', alt:[['Plan A3', () => { if (canExport()) exportA3(); }], ['Avis riverains', () => { if (canExport()) exportAvis(); }]]},
+];
+let guideChecked = false, guideExported = false, guideKey = '';
+function guideShowWork(){ const W = workEls(); if (view !== '2d') setView('2d'); if (W.length) frameEls(W); const c = state.els.find(e => e.t === 'closure'); if (c){ sel = c.id; applySel(); if (activeTab !== 'props') setTab('props'); else refreshPanel(); } }
+function renderGuide(){
+  let g = $('#guide'); if (!g){ g = document.createElement('aside'); g.id = 'guide'; g.className = 'guide'; g.setAttribute('aria-label', 'Assistant'); vpEl.appendChild(g); }
+  const show = GUIDE_OPEN && !!state && !$('#app')?.hidden; g.hidden = !show; $('#guideBtn')?.setAttribute('aria-pressed', show);
+  if (!show) return;
+  const st = GUIDE.map(s => !!s.done()), cur = st.indexOf(false), key = st.join() + cur + JSON.stringify([state.meta?.from, state.meta?.to, state.meta?.moa, state.meta?.entreprise]);
+  if (key === guideKey && g.childElementCount) return; guideKey = key;
+  const m = state.meta || {}, nDone = st.filter(Boolean).length;
+  g.innerHTML = `<header><b>Votre plan en ${GUIDE.length} étapes</b><span>${nDone}/${GUIDE.length}</span><button type="button" class="g-x" aria-label="Fermer l'assistant" title="Fermer (le bouton Guide le rouvre)">×</button></header>
+    <i class="g-bar"><i style="width:${nDone / GUIDE.length * 100}%"></i></i>
+    <ol>${GUIDE.map((s, i) => `<li class="${st[i] ? 'ok' : i === cur ? 'cur' : ''}" data-i="${i}"><span class="g-n">${st[i] ? '✓' : i + 1}</span><div><b>${s.t}</b>${i === cur ? `<p>${s.d}</p>${s.form ? `<div class="g-form"><label>Du<input type="date" id="gFrom" value="${esc(m.from || '')}"></label><label>Au<input type="date" id="gTo" value="${esc(m.to || '')}"></label><label class="w">Maître d'ouvrage<input id="gMoa" value="${esc(m.moa || '')}" placeholder="Ville de…"></label><label class="w">Entreprise<input id="gEnt" value="${esc(m.entreprise || '')}" placeholder="Entreprise de travaux"></label></div>` : `<div class="g-acts"><button type="button" class="btn primary" data-go="${i}">${s.btn}</button>${(s.alt || []).map((a, j) => `<button type="button" class="btn" data-alt="${i}.${j}">${a[0]}</button>`).join('')}</div>`}` : ''}</div></li>`).join('')}</ol>
+    ${cur < 0 ? '<p class="g-end">Tout est prêt. Vous pouvez encore ajuster le plan, puis réexporter.</p>' : ''}
+    <footer><button type="button" class="g-link" id="gTour">Visite de l'interface</button></footer>`;
+  g.querySelector('.g-x').onclick = () => { GUIDE_OPEN = false; LS.set('at.guide', '0'); renderGuide(); };
+  g.querySelectorAll('[data-go]').forEach(b => b.onclick = () => GUIDE[+b.dataset.go].go());
+  g.querySelectorAll('[data-alt]').forEach(b => { const [i, j] = b.dataset.alt.split('.'); b.onclick = () => GUIDE[+i].alt[+j][1](); });
+  g.querySelectorAll('li.ok').forEach(li => li.onclick = () => GUIDE[+li.dataset.i].go?.());
+  const setM = (id, k) => { const el = g.querySelector('#' + id); if (el) el.onchange = () => { edit(() => { state.meta[k] = el.value.trim(); }); save(); renderGuide(); }; };
+  setM('gFrom', 'from'); setM('gTo', 'to'); setM('gMoa', 'moa'); setM('gEnt', 'entreprise');
+  g.querySelector('#gTour').onclick = startTour;
+}
+
+/* ---------- visite guidée (bulles sur l'interface) ---------- */
+const TOUR = [
+  ['.tools', 'Les outils', 'À gauche : choisir le lieu, barrer une rue, dessiner une déviation, placer un panneau. Survolez un outil pour voir son raccourci clavier.'],
+  ['.modes', 'Plan ou 3D', 'Le plan 2D sert à préparer et imprimer. La 3D aide à présenter le chantier aux élus et aux riverains.'],
+  ['#panel', 'Le panneau de droite', 'Il montre les réglages de l\'élément sélectionné (rue barrée, déviation, panneau) et la bibliothèque de signalisation.'],
+  ['#exportBtn', 'Exporter', 'Dossier d\'arrêté, plan A3, avis aux riverains : tout est cadré automatiquement sur le chantier.'],
+  ['#modeBtn', 'Mode simple ou expert', 'Le mode expert ajoute le balisage, les emprises, les cotes, la giration, la simulation du trafic et tous les formats d\'export.'],
+  ['#guideBtn', 'L\'assistant', 'Il vous accompagne étape par étape. Rouvrez-le ici à tout moment.'],
+];
+function startTour(){
+  let i = 0; const ov = document.createElement('div'); ov.className = 'tour'; ov.innerHTML = '<i class="t-hole"></i><div class="t-bub" role="dialog" aria-live="polite"></div>'; document.body.appendChild(ov);
+  const hole = ov.querySelector('.t-hole'), bub = ov.querySelector('.t-bub');
+  const end = () => { ov.remove(); LS.set('at.tour', '1'); removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') end(); else if (e.key === 'ArrowRight' || e.key === 'Enter') next(); };
+  const show = () => {
+    const [q, t, d] = TOUR[i], el = $(q), r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+    if (!r){ i++; return i < TOUR.length ? show() : end(); }
+    const pad = 6; Object.assign(hole.style, {left:r.left - pad + 'px', top:r.top - pad + 'px', width:r.width + pad * 2 + 'px', height:r.height + pad * 2 + 'px'});
+    bub.innerHTML = `<small>${i + 1} / ${TOUR.length}</small><b>${t}</b><p>${d}</p><div><button type="button" class="btn" data-t="skip">Passer</button><button type="button" class="btn primary" data-t="next">${i === TOUR.length - 1 ? 'Terminer' : 'Suivant'}</button></div>`;
+    const bw = 300, bh = bub.offsetHeight || 160; let x = r.right + 14, y = r.top;
+    if (x + bw > innerWidth - 10){ x = Math.max(10, r.left - bw - 14); }
+    if (r.width > innerWidth * 0.5 || x < 10){ x = Math.min(innerWidth - bw - 10, Math.max(10, r.left)); y = r.bottom + 14; }
+    if (y + bh > innerHeight - 10) y = Math.max(10, r.top - bh - 14);
+    Object.assign(bub.style, {left:x + 'px', top:y + 'px'});
+    bub.querySelector('[data-t=skip]').onclick = end; bub.querySelector('[data-t=next]').onclick = next;
+  };
+  const next = () => { i++; if (i >= TOUR.length) end(); else show(); };
+  addEventListener('keydown', key); show();
+}
+
+/* ---------- boutons d'en-tête et démarrage ---------- */
+(function initGuide(){
+  const acts = $('.top .acts'); if (!acts) return;
+  const mk = (id, html, title) => { const b = document.createElement('button'); b.className = 'ib g-hdr'; b.id = id; b.type = 'button'; b.innerHTML = html; b.title = title; acts.insertBefore(b, $('#fileBtn')); return b; };
+  mk('guideBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span>Guide</span>', 'Assistant pas à pas').onclick = () => { GUIDE_OPEN = !GUIDE_OPEN; LS.set('at.guide', GUIDE_OPEN ? '1' : '0'); guideKey = ''; renderGuide(); };
+  mk('modeBtn', 'Mode simple', '').onclick = () => setSimple(!SIMPLE);
+  applySimple();
+  let wasOpen = false;
+  setInterval(() => {   // suivi léger de l'avancement (pas d'abonnement aux nombreux points de modification du projet)
+    const open = !!state && !$('#app')?.hidden && $('#home')?.hidden !== false;
+    if (open) renderGuide(); else if ($('#guide')) $('#guide').hidden = true;
+    if (open && !wasOpen && LS.get('at.tour', '') !== '1' && window.__apReady) setTimeout(startTour, 900);
+    if (open !== wasOpen){ guideChecked = guideExported = false; guideKey = ''; }
+    wasOpen = open;
+    document.body.classList.toggle('has-ph', !!state?.phases?.length);
+  }, 700);
+})();
 
 /* ==== 80-main.js ==== */
 /* ============ Démarrage, vues, boucle de rendu, pont avec le compte et le cloud ============ */
