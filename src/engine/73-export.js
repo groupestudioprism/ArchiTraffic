@@ -35,7 +35,9 @@ async function exportDetailPNG(k = 2){
   if (!cls.length){ toast('Aucune route barrée : export de la vue actuelle.', 3000); return exportPNG(k); }
   await withWorkView(async () => {
     if (cls.length > 1) await saveCanvas(await shotOf(workEls(), k), pngName('0-plan-ensemble'));
-    for (const [i, c] of cls.entries()){ await saveCanvas(await shotOf(workEls(c), k), pngName(`${i + 1}-${safeName(c.name || 'route-barree')}`)); await sleep(300); }
+    for (const [i, c] of cls.entries()){ const W = workEls(c), set = new Set(W), pts = W.flatMap(e => e.pts), m = 30, x0 = Math.min(...pts.map(q => q[0])) - m, x1 = Math.max(...pts.map(q => q[0])) + m, y0 = Math.min(...pts.map(q => q[1])) - m, y1 = Math.max(...pts.map(q => q[1])) + m;
+      LEG_FILTER = e => set.has(e) || (e.t !== 'closure' && e.t !== 'detour' && e.t !== 'pdetour' && (e.cl ? e.cl === c.id : e.x == null || (e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1)));
+      try { await saveCanvas(await shotOf(W, k), pngName(`${i + 1}-${safeName(c.name || 'route-barree')}`)); } finally { LEG_FILTER = null; } await sleep(300); }
   });
   toast(`${cls.length + (cls.length > 1 ? 1 : 0)} plans enregistrés`, 3000);
 }

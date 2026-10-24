@@ -1,9 +1,10 @@
 /* ============ Légende automatique et étiquettes à l'écran ============ */
+let LEG_FILTER = null;   // export d'un plan de détail : légende limitée à ce qu'il montre
 function legendEntries(){
   const out = [], seen = new Map(), hide = new Set(state.legend.hide || []);
   const add = (key, html, label, n = 1) => { if (seen.has(key)){ seen.get(key).n += n; return; } const e = {key, html, label, n}; seen.set(key, e); out.push(e); };
   for (const e of state.els){
-    if (e.hidden || phOff(e)) continue;
+    if (e.hidden || phOff(e) || (LEG_FILTER && !LEG_FILTER(e))) continue;
     if (e.t === 'closure') add('closure|' + e.mode, `<i class="lg-zone" style="border-color:#D32F2F;background:repeating-linear-gradient(135deg,#D32F2F99 0 4px,#fff9 4px 7px)"></i>`, e.mode === 'alternat' ? 'Chaussée rétrécie, alternat' : e.mode === 'voie' ? 'File neutralisée (circulation maintenue)' : e.mode === 'sens' ? 'Voie neutralisée (un sens dévié)' : 'Route barrée');
     else if (e.t === 'pdetour') add('pdetour', `<i class="lg-line" style="border-color:${PED_COL}"></i>`, 'Cheminement piéton et cycles dévié');
     else if (e.t === 'detour') add('detour|' + e.col + '|' + e.name, `<i class="lg-line" style="border-color:${esc(e.col)}"></i>`, (e.name || 'Déviation') + (e.cls && e.cls !== 'tous' ? ` (${e.cls})` : ''));
