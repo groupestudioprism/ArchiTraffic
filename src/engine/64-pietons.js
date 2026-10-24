@@ -63,6 +63,22 @@ function busStopsOn(c){
     .map(p => ({name:p.tags?.name || 'Arrêt sans nom', x:p.x, y:p.y, lines:p.tags?.route_ref || p.tags?.['bus_routes'] || ''}));
 }
 function pedChecks(add, els){
+  // accessibilité (PMR) des cheminements piétons déviés : marches, trottoirs absents, traversées sans passage piéton, routes rapides
+  const W = WORLD?.W, cross = (W?.points || []).filter(q => q.k === 'crossing' || q.tags?.crossing);
+  for (const pd of els.filter(e => e.t === 'pdetour' && e.pts?.length > 1)){
+    const L = plLen(pd.pts), nm = pd.name || 'Cheminement piéton dévié', iss = new Map(), seenCross = new Set(), closedNames = new Set(els.filter(e => e.t === 'closure' && e.mode === 'total').map(e => e.name).filter(Boolean));
+    for (let x = 0; x <= L; x += 4){ const q = plAt(pd.pts, Math.min(x, L)).pt, nr = nearestRoad(q, 5, false); if (!nr) continue; const r = nr.r;
+      if (r.hw === 'steps') iss.set('steps', ['err', `${nm} : passe par des marches (${r.name || 'escalier'}) — non accessible en fauteuil ni avec une poussette : rampe provisoire ou autre itinéraire`, q]);
+      else if (r.drive && /^(no|none|separate)$/.test(r.sidewalk) && r.sidewalk !== 'separate') iss.set('sw' + (r.name || r.id), ['warn', `${nm} : longe ${r.name || 'une voie'} sans trottoir — cheminement protégé (barrières, 1,40 m) à prévoir`, q]);
+      else if (r.drive && r.speed > 50) iss.set('sp' + (r.name || r.id), ['warn', `${nm} : longe ${r.name || 'une voie'} limitée à ${r.speed} km/h — séparer les piétons de la circulation`, q]); }
+    // traversées : chaque voie circulée coupée par le cheminement doit avoir un passage piéton à moins de 15 m
+    for (let k = 0; k + 1 < pd.pts.length; k++){ const a = pd.pts[k], b = pd.pts[k + 1];
+      for (const [ri, r] of NET.roads.entries()){ if (!r.drive || seenCross.has(ri)) continue; for (let m = 0; m + 1 < r.pts.length; m++){ const X = segInter(a, b, r.pts[m], r.pts[m + 1]); if (!X) continue; seenCross.add(ri);
+        if (closedNames.has(r.name || '#' + ri)) break;   // voie barrée par le chantier : pas de circulation à traverser
+        if (!cross.some(c => Math.hypot(c.x - X[0], c.y - X[1]) < 15)) iss.set('x' + (r.name || ri), ['warn', `${nm} : traverse ${r.name || 'une voie'} hors passage piéton — passage provisoire (marquage, abaissé de trottoir) à créer`, X]); break; } } }
+    if (!iss.size) add('ok', `${nm} : accessible (pas de marches, traversées sur passages piétons)`, plAt(pd.pts, L / 2).pt);
+    for (const [, [lvl, txt, q]] of iss) add(lvl, txt, q);
+  }
   for (const c of els.filter(e => e.t === 'closure' && e.pts?.length > 1)){
     const mid = plAt(c.pts, plLen(c.pts) / 2).pt, nm = c.name || 'Rue';
     if (c.ped === 'devie'){ const pd = els.find(d => d.t === 'pdetour' && d.cl === c.id); if (!pd) add('err', `${nm} : piétons déviés mais aucun cheminement possible (à aménager : passage protégé provisoire)`, mid); else add('ok', `${nm} : cheminement piéton dévié (${fmtM(pd.len)}, +${fmtM(pd.extra || 0)})`, mid); }
