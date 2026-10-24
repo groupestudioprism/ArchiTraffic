@@ -133,6 +133,8 @@ const FirebaseAuth = {
     this.db = firebase.firestore();
     // Réseaux d'entreprise, antivirus ou proxys qui bloquent le flux temps réel : bascule automatique (évite les attentes de plusieurs minutes)
     try { this.db.settings({experimentalAutoDetectLongPolling:true, merge:true}); } catch(e){}
+    // hors ligne : projets ouverts gardés sur l'appareil, modifications mises en file et envoyées au retour du réseau
+    try { this.db.enablePersistence({synchronizeTabs:true}).catch(() => {}); } catch(e){}
     this.ts = () => firebase.firestore.FieldValue.serverTimestamp();
   },
   norm(u){ if (!u) return null; const [f, ...l] = (u.displayName || '').split(' '); return {uid:u.uid, email:u.email, firstName:f || '', lastName:l.join(' '), verified:u.emailVerified}; },

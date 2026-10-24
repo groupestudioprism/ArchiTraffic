@@ -253,6 +253,7 @@ const Save = {
   canWrite(){ return !!this.pid && (this.role === 'owner' || this.role === 'edit') && canCloud(); },
   begin(meta, role, data){ window.APCloudActive = true; this.pid = meta.id; this.meta = meta; this.role = role; this.last = data; this.lastThumb = 0; this.err = 0; clearTimeout(this.timer); this.first = 0;
     this.set(this.canWrite() ? 'saved' : 'ro'); },
+  online(){ if (this.pid && this.state === 'offline'){ this.set('saving'); setTimeout(() => this.set('saved'), 2500); } },
   end(){ window.APCloudActive = false; clearTimeout(this.timer); this.pid = null; this.meta = null; this.role = ''; this.set(''); },
   changed(){
     if (!this.pid) return;
@@ -271,6 +272,8 @@ const Save = {
     if (byteLen(data) > MAX_DATA){ this.set('big'); return; }
     // quota connu localement : projets du compte en cours
     if (meta.ownerUid === me.uid && H.usage != null && byteLen(data) - (meta.size || 0) > 0 && H.usage + byteLen(data) - (meta.size || 0) > PLANS[planKey()].bytes){ this.set('quota'); return; }
+    if (!navigator.onLine && FIREBASE_CONFIG){   // hors ligne : écriture mise en file par Firestore (cache de l'appareil), envoyée au retour du réseau
+      const extra0 = {}; Cloud().save(pid, data, extra0, meta.size || 0, meta.ownerUid).catch(() => {}); meta.size = byteLen(data); this.last = data; this.set('offline'); return; }
     this.busy = true; this.set('saving');
     try {
       const extra = {}; if (wantThumb){ const t = window.APModel.thumb(); if (t && t.length < 88000) extra.thumb = t; }
@@ -285,7 +288,7 @@ const Save = {
   set(s){
     this.state = s; const el = $a('#cloudState'); if (!el) return;
     const hm = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-    const T = {saved:`Enregistré · ${hm}`, saving:'Enregistrement…', dirty:'Modifications en cours…', error:'Hors ligne · nouvel essai…', denied:'Enregistrement refusé',
+    const T = {offline:'Hors ligne · gardé sur l\'appareil', saved:`Enregistré · ${hm}`, saving:'Enregistrement…', dirty:'Modifications en cours…', error:'Hors ligne · nouvel essai…', denied:'Enregistrement refusé',
       big:'Projet trop volumineux pour le cloud', quota:'Espace cloud plein', ro:'Lecture seule'};
     el.hidden = !s; el.textContent = T[s] || ''; el.className = 'cs ' + s;
     el.title = s === 'ro' ? 'Ce projet vous est partagé en lecture : vos modifications ne sont pas enregistrées.' : s === 'quota' ? 'Le stockage du propriétaire est plein : libérez de la place ou passez à une licence ARCHITRAFIC (50 Mo).' : '';
@@ -684,3 +687,6 @@ $a('#homeBody').addEventListener('click', async e => {
 $a('#homeBody').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.target.matches('[data-open]') || e.target.matches('[data-folder]'))) e.target.click(); });
 $a('#homeBtn').addEventListener('click', () => showHome());
 if (!FIREBASE_CONFIG) window.__apT = {PLANS, H, renderHome, FOLDER_LIMITS}; // démo : accès pour les tests
+
+addEventListener('online', () => { try { Save.online(); toastA('Connexion retrouvée : vos modifications sont envoyées.'); } catch(e){} });
+addEventListener('offline', () => { try { toastA('Hors ligne : vous pouvez continuer, les modifications sont gardées sur l\'appareil.'); } catch(e){} });

@@ -49,7 +49,7 @@ def main(argv):
     assert demo.count('const FIREBASE_CONFIG = null;') == 1 and f"FIREBASE_VERSION = '{FB}'" in demo
     (ROOT / 'dist').mkdir(exist_ok=True)
     (ROOT / 'dist' / 'architrafic-demo.html').write_text(demo, encoding='utf-8')
-    live = HEAD + demo.replace('const FIREBASE_CONFIG = null;', CONFIG).replace('<title>ARCHITRAFIC</title>', '<title>ARCHITRAFIC · Studio Prism</title>', 1) + '</body></html>\n'
+    live = HEAD + demo.replace('const FIREBASE_CONFIG = null;', CONFIG).replace('<title>ARCHITRAFIC</title>', '<title>ARCHITRAFIC · Studio Prism</title>', 1) + '<script>if (\'serviceWorker\' in navigator) addEventListener(\'load\', () => navigator.serviceWorker.register(\'sw.js\').catch(() => {}));</script></body></html>\n'
     (ROOT / 'index.html').write_text(live, encoding='utf-8')
     print('index.html', len(live), 'octets · dist/architrafic-demo.html', len(demo), 'octets')
 if __name__ == '__main__': main(sys.argv[1:])
