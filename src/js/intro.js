@@ -8,7 +8,8 @@
   var anims = [], endAt = T0 + EXIT, hiding = false, closed = false, hideT = 0, played = false;
   function q(s){ return sp.querySelector(s); }
   function qa(s){ return [].slice.call(sp.querySelectorAll(s)); }
-  try { var _c = sp.querySelector('.sp-bob svg'); if (_c) window.__spCarSVG = _c.outerHTML; } catch(e){}   // gardée pour l'écran de chargement (le splash est retiré ensuite)
+  try { var _c = sp.querySelector('.sp-bob svg'); if (_c) window.__spCarSVG = _c.outerHTML; } catch(e){}
+  try { var _r = sp.querySelector('.sp-rcar'); if (_r && window.__spCarSVG){ _r.innerHTML = window.__spCarSVG.replace(/\b(id="|url\(#)sp/g, '$1rc'); var _s = _r.firstElementChild; _s.removeAttribute('width'); _s.removeAttribute('height'); [].forEach.call(_s.querySelectorAll('.sp-beam,.sp-speed,.sp-puffs,.sp-brake'), function(n){ n.remove(); }); } } catch(e){}   // la voiture roule aussi sur la barre de chargement   // gardée pour l'écran de chargement (le splash est retiré ensuite)
   function fit(){ try { stage.style.setProperty('--k', (stage.offsetWidth / 1200).toFixed(5)); } catch(e){} }
   function A(el, kf, o){ if (!el) return null; o.fill = o.fill || 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
   function cancelAll(){ anims.forEach(function(a){ try { a.cancel(); } catch(e){} }); anims = []; }
@@ -77,6 +78,7 @@
     A(q('.sp-ground'), [{opacity: 1}, {opacity: 0}], {delay: TE - 150, duration: 320, easing: 'linear', fill: 'forwards'});
     A(q('.sp-tl'), [{opacity: 1}, {opacity: 0}], {delay: TE - 150, duration: 320, easing: 'linear', fill: 'forwards'});
     A(q('.sp-road'), [{opacity: 0}, {opacity: 1}], {delay: TE + 50, duration: 300});
+    A(q('.sp-rcar'), [{opacity: 0}, {opacity: 1}], {delay: TE + 50, duration: 300, fill: 'forwards'});
     A(q('.sp-msg'), [{opacity: 0}, {opacity: 1}], {delay: TE + 50, duration: 300});
     SW = SWT; EXIT = SWT + 400; endAt = T0 + EXIT;
     var master = A(stage, [{opacity: 1}, {opacity: 1}], {duration: SWT});

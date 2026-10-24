@@ -29,7 +29,7 @@
 .sp-road{position:relative;width:min(220px,60vw);height:5px;border-radius:3px;background:#E6EBF1;overflow:hidden;flex:none}
 :root[data-theme="dark"] .sp-road{background:#26324A}
 .sp-road i{position:absolute;left:0;top:0;bottom:0;width:calc(100% + 120px);background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);animation:spDash 1s linear infinite}
-#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:0}
+#splash.sp-play .sp-road,#splash.sp-play .sp-msg,#splash.sp-play .sp-rcar{opacity:0}
 .sp-msg{margin:0;font-size:13px;color:#56637C;min-height:1.3em;text-align:center}
 :root[data-theme="dark"] .sp-msg{color:#B7C3D8}
 .sp-msg.err{color:#B3261E;font-weight:600}
@@ -43,3 +43,13 @@
 @keyframes spFade{from{opacity:0}to{opacity:1}}
 @keyframes spDash{to{transform:translateX(-120px)}}
 @media (prefers-reduced-motion:reduce){#splash.sp-play .sp-curtain,#splash.sp-play .sp-scene{display:none}#splash.sp-play .sp-final{opacity:1}#splash.sp-play .sp-road,#splash.sp-play .sp-msg{opacity:1}.sp-skip{display:none}.sp-road i{animation:none}}
+
+/* barre de chargement d'ouverture : la berline de l'intro y roule en boucle */
+.sp-roadw{position:relative;flex:none;padding-top:24px}
+.sp-rcar{position:absolute;top:0;left:0;width:56px;height:25px;animation:spRcar 2.4s cubic-bezier(.45,.05,.55,.95) infinite;pointer-events:none}
+.sp-rcar svg{display:block;width:56px;height:25px;overflow:visible}
+.sp-rcar .sp-wh{animation:spWheel .55s linear infinite}
+#splash.done .sp-rcar{opacity:0;transition:opacity .2s ease}
+@keyframes spRcar{0%{transform:translateX(-46px)}100%{transform:translateX(calc(min(220px,60vw) - 10px))}}
+@keyframes spWheel{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sp-rcar,.sp-rcar .sp-wh{animation:none}}
