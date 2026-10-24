@@ -357,6 +357,7 @@ function insetRing(p, d){ const n = p.length, out = [];
 function buildBuildings(grp){
   const W = WORLD.W, plan = planLook(), groups = new Map(), gb = key => groups.get(key) || groups.set(key, new GB()).get(key);
   const reg = frRegion(WORLD.P.lat0, WORLD.P.lon0), urbI = urbanIndex(W), roofDefault = reg === 'bzh' ? 'ardoises' : 'tuiles';
+  const ECO_B = GFX() === GFX_PRESETS.eco;   // téléphone, tablette : façades sans socles, corniches ni vitrines (2 à 3 fois moins de triangles)
   W.bld.forEach((b, bi) => {
     const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, n = p.length, c0 = centroid(p), st = bldStyle(b, bi, Math.abs(ringArea(p)), urbI(c0[0], c0[1]), reg);
     const zs = p.map(q => H(q[0], q[1])), zMin = Math.min(...zs) - 0.4, zAvg = zs.reduce((a, v) => a + v, 0) / n;
@@ -368,12 +369,12 @@ function buildBuildings(grp){
       else if (pitchedTag || ['pav', 'brique', 'pierre', 'immeuble', 'eglise', 'annexe'].includes(st.type) && b.h <= 18) ridgeH = clamp(minorW * (st.type === 'eglise' ? 0.75 : st.reg === 'sud' ? 0.28 : st.reg === 'bzh' || st.reg === 'nord' ? 0.5 : 0.4), 1.2, st.type === 'eglise' ? 12 : 6);
     }
     const eave = Math.max(2.6, b.h - (b.ridge > 1.2 ? ridgeH : 0) - mansH), zTop = zAvg + eave;
-    const shop = ['haus', 'immeuble', 'brique', 'mod', 'recent'].includes(st.type) && b.lv >= 3 && st.R() < (st.type === 'haus' ? 0.9 : 0.6);
+    const shop = !ECO_B && ['haus', 'immeuble', 'brique', 'mod', 'recent'].includes(st.type) && b.lv >= 3 && st.R() < (st.type === 'haus' ? 0.9 : 0.6);
     const facKey = plan ? 'plan' : `fac|${st.kind}|${st.seed}|${reg}`, shopKey = plan ? 'plan' : `shop|${st.kind}|${st.seed}|${reg}`;
     const wall = (ring) => { let s = 0; for (let i = 0; i < ring.length; i++){ const a = ring[i], c = ring[(i + 1) % ring.length], L = V.dist(a, c); if (L < 0.05) continue;
       const z1 = shop ? zAvg + 3.4 : zMin; if (shop){ gb(shopKey).quad(P3(a[0], a[1], zMin), P3(c[0], c[1], zMin), P3(c[0], c[1], z1), P3(a[0], a[1], z1), [s / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, (zMin - zAvg) / 3.4], [(s + L) / 3, 1], [s / 3, 1]); }
       gb(facKey).quad(P3(a[0], a[1], z1), P3(c[0], c[1], z1), P3(c[0], c[1], zTop), P3(a[0], a[1], zTop), [s / 3, (z1 - zAvg) / 3], [(s + L) / 3, (z1 - zAvg) / 3], [(s + L) / 3, eave / 3], [s / 3, eave / 3]);
-      if (!plan && L > 1.2){ const nx = (c[1] - a[1]) / L, ny = -(c[0] - a[0]) / L, o = (q, k) => [q[0] + nx * k, q[1] + ny * k];
+      if (!plan && !ECO_B && L > 1.2){ const nx = (c[1] - a[1]) / L, ny = -(c[0] - a[0]) / L, o = (q, k) => [q[0] + nx * k, q[1] + ny * k];
         if (!shop && b.h > 4){ const A2 = o(a, 0.04), C2 = o(c, 0.04), zp = zAvg + 0.7; gb('plinth|x|0').quad(P3(A2[0], A2[1], zMin), P3(C2[0], C2[1], zMin), P3(C2[0], C2[1], zp), P3(A2[0], A2[1], zp), [s, 0], [s + L, 0], [s + L, 0.7], [s, 0.7]); }
         if (b.h > 7){ const CB = gb('cornice|x|0'), A3 = o(a, 0.22), C3 = o(c, 0.22), zc = zTop - (ridgeH > 0 ? 0.05 : 0.35); // bandeau de corniche
           CB.quad(P3(A3[0], A3[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(C3[0], C3[1], zc), P3(A3[0], A3[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(a[0], a[1], zc - 0.22), P3(c[0], c[1], zc - 0.22), P3(C3[0], C3[1], zc - 0.22), P3(A3[0], A3[1], zc - 0.22), [0, 0], [1, 0], [1, 1], [0, 1]); CB.quad(P3(A3[0], A3[1], zc), P3(C3[0], C3[1], zc), P3(c[0], c[1], zc), P3(a[0], a[1], zc), [0, 0], [1, 0], [1, 1], [0, 1]); }
