@@ -275,6 +275,7 @@ const Save = {
     try {
       const extra = {}; if (wantThumb){ const t = window.APModel.thumb(); if (t && t.length < 88000) extra.thumb = t; }
       await withTimeout(Cloud().save(pid, data, extra, meta.size || 0, meta.ownerUid), 20000);
+      try { const inf = window.APModel.info?.(); if (inf && inf !== meta.info && this.pid === pid){ meta.info = inf; Cloud().update(pid, {info:inf}).catch(() => {}); const hp = (H.mine?.projects || []).find(x => x.id === pid); if (hp) hp.info = inf; } } catch(e){}   // résumé pour le tableau de bord (ignoré si les règles ne l'acceptent pas encore)
       if (this.pid === pid){ if (meta.ownerUid === me.uid && H.usage != null) H.usage += byteLen(data) - (meta.size || 0); meta.size = byteLen(data); this.last = data; this.err = 0; if (extra.thumb){ this.lastThumb = Date.now(); meta.thumb = extra.thumb; } this.set('saved'); }
     } catch(e){
       if (this.pid === pid){ this.err++; const c = e?.code; this.set(c === 'app/quota' || c === 'app/quota-or-denied' ? 'quota' : c === 'permission-denied' ? 'denied' : 'error'); if (!['permission-denied', 'app/quota', 'app/quota-or-denied'].includes(c)) this.timer = setTimeout(() => this.flush(), Math.min(60000, 5000 * this.err)); }
@@ -362,6 +363,21 @@ function crumbs(){
   while (f && guard++ < 20){ out.unshift(f); f = fs.find(x => x.id === f.parentId); }
   return out;
 }
+/* tableau de bord : chantiers en cours et à venir, d'après le résumé enregistré avec chaque projet */
+function dashHtml(all){
+  const today = new Date().toISOString().slice(0, 10), fd = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', {day:'numeric', month:'short'}) : '…';
+  const rows = all.map(p => { let i = null; try { i = p.info ? JSON.parse(p.info) : null; } catch(e){} return i && (i.from || i.to) ? {p, i} : null; }).filter(Boolean)
+    .filter(x => !x.i.to || x.i.to >= today).sort((a, b) => (a.i.from || '').localeCompare(b.i.from || ''));
+  if (!rows.length) return '';
+  const line = ({p, i}) => { const now = i.from && i.from <= today && (!i.to || today <= i.to), days = i.from && !now ? Math.ceil((new Date(i.from) - new Date(today)) / 864e5) : 0, pc = i.sg ? Math.round(i.pose / i.sg * 100) : 0;
+    return `<div class="hdash-row" data-open="${esc(p.id)}" tabindex="0" role="button" aria-label="Ouvrir ${esc(p.name)}">
+      <span class="hd-st ${now ? 'now' : 'next'}">${now ? 'En cours' : days <= 1 ? 'Demain' : `Dans ${days} j`}</span>
+      <span class="hd-main"><b>${esc(p.name)}</b><small>${fd(i.from)} → ${fd(i.to)}${i.cur ? ' · ' + esc(i.cur) : i.ph ? ` · ${i.ph} phases` : ''}${i.cl?.length ? ' · ' + esc(i.cl.join(', ')) : ''}</small></span>
+      <span class="hd-pose" title="Panneaux posés (mode terrain)"><i><i style="width:${pc}%"></i></i>${i.sg ? `${i.pose}/${i.sg} posés` : '—'}</span>
+      <span class="hd-chk ${i.err ? 'err' : i.warn ? 'warn' : 'ok'}" title="Contrôle réglementaire">${i.err ? `${i.err} erreur${i.err > 1 ? 's' : ''}` : i.warn ? `${i.warn} à vérifier` : 'Conforme'}</span></div>`; };
+  const now = rows.filter(x => x.i.from && x.i.from <= today), next = rows.filter(x => !(x.i.from && x.i.from <= today));
+  return `<h2 class="hsec">Tableau de bord</h2><div class="hdash">${now.length ? `<p class="hd-h">En cours · ${now.length}</p>${now.map(line).join('')}` : ''}${next.length ? `<p class="hd-h">À venir · ${next.length}</p>${next.slice(0, 8).map(line).join('')}` : ''}</div>`;
+}
 function cardHtml(p, shared){
   const thumb = p.thumb ? `<img src="${esc(p.thumb)}" alt="" loading="lazy">` : ICON.plan;
   const sub = shared ? `${esc(p.ownerName || p.ownerEmail || '')} · ${ROLE[p.role] || 'Lecture'}` : `${ago(p.updatedAt)}${p.updatedBy && p.updatedBy !== me.uid && p.updatedByName ? ' par ' + esc(p.updatedByName) : ''} · ${kb(p.size)}`;
@@ -403,6 +419,7 @@ function renderHome(){
     let h = !H.folder ? '' : `<nav class="hcrumbs" aria-label="Dossiers"><button type="button" data-folder="">Mes projets</button>${cr.map(f => `<span>›</span><button type="button" data-folder="${esc(f.id)}">${esc(f.name)}</button>`).join('')}</nav>`;
     if (local) h += `<div class="hlocal"><div><b>Un chantier est enregistré sur cet appareil</b><span>${esc(local.name || 'Sans titre')} · ${local.els.length} éléments</span></div><button type="button" class="ap-btn alt" data-hact="import-local">Enregistrer dans le cloud</button><button type="button" class="ap-link" data-hact="dismiss-local">Ignorer</button></div>`;
     if (fs.length) h += `<h2 class="hsec">Dossiers</h2><div class="hfolders">${fs.map(f => folderHtml(f, false)).join('')}</div>`;
+    if (!H.folder) h += dashHtml(H.mine?.projects || []);
     h += ps.length ? `<h2 class="hsec">${H.folder ? 'Projets du dossier' : 'Projets récents'}</h2><div class="hgrid">${ps.map(p => cardHtml(p, false)).join('')}</div>`
       : `<div class="hempty"><div class="hic">${ICON.plan}</div><h3>${H.folder ? 'Ce dossier est vide' : 'Aucun projet pour l\'instant'}</h3><p>Créez un projet : il s'enregistre tout seul dans le cloud, à chaque modification.</p><button type="button" class="ap-btn" data-hact="new">Nouveau projet</button></div>`;
     body.innerHTML = h;

@@ -176,3 +176,14 @@ a.ap-link{text-decoration:none}
 .ho-b:hover{border-color:var(--accent);color:var(--accent)}
 .ho-x{width:30px;height:30px;border:0;background:transparent;border-radius:8px;color:var(--mut);cursor:pointer}.ho-x:hover{background:var(--panel)}
 @media (max-width:700px){.h-offer{padding:0 14px}}
+
+/* tableau de bord des chantiers */
+.hdash{background:var(--panel,#fff);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:6px 10px 10px;margin-bottom:22px}
+.hd-h{margin:10px 6px 4px;font:700 11px var(--f-body,Inter);letter-spacing:.06em;text-transform:uppercase;color:var(--mut,#6B7280)}
+.hdash-row{display:grid;grid-template-columns:88px 1fr 150px 110px;gap:12px;align-items:center;padding:9px 6px;border-radius:10px;cursor:pointer}
+.hdash-row:hover,.hdash-row:focus-visible{background:rgba(21,101,192,.06);outline:none}
+.hd-st{font:700 11.5px var(--f-body,Inter);padding:4px 8px;border-radius:99px;text-align:center}.hd-st.now{background:#E3F4EA;color:#127A3F}.hd-st.next{background:#E8EFFA;color:#1554A6}
+.hd-main{min-width:0}.hd-main b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hd-main small{display:block;color:var(--mut,#6B7280);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-pose{font-size:12px;color:var(--mut,#6B7280);display:flex;flex-direction:column;gap:4px}.hd-pose>i{display:block;height:5px;border-radius:5px;background:rgba(0,0,0,.08);overflow:hidden}.hd-pose>i>i{display:block;height:100%;background:#18A058}
+.hd-chk{font:600 12px var(--f-body,Inter);text-align:right}.hd-chk.err{color:#C62828}.hd-chk.warn{color:#B86E00}.hd-chk.ok{color:#127A3F}
+@media (max-width:760px){.hdash-row{grid-template-columns:72px 1fr;row-gap:4px}.hd-pose,.hd-chk{grid-column:2;text-align:left}}

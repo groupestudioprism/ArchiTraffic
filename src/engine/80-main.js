@@ -113,7 +113,14 @@ $('#simDens').value = String(state.sim.dens);
 requestAnimationFrame(loop);
 
 /* ---------- pont avec le compte et le cloud (script classique) ---------- */
-window.APModel = {
+/* résumé du chantier pour le tableau de bord de l'accueil (enregistré avec le projet, < 800 caractères) */
+function projInfo(){ try {
+  const els = state.els || [], objs = els.filter(e => e.t === 'obj' && LIBK[e.k]?.sign), today = new Date().toISOString().slice(0, 10), P = state.phases || [];
+  const cur = P.find(p => p.from && p.to && p.from <= today && today <= p.to), r = WORLD ? siteChecks() : [];
+  return JSON.stringify({v:1, from:state.meta?.from || '', to:state.meta?.to || '', site:(state.site?.label || '').slice(0, 90), cl:els.filter(e => e.t === 'closure').map(e => (e.name || 'Voie').slice(0, 40)).slice(0, 6),
+    ph:P.length, cur:cur ? cur.name.slice(0, 60) : '', sg:objs.length, pose:objs.filter(e => e.posed).length, err:r.filter(x => x.lvl === 'err').length, warn:r.filter(x => x.lvl === 'warn').length}).slice(0, 790);
+} catch(e){ return ''; } }
+window.APModel = { info:projInfo,
   get: () => JSON.stringify(state),
   name: () => state.name,
   sample: () => sample(),

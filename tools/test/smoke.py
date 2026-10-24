@@ -47,6 +47,7 @@ with sync_playwright() as p:
     d = np.value; d.wait_for_load_state(); d.wait_for_timeout(1500)
     check('ARRÊTÉ' in d.content().upper(), 'dossier d\'arrêté généré')
     check(not pg.query_selector('#guide[hidden]'), 'assistant affiché')
+    inf = pg.evaluate("() => window.APModel.info()"); check('"sg"' in inf and len(inf) < 800, 'résumé du chantier pour le tableau de bord')
     b.close()
 check(not errs, 'aucune erreur JavaScript' + ('' if not errs else ' : ' + ' | '.join(errs[:3])))
 sys.exit(1 if fails else 0)

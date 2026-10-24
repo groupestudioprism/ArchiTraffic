@@ -860,6 +860,17 @@ a.ap-link{text-decoration:none}
 .ho-b:hover{border-color:var(--accent);color:var(--accent)}
 .ho-x{width:30px;height:30px;border:0;background:transparent;border-radius:8px;color:var(--mut);cursor:pointer}.ho-x:hover{background:var(--panel)}
 @media (max-width:700px){.h-offer{padding:0 14px}}
+
+/* tableau de bord des chantiers */
+.hdash{background:var(--panel,#fff);border:1px solid rgba(0,0,0,.07);border-radius:16px;padding:6px 10px 10px;margin-bottom:22px}
+.hd-h{margin:10px 6px 4px;font:700 11px var(--f-body,Inter);letter-spacing:.06em;text-transform:uppercase;color:var(--mut,#6B7280)}
+.hdash-row{display:grid;grid-template-columns:88px 1fr 150px 110px;gap:12px;align-items:center;padding:9px 6px;border-radius:10px;cursor:pointer}
+.hdash-row:hover,.hdash-row:focus-visible{background:rgba(21,101,192,.06);outline:none}
+.hd-st{font:700 11.5px var(--f-body,Inter);padding:4px 8px;border-radius:99px;text-align:center}.hd-st.now{background:#E3F4EA;color:#127A3F}.hd-st.next{background:#E8EFFA;color:#1554A6}
+.hd-main{min-width:0}.hd-main b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hd-main small{display:block;color:var(--mut,#6B7280);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-pose{font-size:12px;color:var(--mut,#6B7280);display:flex;flex-direction:column;gap:4px}.hd-pose>i{display:block;height:5px;border-radius:5px;background:rgba(0,0,0,.08);overflow:hidden}.hd-pose>i>i{display:block;height:100%;background:#18A058}
+.hd-chk{font:600 12px var(--f-body,Inter);text-align:right}.hd-chk.err{color:#C62828}.hd-chk.warn{color:#B86E00}.hd-chk.ok{color:#127A3F}
+@media (max-width:760px){.hdash-row{grid-template-columns:72px 1fr;row-gap:4px}.hd-pose,.hd-chk{grid-column:2;text-align:left}}
 /* ===== ARCHITRAFIC — direction artistique du logo : bleu (conception) → cyan → jaune → orange (trafic, balisage) =====
    Se superpose à la charte Studio Prism d'ARCHIPLAN (app.css, auth.css, home.css). Thème clair par défaut, thème sombre au choix. */
 :root{
@@ -2653,6 +2664,7 @@ const Save = {
     try {
       const extra = {}; if (wantThumb){ const t = window.APModel.thumb(); if (t && t.length < 88000) extra.thumb = t; }
       await withTimeout(Cloud().save(pid, data, extra, meta.size || 0, meta.ownerUid), 20000);
+      try { const inf = window.APModel.info?.(); if (inf && inf !== meta.info && this.pid === pid){ meta.info = inf; Cloud().update(pid, {info:inf}).catch(() => {}); const hp = (H.mine?.projects || []).find(x => x.id === pid); if (hp) hp.info = inf; } } catch(e){}   // résumé pour le tableau de bord (ignoré si les règles ne l'acceptent pas encore)
       if (this.pid === pid){ if (meta.ownerUid === me.uid && H.usage != null) H.usage += byteLen(data) - (meta.size || 0); meta.size = byteLen(data); this.last = data; this.err = 0; if (extra.thumb){ this.lastThumb = Date.now(); meta.thumb = extra.thumb; } this.set('saved'); }
     } catch(e){
       if (this.pid === pid){ this.err++; const c = e?.code; this.set(c === 'app/quota' || c === 'app/quota-or-denied' ? 'quota' : c === 'permission-denied' ? 'denied' : 'error'); if (!['permission-denied', 'app/quota', 'app/quota-or-denied'].includes(c)) this.timer = setTimeout(() => this.flush(), Math.min(60000, 5000 * this.err)); }
@@ -2740,6 +2752,21 @@ function crumbs(){
   while (f && guard++ < 20){ out.unshift(f); f = fs.find(x => x.id === f.parentId); }
   return out;
 }
+/* tableau de bord : chantiers en cours et à venir, d'après le résumé enregistré avec chaque projet */
+function dashHtml(all){
+  const today = new Date().toISOString().slice(0, 10), fd = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', {day:'numeric', month:'short'}) : '…';
+  const rows = all.map(p => { let i = null; try { i = p.info ? JSON.parse(p.info) : null; } catch(e){} return i && (i.from || i.to) ? {p, i} : null; }).filter(Boolean)
+    .filter(x => !x.i.to || x.i.to >= today).sort((a, b) => (a.i.from || '').localeCompare(b.i.from || ''));
+  if (!rows.length) return '';
+  const line = ({p, i}) => { const now = i.from && i.from <= today && (!i.to || today <= i.to), days = i.from && !now ? Math.ceil((new Date(i.from) - new Date(today)) / 864e5) : 0, pc = i.sg ? Math.round(i.pose / i.sg * 100) : 0;
+    return `<div class="hdash-row" data-open="${esc(p.id)}" tabindex="0" role="button" aria-label="Ouvrir ${esc(p.name)}">
+      <span class="hd-st ${now ? 'now' : 'next'}">${now ? 'En cours' : days <= 1 ? 'Demain' : `Dans ${days} j`}</span>
+      <span class="hd-main"><b>${esc(p.name)}</b><small>${fd(i.from)} → ${fd(i.to)}${i.cur ? ' · ' + esc(i.cur) : i.ph ? ` · ${i.ph} phases` : ''}${i.cl?.length ? ' · ' + esc(i.cl.join(', ')) : ''}</small></span>
+      <span class="hd-pose" title="Panneaux posés (mode terrain)"><i><i style="width:${pc}%"></i></i>${i.sg ? `${i.pose}/${i.sg} posés` : '—'}</span>
+      <span class="hd-chk ${i.err ? 'err' : i.warn ? 'warn' : 'ok'}" title="Contrôle réglementaire">${i.err ? `${i.err} erreur${i.err > 1 ? 's' : ''}` : i.warn ? `${i.warn} à vérifier` : 'Conforme'}</span></div>`; };
+  const now = rows.filter(x => x.i.from && x.i.from <= today), next = rows.filter(x => !(x.i.from && x.i.from <= today));
+  return `<h2 class="hsec">Tableau de bord</h2><div class="hdash">${now.length ? `<p class="hd-h">En cours · ${now.length}</p>${now.map(line).join('')}` : ''}${next.length ? `<p class="hd-h">À venir · ${next.length}</p>${next.slice(0, 8).map(line).join('')}` : ''}</div>`;
+}
 function cardHtml(p, shared){
   const thumb = p.thumb ? `<img src="${esc(p.thumb)}" alt="" loading="lazy">` : ICON.plan;
   const sub = shared ? `${esc(p.ownerName || p.ownerEmail || '')} · ${ROLE[p.role] || 'Lecture'}` : `${ago(p.updatedAt)}${p.updatedBy && p.updatedBy !== me.uid && p.updatedByName ? ' par ' + esc(p.updatedByName) : ''} · ${kb(p.size)}`;
@@ -2781,6 +2808,7 @@ function renderHome(){
     let h = !H.folder ? '' : `<nav class="hcrumbs" aria-label="Dossiers"><button type="button" data-folder="">Mes projets</button>${cr.map(f => `<span>›</span><button type="button" data-folder="${esc(f.id)}">${esc(f.name)}</button>`).join('')}</nav>`;
     if (local) h += `<div class="hlocal"><div><b>Un chantier est enregistré sur cet appareil</b><span>${esc(local.name || 'Sans titre')} · ${local.els.length} éléments</span></div><button type="button" class="ap-btn alt" data-hact="import-local">Enregistrer dans le cloud</button><button type="button" class="ap-link" data-hact="dismiss-local">Ignorer</button></div>`;
     if (fs.length) h += `<h2 class="hsec">Dossiers</h2><div class="hfolders">${fs.map(f => folderHtml(f, false)).join('')}</div>`;
+    if (!H.folder) h += dashHtml(H.mine?.projects || []);
     h += ps.length ? `<h2 class="hsec">${H.folder ? 'Projets du dossier' : 'Projets récents'}</h2><div class="hgrid">${ps.map(p => cardHtml(p, false)).join('')}</div>`
       : `<div class="hempty"><div class="hic">${ICON.plan}</div><h3>${H.folder ? 'Ce dossier est vide' : 'Aucun projet pour l\'instant'}</h3><p>Créez un projet : il s'enregistre tout seul dans le cloud, à chaque modification.</p><button type="button" class="ap-btn" data-hact="new">Nouveau projet</button></div>`;
     body.innerHTML = h;
@@ -8419,7 +8447,14 @@ $('#simDens').value = String(state.sim.dens);
 requestAnimationFrame(loop);
 
 /* ---------- pont avec le compte et le cloud (script classique) ---------- */
-window.APModel = {
+/* résumé du chantier pour le tableau de bord de l'accueil (enregistré avec le projet, < 800 caractères) */
+function projInfo(){ try {
+  const els = state.els || [], objs = els.filter(e => e.t === 'obj' && LIBK[e.k]?.sign), today = new Date().toISOString().slice(0, 10), P = state.phases || [];
+  const cur = P.find(p => p.from && p.to && p.from <= today && today <= p.to), r = WORLD ? siteChecks() : [];
+  return JSON.stringify({v:1, from:state.meta?.from || '', to:state.meta?.to || '', site:(state.site?.label || '').slice(0, 90), cl:els.filter(e => e.t === 'closure').map(e => (e.name || 'Voie').slice(0, 40)).slice(0, 6),
+    ph:P.length, cur:cur ? cur.name.slice(0, 60) : '', sg:objs.length, pose:objs.filter(e => e.posed).length, err:r.filter(x => x.lvl === 'err').length, warn:r.filter(x => x.lvl === 'warn').length}).slice(0, 790);
+} catch(e){ return ''; } }
+window.APModel = { info:projInfo,
   get: () => JSON.stringify(state),
   name: () => state.name,
   sample: () => sample(),
