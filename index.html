@@ -1146,6 +1146,15 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
 .g-tip.to-l::after{left:-4px}.g-tip.to-r::after{right:-4px}
 @keyframes gTip{from{transform:translateX(0)}to{transform:translateX(4px)}}.g-tip.to-r{animation-direction:alternate-reverse}
 @media (prefers-reduced-motion:reduce){.g-pulse,.g-tip{animation:none}}
+
+/* mode terrain */
+.tr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 18px 10px}.tr-top b{font-size:14px}
+.tr-bar{flex:1;min-width:80px;height:6px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;display:block}.tr-bar i{display:block;height:100%;background:#18A058;transition:width .3s}
+.tr-list{max-height:min(62vh,640px);overflow:auto}.tr-it{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(0,0,0,.06)}
+.tr-it label{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer}.tr-it input{width:24px;height:24px;flex:none}.tr-it img{width:42px;height:42px;object-fit:contain;flex:none}
+.tr-it span{min-width:0}.tr-it b{display:block;font-size:13.5px;font-weight:600}.tr-it small{display:block;color:var(--mut);font-size:12px}
+.tr-it.ok{opacity:.55}.tr-it.ok b{text-decoration:line-through}.tr-acts{display:flex;gap:6px;flex:none}.tr-acts .btn{padding:6px 10px;font-size:12.5px;text-decoration:none}
+@media (max-width:760px){.tr-list{max-height:none}.tr-acts{flex-direction:column}}
 /* Menu contextuel Studio Prism (clic droit / appui long) — même rendu dans toutes les apps ; couleurs reprises des variables du thème */
 .pctx{position:fixed;z-index:90;min-width:220px;max-width:min(340px,calc(100vw - 12px));max-height:calc(100vh - 12px);overflow:auto;padding:5px;border-radius:12px;
   background:var(--panel,#fff);color:var(--ink,#111827);border:1px solid var(--line,#DCE7EF);box-shadow:0 14px 38px rgb(7 27 85 / .22),0 2px 6px rgb(7 27 85 / .10);
@@ -1377,6 +1386,7 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
   <button data-act="open"><b>Importer un projet…</b><span>Fichier ARCHITRAFIC .json</span></button>
   <button data-act="glbin"><b>Importer une maquette ARCHIPLAN…</b><span>Fichier .glb exporté depuis ARCHIPLAN</span></button>
   <button data-act="apin"><b>Importer l'emprise d'un projet ARCHIPLAN…</b><span>Fichier .archiplan : contour et hauteur du bâtiment, posés comme emprise de chantier</span></button>
+  <button data-act="terrain"><b>Mode terrain (pose)</b><span>Sur le téléphone : panneaux par distance GPS, à cocher à la pose, suivi au bureau</span></button>
   <button data-act="check"><b>Contrôler le chantier</b><span>Signalisation, distances, déviations : ce qui manque ou ne va pas</span></button>
   <button data-act="sample"><b>Charger l'exemple</b><span>Rue barrée avec déviation, en centre-ville</span></button>
   <button data-act="tour"><b>Voir le tutoriel</b><span>Visite guidée de l'interface</span></button>
@@ -7377,7 +7387,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.t
 $('#fileBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#fileMenu'), e.currentTarget); });
 $('#exportBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#exportMenu'), e.currentTarget); });
 $('#fileMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#fileMenu').hidden = true;
-  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample()), credits:signCredits, tour:() => startTour()})[b.dataset.act]?.(); });
+  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample()), credits:signCredits, terrain:openTerrain, tour:() => startTour()})[b.dataset.act]?.(); });
 $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#exportMenu').hidden = true; if (!canExport()) return;
   ({a3:exportA3, dossier:exportDossier, arrete:() => exportArrete(), avis:exportAvis, terrain:exportTerrain, devis:exportDevis, waze:exportWaze, dxf:exportDXF, png:() => exportWorkPNG(2), png4:() => exportWorkPNG(4), pngd:() => exportDetailPNG(2), pngv:() => exportPNG(2), glb:exportGLB, csv:exportCSV, geojson:exportGeoJSON, json:exportJSON})[b.dataset.act]?.(); });
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
@@ -7836,6 +7846,39 @@ function exportDXF(){
   }
   put(0, 'ENDSEC', 0, 'EOF');
   downloadBlob(new Blob([L.join('\r\n')], {type:'application/dxf'}), `${safeName(state.name)}-signalisation-L93.dxf`); toast('Plan DXF enregistré en Lambert-93 (EPSG:2154), calques par famille de panneaux.', 5000);
+}
+
+/* ==== 77b-terrain.js ==== */
+/* ============ Mode terrain : pose de la signalisation depuis le téléphone ============
+   Liste des panneaux et équipements du chantier, triés par distance à la position GPS du poseur,
+   cochés au fur et à mesure : l'état « posé » est enregistré dans le projet (visible au bureau, synchronisé par le cloud). */
+let terrainWatch = null, terrainPos = null;
+function terrainItems(){
+  const P = WORLD?.P; if (!P) return [];
+  return state.els.filter(e => e.t === 'obj' && !phOff(e) && !e.hidden).map(e => { const L = LIBK[e.k], [lon, lat] = P.toLL(e.x, e.y), near = nearestRoad([e.x, e.y], 30, false);
+    const d = terrainPos ? Math.hypot(...(() => { const [x, y] = P.toXY ? P.toXY(terrainPos.lon, terrainPos.lat) : [0, 0]; return [x - e.x, y - e.y]; })()) : null;
+    return {e, L, lat, lon, rue:near?.r.name || '', d}; })
+    .sort((a, b) => (!!a.e.posed - !!b.e.posed) || (a.d != null && b.d != null ? a.d - b.d : a.rue.localeCompare(b.rue)));
+}
+function openTerrain(){
+  if (!WORLD?.P){ toast('Choisissez d\'abord le lieu du chantier.'); return; }
+  const render = () => {
+    const it = terrainItems(), done = it.filter(x => x.e.posed).length;
+    dlgEngine(`<div class="ed-h"><div><p class="eyebrow">Mode terrain</p><h3 class="ed-name" style="margin:0">Pose de la signalisation</h3></div><button class="btn" id="trClose" type="button">Fermer</button></div>
+      <div class="tr-top"><b>${done} / ${it.length} posés</b><i class="tr-bar"><i style="width:${it.length ? done / it.length * 100 : 0}%"></i></i>
+        <button class="btn${terrainWatch != null ? ' primary' : ''}" id="trGps" type="button">${terrainWatch != null ? (terrainPos ? `Position suivie (±${Math.round(terrainPos.acc)} m)` : 'Recherche de la position…') : 'Trier par distance (GPS)'}</button></div>
+      <div class="ed-body tr-list" style="display:block">${it.length ? it.map((x, i) => `<div class="tr-it${x.e.posed ? ' ok' : ''}">
+        <label><input type="checkbox" data-tr="${x.e.id}"${x.e.posed ? ' checked' : ''}><img src="${x.L?.sign ? signThumb(x.L.sign, {...(x.L.p || {}), ...(x.e.p || {})}) : thumbLazy(x.L)}" alt=""><span><b>${esc(x.L?.sign || '')} ${esc(x.L?.n || x.L?.name || x.e.k)}</b><small>${esc(x.rue || 'Voie non nommée')}${x.d != null ? ` · à ${x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1).replace('.', ',') + ' km'}` : ''}${x.e.posed ? ` · posé ${new Date(x.e.posed).toLocaleString('fr-FR', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})}` : ''}</small></span></label>
+        <span class="tr-acts"><button class="btn" type="button" data-trv="${x.e.id}">Plan</button><a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat.toFixed(6)},${x.lon.toFixed(6)}" target="_blank" rel="noopener">Y aller</a></span></div>`).join('') : '<p class="hint">Aucun panneau dans ce chantier (ou cette phase).</p>'}</div>`, 'mid');
+    $('#trClose').onclick = () => { stopGps(); closeEngine(); };
+    $('#trGps').onclick = () => { if (terrainWatch != null){ stopGps(); render(); return; } if (!navigator.geolocation){ toast('Position indisponible sur cet appareil.'); return; }
+      terrainWatch = navigator.geolocation.watchPosition(p => { terrainPos = {lat:p.coords.latitude, lon:p.coords.longitude, acc:p.coords.accuracy}; if (!$('#engDlg').hidden && $('#trGps')) render(); },
+        () => { toast('Position refusée ou indisponible.'); stopGps(); render(); }, {enableHighAccuracy:true, maximumAge:5000}); render(); };
+    $$('[data-tr]').forEach(b => b.onchange = () => { const e = state.els.find(x => x.id === b.dataset.tr); if (!e) return; edit(() => { if (b.checked) e.posed = Date.now(); else delete e.posed; }); save(); render(); });
+    $$('[data-trv]').forEach(b => b.onclick = () => { const e = state.els.find(x => x.id === b.dataset.trv); if (!e) return; stopGps(); closeEngine(); if (view !== '2d') setView('2d'); frameAt(e.x, e.y, 25); sel = e.id; applySel(); refreshPanel(); });
+  };
+  const stopGps = () => { if (terrainWatch != null) navigator.geolocation.clearWatch(terrainWatch); terrainWatch = null; terrainPos = null; };
+  render();
 }
 
 /* ==== 78-ctx.js ==== */
@@ -8321,7 +8364,18 @@ function runSampleSetup(){
     state.els.push({id:uid8(), t:'zone', name:'Tranchée réseau', pts:[V.add(V.add(mid.pt, V.mul(mid.dir, -12)), V.mul(n, 3)), V.add(V.add(mid.pt, V.mul(mid.dir, 22)), V.mul(n, 3)), V.add(V.add(mid.pt, V.mul(mid.dir, 22)), V.mul(n, -3)), V.add(V.add(mid.pt, V.mul(mid.dir, -12)), V.mul(n, -3))], fence:true});
     state.els.push({id:uid8(), t:'note', x:mid.pt[0] + n[0] * 8, y:mid.pt[1] + n[1] * 8, text:'Tranchée réseau d\'eau\nAccès riverains maintenu', col:'#1565C0'});
   });
-  frameAt(cl.pts[0][0], cl.pts[0][1], 90); toast('Exemple prêt : rue barrée, déviation calculée, panneaux et engins posés. Lancez la simulation ▶', 6000);
+  // chantier réaliste : deux phases (deux rues voisines), dates, intervenants
+  const d0 = new Date(Date.now() + 14 * 864e5), iso = d => d.toISOString().slice(0, 10), add = (d, n) => new Date(d.getTime() + n * 864e5);
+  let cl2 = null; { let b2 = null; const c0 = plAt(cl.pts, plLen(cl.pts) / 2).pt;
+    for (const [ri, r] of NET.roads.entries()){ if (!r.drive || r.cls < 4 || r.cls > 5 || r.name === cl.name) continue; for (let k = 0; k + 1 < r.pts.length; k++){ const c = segClosest(c0, r.pts[k], r.pts[k + 1]), dd = V.dist(c.pt, c0); if (dd > 90 && dd < 260 && (!b2 || dd < b2.d)) b2 = {ri, k, t:c.t, pt:c.pt, d:dd, r, dir:V.norm(V.sub(r.pts[k + 1], r.pts[k]))}; } }
+    if (b2){ const keep2 = {...TOOLOPT}; Object.assign(TOOLOPT, {closeMode:'total', autoDetour:true, autoSigns:true}); const n0 = state.els.length; makeClosure(b2); Object.assign(TOOLOPT, keep2); cl2 = state.els.slice(n0).find(e => e.t === 'closure'); } }
+  edit(() => {
+    state.name = 'Exemple · renouvellement réseau d\'eau'; Object.assign(state.meta, {from:iso(d0), to:iso(add(d0, cl2 ? 27 : 13))});
+    if (cl2){ const p1 = {id:uid8(), name:'Phase 1 : ' + (cl.name || 'première rue'), from:iso(d0), to:iso(add(d0, 13))}, p2 = {id:uid8(), name:'Phase 2 : ' + (cl2.name || 'seconde rue'), from:iso(add(d0, 14)), to:iso(add(d0, 27))};
+      state.phases = [p1, p2]; const i2 = state.els.indexOf(cl2); state.els.forEach((e, i) => { e.ph = i < i2 ? p1.id : p2.id; }); }
+  });
+  if (view !== '2d') setView('2d'); frameEls(workEls()); renderPhaseBar?.();
+  toast(cl2 ? 'Exemple prêt : deux phases de travaux, déviations, panneaux et dates. Ouvrez Exporter → Dossier d\'arrêté.' : 'Exemple prêt : rue barrée, déviation calculée, panneaux et engins posés.', 7000);
 }
 
 /* ---------- démarrage ---------- */
@@ -8358,7 +8412,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; if (window.__spHide){ window.__spHide(); return; } const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;

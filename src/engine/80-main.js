@@ -93,7 +93,18 @@ function runSampleSetup(){
     state.els.push({id:uid8(), t:'zone', name:'Tranchée réseau', pts:[V.add(V.add(mid.pt, V.mul(mid.dir, -12)), V.mul(n, 3)), V.add(V.add(mid.pt, V.mul(mid.dir, 22)), V.mul(n, 3)), V.add(V.add(mid.pt, V.mul(mid.dir, 22)), V.mul(n, -3)), V.add(V.add(mid.pt, V.mul(mid.dir, -12)), V.mul(n, -3))], fence:true});
     state.els.push({id:uid8(), t:'note', x:mid.pt[0] + n[0] * 8, y:mid.pt[1] + n[1] * 8, text:'Tranchée réseau d\'eau\nAccès riverains maintenu', col:'#1565C0'});
   });
-  frameAt(cl.pts[0][0], cl.pts[0][1], 90); toast('Exemple prêt : rue barrée, déviation calculée, panneaux et engins posés. Lancez la simulation ▶', 6000);
+  // chantier réaliste : deux phases (deux rues voisines), dates, intervenants
+  const d0 = new Date(Date.now() + 14 * 864e5), iso = d => d.toISOString().slice(0, 10), add = (d, n) => new Date(d.getTime() + n * 864e5);
+  let cl2 = null; { let b2 = null; const c0 = plAt(cl.pts, plLen(cl.pts) / 2).pt;
+    for (const [ri, r] of NET.roads.entries()){ if (!r.drive || r.cls < 4 || r.cls > 5 || r.name === cl.name) continue; for (let k = 0; k + 1 < r.pts.length; k++){ const c = segClosest(c0, r.pts[k], r.pts[k + 1]), dd = V.dist(c.pt, c0); if (dd > 90 && dd < 260 && (!b2 || dd < b2.d)) b2 = {ri, k, t:c.t, pt:c.pt, d:dd, r, dir:V.norm(V.sub(r.pts[k + 1], r.pts[k]))}; } }
+    if (b2){ const keep2 = {...TOOLOPT}; Object.assign(TOOLOPT, {closeMode:'total', autoDetour:true, autoSigns:true}); const n0 = state.els.length; makeClosure(b2); Object.assign(TOOLOPT, keep2); cl2 = state.els.slice(n0).find(e => e.t === 'closure'); } }
+  edit(() => {
+    state.name = 'Exemple · renouvellement réseau d\'eau'; Object.assign(state.meta, {from:iso(d0), to:iso(add(d0, cl2 ? 27 : 13))});
+    if (cl2){ const p1 = {id:uid8(), name:'Phase 1 : ' + (cl.name || 'première rue'), from:iso(d0), to:iso(add(d0, 13))}, p2 = {id:uid8(), name:'Phase 2 : ' + (cl2.name || 'seconde rue'), from:iso(add(d0, 14)), to:iso(add(d0, 27))};
+      state.phases = [p1, p2]; const i2 = state.els.indexOf(cl2); state.els.forEach((e, i) => { e.ph = i < i2 ? p1.id : p2.id; }); }
+  });
+  if (view !== '2d') setView('2d'); frameEls(workEls()); renderPhaseBar?.();
+  toast(cl2 ? 'Exemple prêt : deux phases de travaux, déviations, panneaux et dates. Ouvrez Exporter → Dossier d\'arrêté.' : 'Exemple prêt : rue barrée, déviation calculée, panneaux et engins posés.', 7000);
 }
 
 /* ---------- démarrage ---------- */
@@ -130,7 +141,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; if (window.__spHide){ window.__spHide(); return; } const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;

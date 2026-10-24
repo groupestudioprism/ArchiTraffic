@@ -284,3 +284,12 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
 .g-tip.to-l::after{left:-4px}.g-tip.to-r::after{right:-4px}
 @keyframes gTip{from{transform:translateX(0)}to{transform:translateX(4px)}}.g-tip.to-r{animation-direction:alternate-reverse}
 @media (prefers-reduced-motion:reduce){.g-pulse,.g-tip{animation:none}}
+
+/* mode terrain */
+.tr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 18px 10px}.tr-top b{font-size:14px}
+.tr-bar{flex:1;min-width:80px;height:6px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;display:block}.tr-bar i{display:block;height:100%;background:#18A058;transition:width .3s}
+.tr-list{max-height:min(62vh,640px);overflow:auto}.tr-it{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(0,0,0,.06)}
+.tr-it label{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer}.tr-it input{width:24px;height:24px;flex:none}.tr-it img{width:42px;height:42px;object-fit:contain;flex:none}
+.tr-it span{min-width:0}.tr-it b{display:block;font-size:13.5px;font-weight:600}.tr-it small{display:block;color:var(--mut);font-size:12px}
+.tr-it.ok{opacity:.55}.tr-it.ok b{text-decoration:line-through}.tr-acts{display:flex;gap:6px;flex:none}.tr-acts .btn{padding:6px 10px;font-size:12.5px;text-decoration:none}
+@media (max-width:760px){.tr-list{max-height:none}.tr-acts{flex-direction:column}}
