@@ -141,7 +141,7 @@ window.APModel = { info:projInfo,
       const c = document.createElement('canvas'); c.width = 320; c.height = Math.max(120, Math.round(320 * src.height / src.width)); const g = c.getContext('2d'); g.fillStyle = '#EEF3F7'; g.fillRect(0, 0, c.width, c.height); g.drawImage(src, 0, 0, c.width, c.height); dirty = true; return c.toDataURL('image/jpeg', 0.72); }
     catch(e){ return ''; }
   },
-  setUserLib(){},
+  setUserLib(lib){ USERLIB = lib && typeof lib === 'object' ? lib : {}; },
 };
 window.dispatchEvent(new Event('ap:ready'));
 window.__apReady = true;

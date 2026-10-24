@@ -96,7 +96,7 @@ async function exportA3(){
 }
 /* ---------- projet d'arrêté de circulation ---------- */
 function exportArrete(ret = false){
-  const m = state.meta || {}, phases = state.phases?.length ? state.phases : [null], art = [];
+  const A = arrParts(), m = state.meta || {}, phases = state.phases?.length ? state.phases : [null], art = [];
   const fmtD = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'}) : '…';
   const modeTxt = c => c.mode === 'alternat' ? `la circulation sera alternée${c.len ? ` sur ${Math.round(c.len)} m` : ''}, réglée par feux tricolores de chantier (KR11) ou piquets K10` : c.mode === 'voie' ? 'une file de circulation sera neutralisée, la circulation étant maintenue sur la file restante' : c.mode === 'sens' ? `la circulation sera interdite dans le sens ${c.dir === -1 ? 'inverse' : 'du tracé'} et maintenue dans l'autre sens` : `la circulation sera interdite à tous les véhicules${c.riv ? ', sauf riverains, véhicules de secours et de service' : ', sauf véhicules de secours et de service'}`;
   let n = 1;
@@ -111,19 +111,20 @@ function exportArrete(ret = false){
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Projet d'arrêté · ${esc(state.name)}</title><style>
     @page{size:A4;margin:22mm 20mm}body{font:12pt/1.5 Georgia,'Times New Roman',serif;color:#111;max-width:170mm;margin:0 auto;padding:10mm 0}h1{font:700 15pt Arial;text-align:center;text-transform:uppercase;margin:0 0 4mm}
     h2{font:600 11pt Arial;text-align:center;margin:0 0 8mm;color:#333}h3{font:700 11.5pt Arial;margin:6mm 0 2mm}.brouillon{border:1px dashed #C62828;color:#C62828;font:600 9.5pt Arial;padding:2mm 3mm;margin-bottom:6mm}
-    .sig{margin-top:14mm;text-align:right}.print{position:fixed;right:10px;top:10px;padding:8px 14px;border-radius:99px;border:0;background:#1565C0;color:#fff;font:600 12px Arial;cursor:pointer}@media print{.print,.brouillon{display:none}}</style></head><body>
+    .sig{margin-top:14mm;text-align:right}.arr-head{display:flex;gap:4mm;align-items:center;font:10pt/1.35 Arial;margin-bottom:8mm}.arr-head img{max-height:20mm;max-width:40mm}.print{position:fixed;right:10px;top:10px;padding:8px 14px;border-radius:99px;border:0;background:#1565C0;color:#fff;font:600 12px Arial;cursor:pointer}@media print{.print,.brouillon{display:none}}</style></head><body>
     <button class="print" onclick="print()">Imprimer / PDF</button>
     <div class="brouillon">Projet généré par ARCHITRAFIC à partir du plan de chantier : à relire, compléter et faire signer par l'autorité compétente (maire, président du conseil départemental ou préfet selon la voie).</div>
-    <h1>Arrêté ${m.arrete ? 'n° ' + esc(m.arrete) : 'temporaire'}</h1><h2>portant réglementation temporaire de la circulation<br>${esc(state.site?.label || '')}</h2>
-    <p>L'autorité investie du pouvoir de police de la circulation,</p>
-    <p>Vu le Code général des collectivités territoriales, notamment ses articles L2213-1 et suivants ;<br>Vu le Code de la route, notamment ses articles R411-8, R411-25 et R411-28 ;<br>Vu l'arrêté interministériel du 24 novembre 1967 modifié relatif à la signalisation des routes et autoroutes ;<br>Vu l'instruction interministérielle sur la signalisation routière, notamment sa 8e partie (signalisation temporaire) ;<br>Vu la demande présentée par ${esc(m.entreprise || "l'entreprise chargée des travaux")}${m.moa ? ` pour le compte de ${esc(m.moa)}` : ''} ;</p>
-    <p>Considérant que la réalisation des travaux « ${esc(state.name)} » nécessite de réglementer temporairement la circulation afin d'assurer la sécurité des usagers et des intervenants ;</p>
+    ${A?.head || ''}<h1>Arrêté ${m.arrete ? 'n° ' + esc(m.arrete) : 'temporaire'}</h1><h2>portant réglementation temporaire de la circulation<br>${esc(state.site?.label || '')}</h2>
+    <p>${A?.auth || 'L\'autorité investie du pouvoir de police de la circulation,'}</p>
+    <p>Vu le Code général des collectivités territoriales, notamment ses articles L2213-1 et suivants ;<br>Vu le Code de la route, notamment ses articles R411-8, R411-25 et R411-28 ;<br>Vu l'arrêté interministériel du 24 novembre 1967 modifié relatif à la signalisation des routes et autoroutes ;<br>Vu l'instruction interministérielle sur la signalisation routière, notamment sa 8e partie (signalisation temporaire) ;<br>Vu la demande présentée par ${esc(m.entreprise || "l'entreprise chargée des travaux")}${m.moa ? ` pour le compte de ${esc(m.moa)}` : ''} ;</p>${A?.visas.length ? `<p>${A.visas.map(v => v.replace(/\s*;?$/, ' ;')).join('<br>')}</p>` : ''}
+    <p>Considérant que la réalisation des travaux « ${esc(state.name)} » nécessite de réglementer temporairement la circulation afin d'assurer la sécurité des usagers et des intervenants ;</p>${A?.cons.length ? A.cons.map(c => `<p>${c}</p>`).join('') : ''}
     <p style="text-align:center;font:700 12pt Arial;margin:6mm 0">ARRÊTE</p>${art.join('')}
     <h3>Article ${n++} — Signalisation</h3><p>La signalisation réglementaire, conforme à l'instruction interministérielle (8e partie), sera mise en place, entretenue et déposée par ${esc(m.entreprise || "l'entreprise")}, qui en assure la surveillance de jour comme de nuit. Elle comprend notamment : ${signSummary()}.</p>
     <h3>Article ${n++} — Accès</h3><p>L'accès des riverains, des véhicules de secours et d'incendie et des services publics sera maintenu en permanence dans la mesure du possible. Les cheminements piétons seront maintenus avec une largeur d'au moins 1,40 m.</p>
+    ${(A?.arts || []).map(([t, x]) => `<h3>Article ${n++}${t ? ' — ' + t : ''}</h3><p>${x}</p>`).join('')}
     <h3>Article ${n++} — Infractions</h3><p>Les infractions au présent arrêté seront constatées et poursuivies conformément aux lois et règlements en vigueur.</p>
-    <h3>Article ${n++} — Exécution</h3><p>Le présent arrêté sera affiché aux extrémités des sections concernées. Ampliation en sera adressée aux services de police ou de gendarmerie, au SDIS, aux services de transport en commun concernés et à ${esc(m.entreprise || "l'entreprise")}, chargés chacun en ce qui le concerne de son exécution.</p>
-    <p class="sig">Fait à …………………, le ………………<br><br>L'autorité compétente</p></body></html>`;
+    <h3>Article ${n++} — Exécution</h3><p>Le présent arrêté sera affiché aux extrémités des sections concernées. Ampliation en sera adressée ${A?.ampl ? 'à : ' + A.ampl + ',' : `aux services de police ou de gendarmerie, au SDIS, aux services de transport en commun concernés et à ${esc(m.entreprise || "l'entreprise")},`} chargés chacun en ce qui le concerne de son exécution.</p>
+    <p class="sig">Fait à ${A?.city || '…………………'}, le ………………<br><br>${A?.sign || 'L\'autorité compétente'}</p></body></html>`;
   if (ret === true) return html;
   openDoc(html, `${safeName(state.name)}-projet-arrete.html`);
 }

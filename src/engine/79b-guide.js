@@ -4,7 +4,7 @@
    L'assistant suit l'avancement du chantier : lieu → route barrée → déviation → signalisation → dates → dossier. */
 const LS = {get(k, d){ try { const v = localStorage.getItem(k); return v === null ? d : v; } catch(e){ return d; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }};
 let SIMPLE = LS.get('at.simple', '1') === '1', GUIDE_OPEN = LS.get('at.guide', '1') === '1';
-const SIMPLE_EXPORTS = new Set(['dossier', 'a3', 'png', 'pngd', 'avis', 'arrete']);
+const SIMPLE_EXPORTS = new Set(['dossier', 'a3', 'png', 'pngd', 'avis', 'arrete', 'arrtpl']);
 function applySimple(){
   document.body.classList.toggle('simple', SIMPLE);
   $$('#exportMenu [data-act]').forEach(b => b.classList.toggle('adv', !SIMPLE_EXPORTS.has(b.dataset.act)));
