@@ -27,11 +27,22 @@ const GUIDE = [
 ];
 let guideChecked = false, guideExported = false, guideKey = '';
 function guideShowWork(){ const W = workEls(); if (view !== '2d') setView('2d'); if (W.length) frameEls(W); const c = state.els.find(e => e.t === 'closure'); if (c){ sel = c.id; applySel(); if (activeTab !== 'props') setTab('props'); else refreshPanel(); } }
+/* repère « cliquez ici » sur le bouton de l'étape en cours */
+const GUIDE_SPOT = {site:() => tool !== 'site' && '[data-tool="site"]', close:() => tool !== 'close' && '[data-tool="close"]', det:() => '#eDet' , exp:() => '#exportBtn'};
+function guideSpot(k){
+  $$('.g-pulse').forEach(e => e.classList.remove('g-pulse')); let tip = $('#gTip');
+  const q = GUIDE_OPEN && GUIDE_SPOT[k]?.(), el = q && $(q), r = el && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+  if (!r){ if (tip) tip.hidden = true; return; }
+  el.classList.add('g-pulse'); if (!tip){ tip = document.createElement('div'); tip.id = 'gTip'; tip.className = 'g-tip'; tip.textContent = 'Cliquez ici'; document.body.appendChild(tip); }
+  tip.hidden = false; const left = r.left > innerWidth / 2;
+  tip.className = 'g-tip ' + (left ? 'to-r' : 'to-l'); tip.style.top = (r.top + r.height / 2 - 14) + 'px'; tip.style.left = left ? (r.left - 104) + 'px' : (r.right + 12) + 'px';
+}
 function renderGuide(){
   let g = $('#guide'); if (!g){ g = document.createElement('aside'); g.id = 'guide'; g.className = 'guide'; g.setAttribute('aria-label', 'Assistant'); vpEl.appendChild(g); }
-  const show = GUIDE_OPEN && !!state && !$('#app')?.hidden; g.hidden = !show; $('#guideBtn')?.setAttribute('aria-pressed', show);
+  const show = GUIDE_OPEN && !!state && !$('#app')?.hidden; g.hidden = !show; if (!show) guideSpot(''); $('#guideBtn')?.setAttribute('aria-pressed', show);
   if (!show) return;
   const st = GUIDE.map(s => !!s.done()), cur = st.indexOf(false), key = st.join() + cur + JSON.stringify([state.meta?.from, state.meta?.to, state.meta?.moa, state.meta?.entreprise]);
+  guideSpot(cur >= 0 ? GUIDE[cur].k : '');
   if (key === guideKey && g.childElementCount) return; guideKey = key;
   const m = state.meta || {}, nDone = st.filter(Boolean).length;
   g.innerHTML = `<header><b>Votre plan en ${GUIDE.length} étapes</b><span>${nDone}/${GUIDE.length}</span><button type="button" class="g-x" aria-label="Fermer l'assistant" title="Fermer (le bouton Guide le rouvre)">×</button></header>
@@ -50,12 +61,17 @@ function renderGuide(){
 
 /* ---------- visite guidée (bulles sur l'interface) ---------- */
 const TOUR = [
-  ['.tools', 'Les outils', 'À gauche : choisir le lieu, barrer une rue, dessiner une déviation, placer un panneau. Survolez un outil pour voir son raccourci clavier.'],
+  ['[data-tool="site"]', 'Lieu du chantier', 'Commencez ici : tapez l\'adresse du chantier, le quartier se charge tout seul (rues, bâtiments, relief).'],
+  ['[data-tool="close"]', 'Route barrée', 'Cliquez sur ce bouton, puis sur la rue à fermer : le tronçon entre deux carrefours est barré et la déviation est calculée.'],
+  ['[data-tool="detour"]', 'Déviation', 'Pour dessiner une déviation vous-même, point par point, si celle proposée ne convient pas.'],
+  ['[data-tool="place"]', 'Placer un panneau', 'Ouvre la bibliothèque : choisissez un panneau puis cliquez sur la carte pour le poser.'],
+  ['[data-tool="select"]', 'Sélection', 'Cliquez sur un élément (rue barrée, déviation, panneau) pour le modifier à droite. Suppr l\'efface.'],
   ['.modes', 'Plan ou 3D', 'Le plan 2D sert à préparer et imprimer. La 3D aide à présenter le chantier aux élus et aux riverains.'],
-  ['#panel', 'Le panneau de droite', 'Il montre les réglages de l\'élément sélectionné (rue barrée, déviation, panneau) et la bibliothèque de signalisation.'],
+  ['#panel .tabs', 'Projet, Bibliothèque, Légende', 'Projet : les réglages de l\'élément sélectionné. Bibliothèque : tous les panneaux. Légende : ce qui apparaîtra sur les plans.'],
+  ['#undo', 'Annuler', 'Une erreur ? Ctrl+Z ou ce bouton revient en arrière.'],
   ['#exportBtn', 'Exporter', 'Dossier d\'arrêté, plan A3, avis aux riverains : tout est cadré automatiquement sur le chantier.'],
   ['#modeBtn', 'Mode simple ou expert', 'Le mode expert ajoute le balisage, les emprises, les cotes, la giration, la simulation du trafic et tous les formats d\'export.'],
-  ['#guideBtn', 'L\'assistant', 'Il vous accompagne étape par étape. Rouvrez-le ici à tout moment.'],
+  ['#guideBtn', 'L\'assistant', 'Il vous accompagne étape par étape et vous montre où cliquer. Rouvrez-le ici à tout moment.'],
 ];
 const TOUR_HOME = [
   ['#homeNewP', 'Créer un chantier', 'Commencez ici : un nouveau chantier, puis l\'adresse. Tout s\'enregistre automatiquement dans le cloud.'],
@@ -97,7 +113,7 @@ function startTour(steps = TOUR, lsKey = 'at.tour'){
     const authed = $('#auth')?.hidden !== false && (!$('#app')?.inert || ($('#home')?.hidden === false && !$('#home')?.inert)), homeOn = $('#home')?.hidden === false && !$('#home')?.inert;   // connecté et code PIN saisi
     if (authed && homeOn){ sawHome = true; if (LS.get('at.tourHome', '') !== '1' && !homeTourT && window.__apReady) homeTourT = setTimeout(() => { if ($('#home')?.hidden === false && !$('#home')?.inert && !$('.tour')) startTour(TOUR_HOME, 'at.tourHome'); }, 1200); }
     const open = !!state && authed && $('#home')?.hidden !== false && (sawHome || !!state.site);   // un projet est ouvert après la connexion
-    if (open) renderGuide(); else if ($('#guide')) $('#guide').hidden = true;
+    if (open) renderGuide(); else { if ($('#guide')) $('#guide').hidden = true; guideSpot(''); }
     if (open && !wasOpen && LS.get('at.tour', '') !== '1' && window.__apReady) setTimeout(() => { if (!$('.tour')) startTour(); }, 900);
     if (open !== wasOpen){ guideChecked = guideExported = false; guideKey = ''; }
     wasOpen = open;

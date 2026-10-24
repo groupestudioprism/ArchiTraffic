@@ -276,3 +276,11 @@ details.rules{margin-top:12px}details.rules summary{cursor:pointer;font-size:12.
 .tour .t-bub small{color:#6b7280;font-size:11.5px}.tour .t-bub b{display:block;font:700 15px var(--f-display);margin:2px 0 6px}.tour .t-bub p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#374151}
 .tour .t-bub div{display:flex;justify-content:flex-end;gap:8px}
 body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:calc(37px * var(--pin-sz, 1))}
+/* assistant : bouton à cliquer pour l'étape en cours */
+.g-pulse{position:relative;z-index:8;animation:gPulse 1.6s ease-out infinite;border-radius:12px}
+@keyframes gPulse{0%{box-shadow:0 0 0 0 rgba(21,101,192,.55)}70%{box-shadow:0 0 0 12px rgba(21,101,192,0)}100%{box-shadow:0 0 0 0 rgba(21,101,192,0)}}
+.g-tip{position:fixed;z-index:8500;width:92px;height:28px;display:grid;place-items:center;border-radius:8px;background:#1565C0;color:#fff;font:600 12px var(--f-body);pointer-events:none;box-shadow:0 6px 16px -6px rgba(0,0,0,.4);animation:gTip 1.2s ease-in-out infinite alternate}
+.g-tip::after{content:"";position:absolute;top:50%;width:10px;height:10px;background:#1565C0;transform:translateY(-50%) rotate(45deg)}
+.g-tip.to-l::after{left:-4px}.g-tip.to-r::after{right:-4px}
+@keyframes gTip{from{transform:translateX(0)}to{transform:translateX(4px)}}.g-tip.to-r{animation-direction:alternate-reverse}
+@media (prefers-reduced-motion:reduce){.g-pulse,.g-tip{animation:none}}
