@@ -48,13 +48,26 @@ async function exportPNG(k = 2, asCanvas = false){
   renderer.setPixelRatio(pr); renderer.setSize(w, h, false); markGroup.visible = previewGroup.visible = true; dirty = true;
   const S = cv.width / w;
   // étiquettes
-  // repères de panneaux (images) : bulle blanche + panneau
-  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), PK = 1, ww = r.width * S * PK, hh = r.height * S * PK, x = (r.left - vr.left + r.width / 2) * S - ww / 2, y = (r.bottom - vr.top) * S - hh;   // plan : repères plus discrets, ancrés au même point
-    g.save(); g.fillStyle = a.sig ? '#1E2226' : '#fff'; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, ww, hh, 9 * S) : g.rect(x, y, ww, hh); g.fill();
-    g.beginPath(); g.moveTo(x + ww / 2 - 5 * S, y + hh); g.lineTo(x + ww / 2, y + hh + 6 * S); g.lineTo(x + ww / 2 + 5 * S, y + hh); g.fill(); g.shadowBlur = 0;
-    const im = a.d.querySelector('img'); if (im?.complete) g.drawImage(im, x + 3 * S, y + 3 * S, ww - 6 * S, hh - 6 * S);
-    else if (a.sig){ const st = a.d.dataset.s; ['r', 'y', 'g'].forEach((k, i) => { g.fillStyle = st === k ? ({r:'#FF2A1A', y:'#FFB300', g:'#18E070'})[k] : '#3a3f45'; g.beginPath(); g.arc(x + ww / 2, y + (6 + i * 10) * S, 4 * S, 0, 7); g.fill(); }); }
-    g.restore(); }
+  // repères de panneaux : les panneaux proches sont regroupés dans une même bulle, les bulles ne se chevauchent pas (trait de rappel vers le point de pose)
+  { const vr = vpEl.getBoundingClientRect(), items = [];
+    for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(); if (!r.width) continue;
+      items.push({ax:(r.left - vr.left + r.width / 2) * S, ay:(r.bottom - vr.top) * S + 6 * S, w:r.width * S, h:r.height * S, im:a.d.querySelector('img'), sig:a.sig, st:a.d.dataset.s}); }
+    const cl = [];
+    for (const it of items){ const c = cl.find(c => Math.hypot(c.ax - it.ax, c.ay - it.ay) < Math.max(it.w, it.h) * 0.9 && c.its.length < 6); if (c){ c.its.push(it); c.ax = c.its.reduce((t, q) => t + q.ax, 0) / c.its.length; c.ay = c.its.reduce((t, q) => t + q.ay, 0) / c.its.length; } else cl.push({ax:it.ax, ay:it.ay, its:[it]}); }
+    const placed = [], pad = 3 * S, gap = 2 * S;
+    for (const c of cl){ const n = c.its.length, cols = Math.min(n, 3), rows = Math.ceil(n / cols), u = Math.max(...c.its.map(q => q.w)), v = Math.max(...c.its.map(q => q.h)), cw = (u - 6 * S), ch = (v - 6 * S);
+      const W = cols * cw + (cols - 1) * gap + pad * 2, Hh = rows * ch + (rows - 1) * gap + pad * 2; let x = c.ax - W / 2, y = c.ay - 6 * S - Hh;
+      for (let k = 0; k < 12; k++){ const hit = placed.find(q => x < q.x + q.w + 2 * S && x + W + 2 * S > q.x && y < q.y + q.h + 2 * S && y + Hh + 2 * S > q.y); if (!hit) break; y = hit.y - Hh - 4 * S; }
+      placed.push({x, y, w:W, h:Hh});
+      g.save(); const lifted = c.ay - 6 * S - Hh - y > 2 * S;
+      if (lifted){ g.strokeStyle = '#1E2226'; g.lineWidth = 1.2 * S; g.beginPath(); g.moveTo(x + W / 2, y + Hh); g.lineTo(c.ax, c.ay); g.stroke(); g.fillStyle = '#1E2226'; g.beginPath(); g.arc(c.ax, c.ay, 2.2 * S, 0, 7); g.fill(); }
+      g.fillStyle = n === 1 && c.its[0].sig ? '#1E2226' : '#fff'; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, W, Hh, 9 * S) : g.rect(x, y, W, Hh); g.fill();
+      if (!lifted){ g.beginPath(); g.moveTo(x + W / 2 - 5 * S, y + Hh); g.lineTo(x + W / 2, y + Hh + 6 * S); g.lineTo(x + W / 2 + 5 * S, y + Hh); g.fill(); }
+      g.shadowBlur = 0;
+      c.its.forEach((it, i) => { const ix = x + pad + (i % cols) * (cw + gap), iy = y + pad + Math.floor(i / cols) * (ch + gap);
+        if (it.im?.complete && it.im.naturalWidth) g.drawImage(it.im, ix, iy, cw, ch);
+        else if (it.sig){ ['r', 'y', 'g'].forEach((k, j) => { g.fillStyle = it.st === k ? ({r:'#FF2A1A', y:'#FFB300', g:'#18E070'})[k] : '#3a3f45'; g.beginPath(); g.arc(ix + cw / 2, iy + ch * (0.2 + j * 0.3), Math.min(cw, ch) * 0.12, 0, 7); g.fill(); }); } });
+      g.restore(); } }
   for (const a of annos){ if (a.d.hidden || a.pin) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), cs = getComputedStyle(a.d);
     const x = (r.left - vr.left) * S, y = (r.top - vr.top) * S, ww = r.width * S, hh = r.height * S;
     g.save(); if (a.street && view === '2d'){ const t = a.d.style.transform.match(/rotate\(([-\d.]+)deg\)/); g.translate(x + ww / 2, y + hh / 2); if (t) g.rotate(+t[1] * Math.PI / 180); g.translate(-(x + ww / 2), -(y + hh / 2)); }
