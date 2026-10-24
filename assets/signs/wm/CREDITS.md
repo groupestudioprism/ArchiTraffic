@@ -1,11 +1,13 @@
 # Faces des panneaux : crédits
 
-Dessins issus de Wikimedia Commons, réutilisés sans modification sous leur licence d'origine. Les fichiers CC BY-SA restent sous CC BY-SA.
+Dessins issus de Wikimedia Commons, sous leur licence d'origine. AK1, AK15 et AK21 sont dérivés de A1a, A17 et A21 (fond passé en jaune) et restent sous CC BY-SA.
+Texte des panneaux dessinés par l'app : police Barlow Condensed (SIL Open Font License, assets/fonts/OFL-Barlow.txt).
 
 | Code | Auteur | Licence | Source |
 |---|---|---|---|
 | A13b | Roulex 45 | CC BY-SA 3.0 | [France road sign A13b.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A13b.svg) |
 | A14 | Roulex 45 | CC BY-SA 3.0 | [France road sign A14.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A14.svg) |
+| A17 | Roulex 45 | CC BY-SA 3.0 | [France road sign A17.svg](https://commons.wikimedia.org/wiki/File:France_road_sign_A17.svg) |
 | A18 | Roulex 45 | CC BY-SA 3.0 | [France road sign A18.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A18.svg) |
 | A19 | Roulex 45 | CC BY-SA 3.0 | [France road sign A19.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A19.svg) |
 | A1a | Roulex 45 | CC BY-SA 3.0 | [France road sign A1a.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A1a.svg) |
@@ -20,9 +22,12 @@ Dessins issus de Wikimedia Commons, réutilisés sans modification sous leur lic
 | AB4 | Roulex 45 | CC BY-SA 3.0 | [France road sign AB4.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AB4.svg) |
 | AB6 | Roulex 45 | CC BY-SA 3.0 | [France road sign AB6.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AB6.svg) |
 | AB7 | Roulex 45 | CC BY-SA 3.0 | [France road sign AB7.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AB7.svg) |
+| AK1 | Roulex 45 | CC BY-SA 3.0 | [France road sign A1a.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A1a.svg) — dérivé de A1a (fond jaune de signalisation temporaire) |
 | AK14 | Roulex 45 | CC BY-SA 3.0 | [France road sign AK14.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK14.svg) |
+| AK15 | Roulex 45 | CC BY-SA 3.0 | [France road sign A17.svg](https://commons.wikimedia.org/wiki/File:France_road_sign_A17.svg) — dérivé de A17 (fond jaune de signalisation temporaire) |
 | AK17 | Roulex 45 | CC BY-SA 3.0 | [France road sign AK17.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK17.svg) |
 | AK2 | Roulex 45 | CC BY-SA 3.0 | [France road sign AK2.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK2.svg) |
+| AK21 | Roulex 45 | CC BY-SA 3.0 | [France road sign A21.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_A21.svg) — dérivé de A21 (fond jaune de signalisation temporaire) |
 | AK22 | Mathgb | CC BY-SA 3.0 | [France road sign AK22.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK22.svg) |
 | AK3 | Roulex 45 | CC BY-SA 3.0 | [France road sign AK3.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK3.svg) |
 | AK30 | Mathgb | CC BY-SA 3.0 | [France road sign AK30.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_AK30.svg) |
@@ -43,7 +48,10 @@ Dessins issus de Wikimedia Commons, réutilisés sans modification sous leur lic
 | B16 | Roulex 45 | CC BY-SA 4.0 | [France road sign B16.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B16.svg) |
 | B18c | Roulex 45 | CC BY-SA 4.0 | [France road sign B18c.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B18c.svg) |
 | B19 | Roulex 45 | CC BY-SA 4.0 | [France road sign B19.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B19.svg) |
+| B21-1 | Roulex 45 | CC BY-SA 3.0 | [France road sign B21a1.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B21a1.svg) |
+| B21-2 | Roulex 45 | CC BY-SA 4.0 | [France road sign B21a2.svg](https://commons.wikimedia.org/wiki/File:France_road_sign_B21a2.svg) |
 | B21a1 | Roulex 45 | CC BY-SA 3.0 | [France road sign B21a1.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B21a1.svg) |
+| B21a2 | Roulex 45 | CC BY-SA 4.0 | [France road sign B21a2.svg](https://commons.wikimedia.org/wiki/File:France_road_sign_B21a2.svg) |
 | B21c1 | Roulex 45 | CC BY-SA 4.0 | [France road sign B21c1.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B21c1.svg) |
 | B21c2 | Roulex 45 | CC BY-SA 4.0 | [France road sign B21c2.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B21c2.svg) |
 | B21d1 | Roulex 45 | CC BY-SA 4.0 | [France road sign B21d1.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B21d1.svg) |
@@ -54,7 +62,9 @@ Dessins issus de Wikimedia Commons, réutilisés sans modification sous leur lic
 | B2a | Roulex 45 | CC BY-SA 3.0 | [France road sign B2a.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B2a.svg) |
 | B2b | Roulex 45 | CC BY-SA 4.0 | [France road sign B2b.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B2b.svg) |
 | B3 | Roulex 45 | CC BY-SA 4.0 | [France road sign B3.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B3.svg) |
+| B30 | Roulex 45 | CC BY-SA 4.0 | [France road sign B30 (30).svg](https://commons.wikimedia.org/wiki/File:France_road_sign_B30_(30).svg) |
 | B31 | Roulex 45 | CC BY-SA 3.0 | [France road sign B31.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B31.svg) |
+| B33 | Kilyann Le Hen | CC BY-SA 4.0 | [France road sign B33 (30).svg](https://commons.wikimedia.org/wiki/File:France_road_sign_B33_(30).svg) |
 | B34 | Roulex 45 | CC BY-SA 4.0 | [France road sign B34.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B34.svg) |
 | B4 | Roulex 45 | CC BY-SA 4.0 | [France road sign B4.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B4.svg) |
 | B45a | Roulex 45 | CC BY-SA 4.0 | [France road sign B45a.svg](https://commons.wikimedia.org/wiki/File%3AFrance_road_sign_B45a.svg) |

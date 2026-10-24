@@ -35,7 +35,7 @@ function narrows(g, side){ // AK3 / AK3a / AK3b
   g.strokeStyle = SC.blk; g.lineWidth = 13; g.lineCap = 'butt';
   const L = (sx, k) => { g.beginPath(); g.moveTo(128 + sx * 40, 200); g.lineTo(128 + sx * 40, 170); g.quadraticCurveTo(128 + sx * 40, 150, 128 + sx * (k ? 20 : 40), 132); g.lineTo(128 + sx * (k ? 20 : 40), 100); g.stroke(); };
   L(-1, side !== 1); L(1, side !== -1); }
-function textFit(g, txt, x, y, maxW, size, weight = 'bold', fam = 'Arial, Helvetica, sans-serif'){ let s = size; do { g.font = `${weight} ${s}px ${fam}`; s -= 2; } while (g.measureText(txt).width > maxW && s > 10); g.fillText(txt, x, y); }
+function textFit(g, txt, x, y, maxW, size, weight = 'bold', fam = 'SignFont, Arial Narrow, Arial, Helvetica, sans-serif'){ let s = size; do { g.font = `${weight} ${s}px ${fam}`; s -= 2; } while (g.measureText(txt).width > maxW && s > 10); g.fillText(txt, x, y); }
 
 /* catalogue des faces : forme, couleurs, dessin */
 const SIGNS = {
@@ -73,7 +73,7 @@ const SIGNS = {
   C12:{n:'Sens unique', s:'sq', draw:g => arrow(g, 128, 212, 128, 44, 32, 66, SC.wht)},
   C13a:{n:'Impasse', s:'sq', draw:g => { g.fillStyle = SC.wht; g.fillRect(108, 104, 40, 110); g.fillStyle = SC.red; g.fillRect(70, 62, 116, 42); }},
   C18:{n:'Priorité par rapport au sens inverse', s:'sq', draw:g => { arrow(g, 98, 200, 98, 60, 24, 48, SC.wht); arrow(g, 158, 56, 158, 196, 24, 48, SC.red); }},
-  KC1:{n:'Panneau de position (texte)', s:'rect', ak:1, ar:1.6, p:{t:'ROUTE BARRÉE'}, draw:(g, p, w, h) => { const L = String(p?.t || 'ROUTE BARRÉE').split(/\n|\|/).slice(0, 3), k = L.length === 1 ? 0.34 : L.length === 2 ? 0.27 : 0.21; g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; L.forEach((t, i) => textFit(g, t.toUpperCase(), w / 2, h / 2 + (i - (L.length - 1) / 2) * h * (k + 0.06), w - h * 0.22, Math.round(h * k), '900', 'Arial Narrow, Arial, Helvetica, sans-serif')); }},
+  KC1:{n:'Panneau de position (texte)', s:'rect', ak:1, ar:1.6, p:{t:'ROUTE BARRÉE'}, draw:(g, p, w, h) => { const L = String(p?.t || 'ROUTE BARRÉE').split(/\n|\|/).slice(0, 3), k = L.length === 1 ? 0.34 : L.length === 2 ? 0.27 : 0.21; g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; L.forEach((t, i) => textFit(g, t.toUpperCase(), w / 2, h / 2 + (i - (L.length - 1) / 2) * h * (k + 0.06), w - h * 0.22, Math.round(h * k), '900', 'SignFont, Arial Narrow, Arial, Helvetica, sans-serif')); }},
   KD22a:{n:'Déviation (vers la gauche)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.4, h / 2, w * 0.08, h / 2, h * 0.2, h * 0.36, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.66, h / 2, w * 0.56, Math.round(h * 0.3)); }},
   KD22b:{n:'Déviation (vers la droite)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.6, h / 2, w * 0.92, h / 2, h * 0.2, h * 0.36, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.34, h / 2, w * 0.56, Math.round(h * 0.3)); }},
   KD22c:{n:'Déviation (tout droit)', s:'rect', ak:1, ar:2.4, draw:(g, p, w, h) => { arrow(g, w * 0.14, h * 0.86, w * 0.14, h * 0.14, h * 0.2, h * 0.32, SC.blk); g.fillStyle = SC.blk; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'DÉVIATION', w * 0.6, h / 2, w * 0.7, Math.round(h * 0.3)); }},
@@ -85,12 +85,14 @@ const SIGNS = {
 /* dessin d'une face (canvas, fond transparent hors du panneau) */
 /* Faces officielles (SVG Wikimedia Commons, licences libres : voir assets/signs/wm/credits.json et « Crédits » dans l'app).
    Utilisées pour les panneaux sans texte variable ; les panneaux à texte (KC1 personnalisé, KD8, M1…) restent dessinés ici. */
-const WM_CODES = 'A13b A14 A18 A19 A1a A1c A21 A2b A4 AB1 AB2 AB25 AB3a AB4 AB6 AB7 AK14 AK17 AK2 AK22 AK3 AK30 AK31 AK32 AK3a AK3b AK4 AK5 B0 B1 B10a B11 B12 B13 B14 B15 B16 B18c B19 B21a1 B21c1 B21c2 B21d1 B21e B22a B22b B27a B2a B2b B3 B31 B34 B4 B45a B52 B54 B6a1 B6d B7b B8 B9a B9b B9g C107 C113 C12 C13a C18 C1a C20a C27 CE15a KC1'.split(' ');
+const WM_CODES = 'A13b A14 A18 A19 A1a A1c A21 A2b A4 AB1 AB2 AB25 AB3a AB4 AB6 AB7 AK14 AK17 AK2 AK22 AK3 AK30 AK31 AK32 AK3a AK3b AK4 AK5 B0 B1 B10a B11 B12 B13 B14 B15 B16 B18c B19 B21a1 B21c1 B21c2 B21d1 B21e B22a B22b B27a B2a B2b B3 B31 B34 B4 B45a B52 B54 B6a1 B6d B7b B8 B9a B9b B9g C107 C113 C12 C13a C18 C1a C20a C27 CE15a KC1 B21-1 B21-2 AK1 AK15 AK21 B30 B33'.split(' ');
 const WM_IMG = {}, wmKey = c => c.replace(/_(\d)$/, '-$1');
-const wmReady = Promise.all(WM_CODES.map(c => new Promise(res => { const im = new Image(); im.onload = () => { WM_IMG[c] = im; res(); }; im.onerror = () => res(); im.src = `assets/signs/wm/${c}.svg`; })));
+const signFont = (async () => { try { const f = new FontFace('SignFont', 'url(assets/fonts/BarlowCondensed-Bold.ttf)', {weight:'100 900'}); await f.load(); document.fonts.add(f); } catch(e){} })();   // Barlow Condensed (OFL), proche des caractères routiers
+const wmReady = Promise.all([signFont, ...WM_CODES.map(c => new Promise(res => { const im = new Image(); im.onload = () => { WM_IMG[c] = im; res(); }; im.onerror = () => res(); im.src = `assets/signs/wm/${c}.svg`; }))]);
 function wmFace(code, p){
   const S = SIGNS[code]; if (!S || S.base) return null; const im = WM_IMG[wmKey(code)]; if (!im) return null;
   const def = S.p || {}, pp = {...def, ...(p || {})};
+  if (code === 'B30' || code === 'B33') return String(pp.v ?? '30') === '30' ? im : null;
   if (code === 'KC1') return String(pp.t || '').trim().toUpperCase() === 'ROUTE BARRÉE' ? im : null;
   return Object.keys(pp).every(k => String(pp[k]) === String(def[k])) && !Object.keys(def).length ? im : null;
 }
@@ -109,7 +111,8 @@ function signCanvas(code, p = {}, px = 256){
     case 'blue': g.fillStyle = SC.wht; g.beginPath(); g.arc(128, 128, 124, 0, 7); g.fill(); g.fillStyle = SC.blue; g.beginPath(); g.arc(128, 128, 119, 0, 7); g.fill(); break;
     case 'oct': octPath(g, 126); g.fillStyle = SC.wht; g.fill(); octPath(g, 120); g.fillStyle = SC.red; g.fill(); g.fillStyle = SC.wht; g.textAlign = 'center'; g.textBaseline = 'middle'; textFit(g, 'STOP', 128, 132, 200, 84); break;
     case 'sq': rr(g, 4, 4, 248, 248, 22); g.fillStyle = SC.wht; g.fill(); rr(g, 12, 12, 232, 232, 16); g.fillStyle = SC.blue; g.fill(); break;
-    case 'rect': rr(g, 3, 3, w - 6, h - 6, h * 0.08); g.fillStyle = SC.wht; g.fill(); rr(g, h * 0.05, h * 0.05, w - h * 0.1, h - h * 0.1, h * 0.05); g.fillStyle = bg; g.fill(); break;
+    case 'rect': if (base.ak){ rr(g, 3, 3, w - 6, h - 6, h * 0.07); g.fillStyle = SC.yel; g.fill(); rr(g, h * 0.045, h * 0.045, w - h * 0.09, h - h * 0.09, h * 0.045); g.strokeStyle = SC.blk; g.lineWidth = Math.max(2, h * 0.025); g.stroke(); break; }   // panneaux K : fond jaune, filet noir (comme les modèles officiels)
+      rr(g, 3, 3, w - 6, h - 6, h * 0.08); g.fillStyle = SC.wht; g.fill(); rr(g, h * 0.05, h * 0.05, w - h * 0.1, h - h * 0.1, h * 0.05); g.fillStyle = bg; g.fill(); break;
   }
   (S.draw || base.draw)?.(g, pp, w, h); g.restore(); return cv;
 }

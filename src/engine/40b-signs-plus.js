@@ -18,7 +18,7 @@ function dimArrows(g, vert){ g.fillStyle = SC.blk; const T = (x, y, a) => { g.sa
   if (vert){ T(128, 70, Math.PI); T(128, 186, 0); } else { T(70, 128, Math.PI / 2); T(186, 128, -Math.PI / 2); } }
 function townBg(g, w, h, red = true){ rr(g, 3, 3, w - 6, h - 6, h * 0.08); g.fillStyle = SC.wht; g.fill(); g.strokeStyle = red ? SC.red : SC.blk; g.lineWidth = h * 0.07; rr(g, h * 0.08, h * 0.08, w - h * 0.16, h - h * 0.16, h * 0.05); g.stroke(); }
 function blueRect(g, w, h){ rr(g, 3, 3, w - 6, h - 6, h * 0.07); g.fillStyle = SC.wht; g.fill(); rr(g, h * 0.045, h * 0.045, w - h * 0.09, h - h * 0.09, h * 0.05); g.fillStyle = SC.blue; g.fill(); }
-const txtLines = (g, p, w, h, def, col = SC.blk, k0 = 0.3) => { const L = String(p?.t || def).split(/\n|\|/).slice(0, 3), k = L.length === 1 ? k0 : L.length === 2 ? k0 * 0.78 : k0 * 0.62; g.fillStyle = col; ctr(g); L.forEach((t, i) => textFit(g, t, w / 2, h / 2 + (i - (L.length - 1) / 2) * h * (k + 0.06), w - h * 0.25, Math.round(h * k), '800', 'Arial Narrow, Arial, Helvetica, sans-serif')); };
+const txtLines = (g, p, w, h, def, col = SC.blk, k0 = 0.3) => { const L = String(p?.t || def).split(/\n|\|/).slice(0, 3), k = L.length === 1 ? k0 : L.length === 2 ? k0 * 0.78 : k0 * 0.62; g.fillStyle = col; ctr(g); L.forEach((t, i) => textFit(g, t, w / 2, h / 2 + (i - (L.length - 1) / 2) * h * (k + 0.06), w - h * 0.25, Math.round(h * k), '800', 'SignFont, Arial Narrow, Arial, Helvetica, sans-serif')); };
 
 Object.assign(SIGNS, {
   /* ---- danger ---- */
