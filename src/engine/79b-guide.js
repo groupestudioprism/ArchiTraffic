@@ -35,6 +35,7 @@ function guideSpot(k){
   if (!r){ if (tip) tip.hidden = true; return; }
   el.classList.add('g-pulse'); if (!tip){ tip = document.createElement('div'); tip.id = 'gTip'; tip.className = 'g-tip'; tip.textContent = 'Cliquez ici'; document.body.appendChild(tip); }
   tip.hidden = false; const left = r.left > innerWidth / 2;
+  if (r.top < 80){ tip.className = 'g-tip to-t'; tip.style.top = (r.bottom + 10) + 'px'; tip.style.left = (r.left + r.width / 2 - 46) + 'px'; return; }   // bouton d'en-tête : repère en dessous
   tip.className = 'g-tip ' + (left ? 'to-r' : 'to-l'); tip.style.top = (r.top + r.height / 2 - 14) + 'px'; tip.style.left = left ? (r.left - 104) + 'px' : (r.right + 12) + 'px';
 }
 function renderGuide(){
@@ -107,6 +108,14 @@ function startTour(steps = TOUR, lsKey = 'at.tour'){
   const mk = (id, html, title) => { const b = document.createElement('button'); b.className = 'ib g-hdr'; b.id = id; b.type = 'button'; b.innerHTML = html; b.title = title; acts.insertBefore(b, $('#fileBtn')); return b; };
   mk('guideBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span>Guide</span>', 'Assistant pas à pas').onclick = () => { GUIDE_OPEN = !GUIDE_OPEN; LS.set('at.guide', GUIDE_OPEN ? '1' : '0'); guideKey = ''; renderGuide(); };
   mk('modeBtn', 'Mode simple', '').onclick = () => setSimple(!SIMPLE);
+  // contrôle réglementaire en continu : pastille dans l'en-tête, recalculée après chaque modification
+  const cb = mk('chkBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span>Contrôle</span><em id="chkN" hidden></em>', 'Contrôle réglementaire du chantier');
+  cb.onclick = () => { guideChecked = true; checkDialog(); };
+  let chkT = 0; const runChk = () => { clearTimeout(chkT); chkT = setTimeout(() => { try { if (!state || !WORLD){ $('#chkN').hidden = true; cb.className = 'ib g-hdr'; return; }
+    const r = siteChecks(), ne = r.filter(x => x.lvl === 'err').length, nw = r.filter(x => x.lvl === 'warn').length, n = ne + nw, any = r.some(x => x.lvl !== 'info');
+    const em = $('#chkN'); em.hidden = !n; em.textContent = n; cb.className = 'ib g-hdr' + (ne ? ' chk-err' : nw ? ' chk-warn' : any ? ' chk-ok' : '');
+    cb.title = ne || nw ? `Contrôle réglementaire : ${ne} erreur${ne > 1 ? 's' : ''}, ${nw} point${nw > 1 ? 's' : ''} à vérifier` : any ? 'Contrôle réglementaire : rien à signaler' : 'Contrôle réglementaire du chantier'; } catch(e){} }, 900); };
+  addEventListener('ap:changed', runChk); setInterval(() => { if (!$('#app')?.hidden) runChk(); }, 15000); runChk();
   applySimple();
   let wasOpen = false, sawHome = false, homeTourT = 0;
   setInterval(() => {   // suivi léger de l'avancement (pas d'abonnement aux nombreux points de modification du projet)

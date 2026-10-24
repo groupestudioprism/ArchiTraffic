@@ -3,6 +3,28 @@
    présignalisation AK5 (route barrée) ou AK3 (chaussée rétrécie) en amont, à ≈ 50 m en agglomération et ≈ 150 m hors agglomération ;
    barrage (K2 / KC1) à chaque entrée d'une route barrée ; alternat par feux KR11 aux deux extrémités (longueur ≤ 300 m conseillée) ;
    biseau de cônes K5a devant une voie neutralisée ; déviation jalonnée (KD22) pour chaque sens barré. */
+/* distance de présignalisation (AK5, AK3) selon la vitesse autorisée (IISR 8e partie, ordres de grandeur) */
+function presigDist(v, agglo){ return v <= 30 ? 30 : v <= 50 ? (agglo ? 50 : 100) : v <= 70 ? 100 : v <= 90 ? 150 : v <= 110 ? 200 : 300; }
+/* contrôles complémentaires sur les déviations : établissements sensibles, passages à niveau, voies de desserte, allongement */
+function regChecks(add, els, cls){
+  const W = WORLD?.W; if (!W) return;
+  const near = (pts, x, y, r) => { for (let i = 0; i + 1 < pts.length; i++){ const c = segClosest([x, y], pts[i], pts[i + 1]); if (V.dist(c.pt, [x, y]) <= r) return true; } return false; };
+  const SN = {school:'école', kindergarten:'école maternelle', college:'collège', hospital:'hôpital'};
+  for (const d of els.filter(e => e.t === 'detour' && e.pts?.length > 1)){
+    const at = plAt(d.pts, plLen(d.pts) / 2).pt, nm = d.name || 'Déviation';
+    const sens = (W.sens || []).filter(s => near(d.pts, s.x, s.y, 60)), seen = new Set();
+    for (const s of sens){ const k = s.k + s.name; if (seen.has(k)) continue; seen.add(k);
+      if (s.k === 'hospital') add('warn', `${nm} : passe devant ${s.name || 'un hôpital'} — prévenir l'établissement et les services d'urgence, garder l'accès des secours`, [s.x, s.y]);
+      else add('warn', `${nm} : passe devant ${s.name ? s.name : 'une ' + SN[s.k]} (${SN[s.k]}) — trafic détourné aux heures d'entrée et de sortie (≈ 8 h–9 h, 11 h 30–13 h 30, 16 h–17 h 30) : agent, horaires adaptés ou autre itinéraire`, [s.x, s.y]); }
+    if ((W.points || []).some(q => q.k === 'level_crossing' && near(d.pts, q.x, q.y, 12))) add('warn', `${nm} : franchit un passage à niveau — à éviter pour les poids lourds et les autocars (risque d'immobilisation)`, at);
+    const EK = new Map(NET.edges.map(e => [e.from + '|' + e.to, e])), roadsD = new Set(); (d.ids || []).forEach((id, k) => { const e = k && EK.get(d.ids[k - 1] + '|' + id); if (e && e.cls >= 6) roadsD.add(e.r); }); const desserte = roadsD.size;
+    if (desserte) add('warn', `${nm} : emprunte ${desserte} voie${desserte > 1 ? 's' : ''} de desserte ou résidentielle${desserte > 1 ? 's' : ''} — vérifier gabarit, stationnement et accord du gestionnaire`, at);
+    if ((d.extra || 0) > 2000) add('warn', `${nm} : allongement de ${fmtM(d.extra)} — informer transporteurs, bus et services de collecte`, at);
+  }
+  const days = state.meta?.from && state.meta?.to ? Math.round((new Date(state.meta.to) - new Date(state.meta.from)) / 864e5) + 1 : 0;
+  if (cls.length && !state.meta?.from) add('warn', 'Dates des travaux non renseignées : nécessaires pour l\'arrêté et l\'avis aux riverains', null);
+  if (days > 0 && days > 60) add('info', `Chantier de ${days} jours : un arrêté de plus de deux mois justifie souvent un affichage et une information renforcée des riverains`, null);
+}
 function siteChecks(){
   const out = [], els = state.els.filter(e => !phOff(e) && !e.hidden), objs = els.filter(e => e.t === 'obj'), near = (k, q, r) => objs.filter(o => k.test(o.k) && Math.hypot(o.x - q[0], o.y - q[1]) <= r);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null;
@@ -10,14 +32,14 @@ function siteChecks(){
   const cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1);
   if (!cls.length) add('info', 'Aucune route barrée dans cette vue : rien à contrôler côté signalisation.', null);
   for (const c of cls){
-    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, apD = agglo ? 100 : 150, name = c.name || 'Rue', L = c.len || plLen(c.pts);
+    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, vR = nearestRoad(mid, 15, false)?.r?.speed || (agglo ? 50 : 80), apD = presigDist(vR, agglo), name = c.name || 'Rue', L = c.len || plLen(c.pts);
     const ends = [c.pts[0], c.pts[c.pts.length - 1]];
     if (c.mode === 'total'){
       const ow = sectionOneway(c.ids);
       ends.forEach((q, i) => { if (ow !== 0 && (ow === 1) === (i === 1)) return; const lbl = `${name}, ${ow ? 'entrée (sens unique)' : `extrémité ${i ? 'B' : 'A'}`}`;
         if (!near(/^(K2|KR_ROUTE|KC1|barr|K8)/i, q, 15).length) add('err', `${lbl} : pas de barrage (K2 ou KC1) à l'entrée`, q); else add('ok', `${lbl} : barrage en place`, q);
-        const ak = near(/^AK5$/, q, apD * 2.2); if (!ak.length) add('err', `${lbl} : présignalisation AK5 manquante (≈ ${apD} m en amont)`, q);
-        else { const d = Math.min(...ak.map(o => Math.hypot(o.x - q[0], o.y - q[1]))); if (d < apD * 0.6) add('warn', `${lbl} : AK5 trop proche (${Math.round(d)} m, viser ≈ ${apD} m)`, q); else add('ok', `${lbl} : AK5 à ${Math.round(d)} m`, q); } });
+        const ak = near(/^AK5$/, q, Math.max(apD * 3, 220)); if (!ak.length) add('err', `${lbl} : présignalisation AK5 manquante (≈ ${apD} m en amont, route à ${vR} km/h)`, q);
+        else { const d = Math.min(...ak.map(o => Math.hypot(o.x - q[0], o.y - q[1]))); if (d < apD * 0.6) add('warn', `${lbl} : AK5 trop proche (${Math.round(d)} m, viser ≈ ${apD} m à ${vR} km/h)`, q); else if (d > apD * 2.5 && d > 60) add('warn', `${lbl} : AK5 loin du chantier (${Math.round(d)} m, viser ≈ ${apD} m à ${vR} km/h)`, q); else add('ok', `${lbl} : AK5 à ${Math.round(d)} m (≈ ${apD} m attendus à ${vR} km/h)`, q); } });
       const dets = els.filter(d => d.t === 'detour' && d.cl === c.id);
       if (!dets.length) add('err', `${name} : aucune déviation (itinéraire à prévoir ou accès riverains seuls)`, mid);
       else { for (const d of dets){ const kd = objs.filter(o => /^KD/.test(o.k) && o.auto === c.id).length; if (!kd) add('warn', `${d.name} : déviation sans panneau KD22 de jalonnement`, plAt(d.pts, plLen(d.pts) / 2).pt); else add('ok', `${d.name} : ${kd} panneau${kd > 1 ? 'x' : ''} de jalonnement, +${fmtM(d.extra || 0)}`, null); }
@@ -36,7 +58,7 @@ function siteChecks(){
     }
   }
   for (const c of cls) if (c.mode === 'alternat'){ const A = alternatAdvice(c); add(A.mode === 'impossible' ? 'err' : 'info', `${c.name} — alternat : ${A.txt}`, plAt(c.pts, plLen(c.pts) / 2).pt); }
-  extraChecks(add, els); pedChecks(add, els);
+  extraChecks(add, els); pedChecks(add, els); regChecks(add, els, cls);
   // panneaux trop proches les uns des autres (lisibilité : ≥ 10 m entre deux panneaux successifs d'un même côté)
   const signs = objs.filter(o => LIBK[o.k]?.sign && !/^K5|^K2$/.test(o.k)); let close = 0;
   for (let i = 0; i < signs.length; i++) for (let j = i + 1; j < signs.length; j++){ const d = Math.hypot(signs[i].x - signs[j].x, signs[i].y - signs[j].y); if (d > 0.5 && d < 4 && Math.abs(((signs[i].a - signs[j].a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.5) close++; }

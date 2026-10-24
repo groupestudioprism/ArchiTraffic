@@ -259,7 +259,7 @@ function autoSigns(cl){
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id, ph:cl.ph});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
-  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 100 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
+  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = presigDist(nearestRoad(mid, 15, false)?.r?.speed || (agglo ? 50 : 80), agglo), taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
     if (lane && ((cl.dir === -1) === (i === 0))) return;
     const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement

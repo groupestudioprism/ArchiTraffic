@@ -1155,6 +1155,10 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
 .tr-it span{min-width:0}.tr-it b{display:block;font-size:13.5px;font-weight:600}.tr-it small{display:block;color:var(--mut);font-size:12px}
 .tr-it.ok{opacity:.55}.tr-it.ok b{text-decoration:line-through}.tr-acts{display:flex;gap:6px;flex:none}.tr-acts .btn{padding:6px 10px;font-size:12.5px;text-decoration:none}
 @media (max-width:760px){.tr-list{max-height:none}.tr-acts{flex-direction:column}}
+
+#chkBtn{position:relative}#chkBtn em{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:inline-grid;place-items:center;font:700 11px var(--f-body);color:#fff;background:#8C939B}
+#chkBtn.chk-err em{background:#C62828}#chkBtn.chk-warn em{background:#E08A00}#chkBtn.chk-ok svg{color:#18A058}
+.g-tip.to-t::after{left:50%;top:-4px;transform:translateX(-50%) rotate(45deg)}.g-tip.to-t{animation:none}
 /* Menu contextuel Studio Prism (clic droit / appui long) — même rendu dans toutes les apps ; couleurs reprises des variables du thème */
 .pctx{position:fixed;z-index:90;min-width:220px;max-width:min(340px,calc(100vw - 12px));max-height:calc(100vh - 12px);overflow:auto;padding:5px;border-radius:12px;
   background:var(--panel,#fff);color:var(--ink,#111827);border:1px solid var(--line,#DCE7EF);box-shadow:0 14px 38px rgb(7 27 85 / .22),0 2px 6px rgb(7 27 85 / .10);
@@ -6752,7 +6756,7 @@ function autoSigns(cl){
   const add = (k, q, a, p) => state.els.push({id:uid8(), t:'obj', k, x:q[0], y:q[1], a, p, auto:cl.id, ph:cl.ph});
   const ends = [[cl.pts[0], cl.pts[1]], [cl.pts[cl.pts.length - 1], cl.pts[cl.pts.length - 2]]], w = closureWidth(cl);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null, mid = plAt(cl.pts, plLen(cl.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2;
-  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = agglo ? 100 : 150, taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
+  const lane = cl.mode === 'sens' || cl.mode === 'voie', sd = cl.mode === 'voie' ? (cl.side || 1) : 1, apD = presigDist(nearestRoad(mid, 15, false)?.r?.speed || (agglo ? 50 : 80), agglo), taper = agglo ? 15 : 50;   // AK5 : ~50 m en agglomération, ~150 m hors agglomération (IISR 8e partie)
   ends.forEach(([A, B], i) => {
     if (lane && ((cl.dir === -1) === (i === 0))) return;
     const owc = sectionOneway(cl.ids); if (!lane && cl.mode === 'total' && owc !== 0 && (owc === 1) === (i === 1)) return;   // sens unique : signalisation seulement à l'entrée        // voie neutralisée : signalisation à l'entrée du sens concerné seulement
@@ -7542,6 +7546,28 @@ function autoPhasing(){
    présignalisation AK5 (route barrée) ou AK3 (chaussée rétrécie) en amont, à ≈ 50 m en agglomération et ≈ 150 m hors agglomération ;
    barrage (K2 / KC1) à chaque entrée d'une route barrée ; alternat par feux KR11 aux deux extrémités (longueur ≤ 300 m conseillée) ;
    biseau de cônes K5a devant une voie neutralisée ; déviation jalonnée (KD22) pour chaque sens barré. */
+/* distance de présignalisation (AK5, AK3) selon la vitesse autorisée (IISR 8e partie, ordres de grandeur) */
+function presigDist(v, agglo){ return v <= 30 ? 30 : v <= 50 ? (agglo ? 50 : 100) : v <= 70 ? 100 : v <= 90 ? 150 : v <= 110 ? 200 : 300; }
+/* contrôles complémentaires sur les déviations : établissements sensibles, passages à niveau, voies de desserte, allongement */
+function regChecks(add, els, cls){
+  const W = WORLD?.W; if (!W) return;
+  const near = (pts, x, y, r) => { for (let i = 0; i + 1 < pts.length; i++){ const c = segClosest([x, y], pts[i], pts[i + 1]); if (V.dist(c.pt, [x, y]) <= r) return true; } return false; };
+  const SN = {school:'école', kindergarten:'école maternelle', college:'collège', hospital:'hôpital'};
+  for (const d of els.filter(e => e.t === 'detour' && e.pts?.length > 1)){
+    const at = plAt(d.pts, plLen(d.pts) / 2).pt, nm = d.name || 'Déviation';
+    const sens = (W.sens || []).filter(s => near(d.pts, s.x, s.y, 60)), seen = new Set();
+    for (const s of sens){ const k = s.k + s.name; if (seen.has(k)) continue; seen.add(k);
+      if (s.k === 'hospital') add('warn', `${nm} : passe devant ${s.name || 'un hôpital'} — prévenir l'établissement et les services d'urgence, garder l'accès des secours`, [s.x, s.y]);
+      else add('warn', `${nm} : passe devant ${s.name ? s.name : 'une ' + SN[s.k]} (${SN[s.k]}) — trafic détourné aux heures d'entrée et de sortie (≈ 8 h–9 h, 11 h 30–13 h 30, 16 h–17 h 30) : agent, horaires adaptés ou autre itinéraire`, [s.x, s.y]); }
+    if ((W.points || []).some(q => q.k === 'level_crossing' && near(d.pts, q.x, q.y, 12))) add('warn', `${nm} : franchit un passage à niveau — à éviter pour les poids lourds et les autocars (risque d'immobilisation)`, at);
+    const EK = new Map(NET.edges.map(e => [e.from + '|' + e.to, e])), roadsD = new Set(); (d.ids || []).forEach((id, k) => { const e = k && EK.get(d.ids[k - 1] + '|' + id); if (e && e.cls >= 6) roadsD.add(e.r); }); const desserte = roadsD.size;
+    if (desserte) add('warn', `${nm} : emprunte ${desserte} voie${desserte > 1 ? 's' : ''} de desserte ou résidentielle${desserte > 1 ? 's' : ''} — vérifier gabarit, stationnement et accord du gestionnaire`, at);
+    if ((d.extra || 0) > 2000) add('warn', `${nm} : allongement de ${fmtM(d.extra)} — informer transporteurs, bus et services de collecte`, at);
+  }
+  const days = state.meta?.from && state.meta?.to ? Math.round((new Date(state.meta.to) - new Date(state.meta.from)) / 864e5) + 1 : 0;
+  if (cls.length && !state.meta?.from) add('warn', 'Dates des travaux non renseignées : nécessaires pour l\'arrêté et l\'avis aux riverains', null);
+  if (days > 0 && days > 60) add('info', `Chantier de ${days} jours : un arrêté de plus de deux mois justifie souvent un affichage et une information renforcée des riverains`, null);
+}
 function siteChecks(){
   const out = [], els = state.els.filter(e => !phOff(e) && !e.hidden), objs = els.filter(e => e.t === 'obj'), near = (k, q, r) => objs.filter(o => k.test(o.k) && Math.hypot(o.x - q[0], o.y - q[1]) <= r);
   const urbF = WORLD ? urbanIndex(WORLD.W) : null;
@@ -7549,14 +7575,14 @@ function siteChecks(){
   const cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1);
   if (!cls.length) add('info', 'Aucune route barrée dans cette vue : rien à contrôler côté signalisation.', null);
   for (const c of cls){
-    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, apD = agglo ? 100 : 150, name = c.name || 'Rue', L = c.len || plLen(c.pts);
+    const mid = plAt(c.pts, plLen(c.pts) / 2).pt, agglo = !urbF || urbF(mid[0], mid[1]) >= 2, vR = nearestRoad(mid, 15, false)?.r?.speed || (agglo ? 50 : 80), apD = presigDist(vR, agglo), name = c.name || 'Rue', L = c.len || plLen(c.pts);
     const ends = [c.pts[0], c.pts[c.pts.length - 1]];
     if (c.mode === 'total'){
       const ow = sectionOneway(c.ids);
       ends.forEach((q, i) => { if (ow !== 0 && (ow === 1) === (i === 1)) return; const lbl = `${name}, ${ow ? 'entrée (sens unique)' : `extrémité ${i ? 'B' : 'A'}`}`;
         if (!near(/^(K2|KR_ROUTE|KC1|barr|K8)/i, q, 15).length) add('err', `${lbl} : pas de barrage (K2 ou KC1) à l'entrée`, q); else add('ok', `${lbl} : barrage en place`, q);
-        const ak = near(/^AK5$/, q, apD * 2.2); if (!ak.length) add('err', `${lbl} : présignalisation AK5 manquante (≈ ${apD} m en amont)`, q);
-        else { const d = Math.min(...ak.map(o => Math.hypot(o.x - q[0], o.y - q[1]))); if (d < apD * 0.6) add('warn', `${lbl} : AK5 trop proche (${Math.round(d)} m, viser ≈ ${apD} m)`, q); else add('ok', `${lbl} : AK5 à ${Math.round(d)} m`, q); } });
+        const ak = near(/^AK5$/, q, Math.max(apD * 3, 220)); if (!ak.length) add('err', `${lbl} : présignalisation AK5 manquante (≈ ${apD} m en amont, route à ${vR} km/h)`, q);
+        else { const d = Math.min(...ak.map(o => Math.hypot(o.x - q[0], o.y - q[1]))); if (d < apD * 0.6) add('warn', `${lbl} : AK5 trop proche (${Math.round(d)} m, viser ≈ ${apD} m à ${vR} km/h)`, q); else if (d > apD * 2.5 && d > 60) add('warn', `${lbl} : AK5 loin du chantier (${Math.round(d)} m, viser ≈ ${apD} m à ${vR} km/h)`, q); else add('ok', `${lbl} : AK5 à ${Math.round(d)} m (≈ ${apD} m attendus à ${vR} km/h)`, q); } });
       const dets = els.filter(d => d.t === 'detour' && d.cl === c.id);
       if (!dets.length) add('err', `${name} : aucune déviation (itinéraire à prévoir ou accès riverains seuls)`, mid);
       else { for (const d of dets){ const kd = objs.filter(o => /^KD/.test(o.k) && o.auto === c.id).length; if (!kd) add('warn', `${d.name} : déviation sans panneau KD22 de jalonnement`, plAt(d.pts, plLen(d.pts) / 2).pt); else add('ok', `${d.name} : ${kd} panneau${kd > 1 ? 'x' : ''} de jalonnement, +${fmtM(d.extra || 0)}`, null); }
@@ -7575,7 +7601,7 @@ function siteChecks(){
     }
   }
   for (const c of cls) if (c.mode === 'alternat'){ const A = alternatAdvice(c); add(A.mode === 'impossible' ? 'err' : 'info', `${c.name} — alternat : ${A.txt}`, plAt(c.pts, plLen(c.pts) / 2).pt); }
-  extraChecks(add, els); pedChecks(add, els);
+  extraChecks(add, els); pedChecks(add, els); regChecks(add, els, cls);
   // panneaux trop proches les uns des autres (lisibilité : ≥ 10 m entre deux panneaux successifs d'un même côté)
   const signs = objs.filter(o => LIBK[o.k]?.sign && !/^K5|^K2$/.test(o.k)); let close = 0;
   for (let i = 0; i < signs.length; i++) for (let j = i + 1; j < signs.length; j++){ const d = Math.hypot(signs[i].x - signs[j].x, signs[i].y - signs[j].y); if (d > 0.5 && d < 4 && Math.abs(((signs[i].a - signs[j].a + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) < 0.5) close++; }
@@ -8182,6 +8208,7 @@ function guideSpot(k){
   if (!r){ if (tip) tip.hidden = true; return; }
   el.classList.add('g-pulse'); if (!tip){ tip = document.createElement('div'); tip.id = 'gTip'; tip.className = 'g-tip'; tip.textContent = 'Cliquez ici'; document.body.appendChild(tip); }
   tip.hidden = false; const left = r.left > innerWidth / 2;
+  if (r.top < 80){ tip.className = 'g-tip to-t'; tip.style.top = (r.bottom + 10) + 'px'; tip.style.left = (r.left + r.width / 2 - 46) + 'px'; return; }   // bouton d'en-tête : repère en dessous
   tip.className = 'g-tip ' + (left ? 'to-r' : 'to-l'); tip.style.top = (r.top + r.height / 2 - 14) + 'px'; tip.style.left = left ? (r.left - 104) + 'px' : (r.right + 12) + 'px';
 }
 function renderGuide(){
@@ -8254,6 +8281,14 @@ function startTour(steps = TOUR, lsKey = 'at.tour'){
   const mk = (id, html, title) => { const b = document.createElement('button'); b.className = 'ib g-hdr'; b.id = id; b.type = 'button'; b.innerHTML = html; b.title = title; acts.insertBefore(b, $('#fileBtn')); return b; };
   mk('guideBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg><span>Guide</span>', 'Assistant pas à pas').onclick = () => { GUIDE_OPEN = !GUIDE_OPEN; LS.set('at.guide', GUIDE_OPEN ? '1' : '0'); guideKey = ''; renderGuide(); };
   mk('modeBtn', 'Mode simple', '').onclick = () => setSimple(!SIMPLE);
+  // contrôle réglementaire en continu : pastille dans l'en-tête, recalculée après chaque modification
+  const cb = mk('chkBtn', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span>Contrôle</span><em id="chkN" hidden></em>', 'Contrôle réglementaire du chantier');
+  cb.onclick = () => { guideChecked = true; checkDialog(); };
+  let chkT = 0; const runChk = () => { clearTimeout(chkT); chkT = setTimeout(() => { try { if (!state || !WORLD){ $('#chkN').hidden = true; cb.className = 'ib g-hdr'; return; }
+    const r = siteChecks(), ne = r.filter(x => x.lvl === 'err').length, nw = r.filter(x => x.lvl === 'warn').length, n = ne + nw, any = r.some(x => x.lvl !== 'info');
+    const em = $('#chkN'); em.hidden = !n; em.textContent = n; cb.className = 'ib g-hdr' + (ne ? ' chk-err' : nw ? ' chk-warn' : any ? ' chk-ok' : '');
+    cb.title = ne || nw ? `Contrôle réglementaire : ${ne} erreur${ne > 1 ? 's' : ''}, ${nw} point${nw > 1 ? 's' : ''} à vérifier` : any ? 'Contrôle réglementaire : rien à signaler' : 'Contrôle réglementaire du chantier'; } catch(e){} }, 900); };
+  addEventListener('ap:changed', runChk); setInterval(() => { if (!$('#app')?.hidden) runChk(); }, 15000); runChk();
   applySimple();
   let wasOpen = false, sawHome = false, homeTourT = 0;
   setInterval(() => {   // suivi léger de l'avancement (pas d'abonnement aux nombreux points de modification du projet)
