@@ -8,6 +8,7 @@
   var anims = [], endAt = T0 + EXIT, hiding = false, closed = false, hideT = 0, played = false;
   function q(s){ return sp.querySelector(s); }
   function qa(s){ return [].slice.call(sp.querySelectorAll(s)); }
+  try { var _c = sp.querySelector('.sp-bob svg'); if (_c) window.__spCarSVG = _c.outerHTML; } catch(e){}   // gardée pour l'écran de chargement (le splash est retiré ensuite)
   function fit(){ try { stage.style.setProperty('--k', (stage.offsetWidth / 1200).toFixed(5)); } catch(e){} }
   function A(el, kf, o){ if (!el) return null; o.fill = o.fill || 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
   function cancelAll(){ anims.forEach(function(a){ try { a.cancel(); } catch(e){} }); anims = []; }

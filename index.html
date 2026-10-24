@@ -1171,6 +1171,16 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
 #chkBtn{position:relative}#chkBtn em{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:inline-grid;place-items:center;font:700 11px var(--f-body);color:#fff;background:#8C939B}
 #chkBtn.chk-err em{background:#C62828}#chkBtn.chk-warn em{background:#E08A00}#chkBtn.chk-ok svg{color:#18A058}
 .g-tip.to-t::after{left:50%;top:-4px;transform:translateX(-50%) rotate(45deg)}.g-tip.to-t{animation:none}
+
+/* chargement : la voiture de l'intro roule sur la barre */
+.lb-road{position:relative;display:block;padding-top:22px}
+.lb-car{position:absolute;top:0;left:0;width:58px;height:26px;transform:translateX(-50%);transition:left .12s linear;pointer-events:none}
+.lb-car svg{display:block;width:58px;height:26px;overflow:visible}
+.lb-car .sp-wh{animation:lbWheel .6s linear infinite}
+@keyframes lbWheel{to{transform:rotate(360deg)}}
+.loadbox .lb-road .lb-bar{margin-top:0}
+@media (prefers-reduced-motion:reduce){.lb-car .sp-wh{animation:none}}
+.loadveil .loadbox>.ap-spin{display:none}
 /* Menu contextuel Studio Prism (clic droit / appui long) — même rendu dans toutes les apps ; couleurs reprises des variables du thème */
 .pctx{position:fixed;z-index:90;min-width:220px;max-width:min(340px,calc(100vw - 12px));max-height:calc(100vh - 12px);overflow:auto;padding:5px;border-radius:12px;
   background:var(--panel,#fff);color:var(--ink,#111827);border:1px solid var(--line,#DCE7EF);box-shadow:0 14px 38px rgb(7 27 85 / .22),0 2px 6px rgb(7 27 85 / .10);
@@ -1256,6 +1266,7 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
   var anims = [], endAt = T0 + EXIT, hiding = false, closed = false, hideT = 0, played = false;
   function q(s){ return sp.querySelector(s); }
   function qa(s){ return [].slice.call(sp.querySelectorAll(s)); }
+  try { var _c = sp.querySelector('.sp-bob svg'); if (_c) window.__spCarSVG = _c.outerHTML; } catch(e){}   // gardée pour l'écran de chargement (le splash est retiré ensuite)
   function fit(){ try { stage.style.setProperty('--k', (stage.offsetWidth / 1200).toFixed(5)); } catch(e){} }
   function A(el, kf, o){ if (!el) return null; o.fill = o.fill || 'both'; var a = el.animate(kf, o); anims.push(a); return a; }
   function cancelAll(){ anims.forEach(function(a){ try { a.cancel(); } catch(e){} }); anims = []; }
@@ -1390,7 +1401,7 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
     <div class="compass" aria-hidden="true"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="20"/><g id="cmpG"><path class="nn" d="M22 9l4.5 13h-9z"/><path class="ns" d="M22 35l4.5-13h-9z"/><text x="22" y="8.2" text-anchor="middle">N</text></g></svg></div>
     <div class="loadveil" id="loadBox" hidden role="dialog" aria-modal="true" aria-labelledby="loadTitle">
       <i class="lv-blob b1" aria-hidden="true"></i><i class="lv-blob b2" aria-hidden="true"></i><i class="lv-blob b3" aria-hidden="true"></i>
-      <div class="loadbox"><div class="ap-spin" aria-hidden="true"></div><div class="lb-txt"><b id="loadTitle">Chargement</b><span id="loadStep"></span><i class="lb-bar"><i id="loadBar"></i></i><em id="loadPct">0 %</em></div>
+      <div class="loadbox"><div class="ap-spin" aria-hidden="true"></div><div class="lb-txt"><b id="loadTitle">Chargement</b><span id="loadStep"></span><span class="lb-road"><span class="lb-car" id="loadCar" aria-hidden="true"></span><i class="lb-bar"><i id="loadBar"></i></i></span><em id="loadPct">0 %</em></div>
         <button class="lb-stop" id="loadStop" type="button">Arrêter</button></div>
     </div>
   </main>
@@ -5839,6 +5850,9 @@ let LOAD_STOP = null;   // action du bouton « Arrêter » pour le chargement en
   for (const t of ['keydown', 'keyup', 'keypress', 'wheel', 'pointerdown', 'mousedown', 'touchstart', 'contextmenu', 'dblclick', 'click']) window.addEventListener(t, block, {capture:true, passive:false});
   $('#loadStop')?.addEventListener('click', () => { const f = LOAD_STOP; LOAD_STOP = null; LB.real = 1; b.hidden = true; clearInterval(LB.raf); LB.raf = 0; $('#app')?.removeAttribute('inert'); f?.(); });
 })();
+/* voiture de l'intro, reprise en petit au-dessus de la barre de chargement (elle avance avec la progression) */
+function lbCar(el){ const html = window.__spCarSVG || document.querySelector('#splash .sp-bob svg')?.outerHTML; if (!html) return; const box = document.createElement('div'); box.innerHTML = html.replace(/\b(id="|url\(#)sp/g, '$1lb'); const c = box.firstElementChild; if (!c) return;
+  c.querySelectorAll('.sp-beam,.sp-speed,.sp-puffs,.sp-brake').forEach(n => n.remove()); c.removeAttribute('width'); c.removeAttribute('height'); c.removeAttribute('style'); c.querySelectorAll('[style]').forEach(n => n.removeAttribute('style')); el.appendChild(c); }
 function loadUI(on, title = '', step = '', pct = 0){
   const b = $('#loadBox'), app = $('#app');
   if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; app?.removeAttribute('inert'); LOAD_STOP = null; } }, 260); return; }
@@ -5849,7 +5863,7 @@ function loadUI(on, title = '', step = '', pct = 0){
       const cap = LB.real >= 1 ? 1 : Math.min(0.95, LB.real + Math.min(0.3, 0.1 + (now - LB.rt) / 1000 * 0.008));   // l'avance d'attente grandit doucement avec le temps, plafonnée
       if (LB.shown < LB.real - 0.004) LB.shown += (LB.real - LB.shown) * Math.min(1, dt * 6);   // rattrapage rapide
       else if (LB.shown < cap) LB.shown += (cap - LB.shown) * dt * 0.6;                 // progression d'attente, de plus en plus lente
-      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
+      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; const lc = $('#loadCar'); if (lc){ lc.style.left = (LB.shown * 100).toFixed(1) + '%'; if (!lc.firstChild) lbCar(lc); } $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
       if (now - LB.st > 3500 && LB.real < 0.8){ LB.st = now; $('#loadStep').textContent = LB_MSG[LB.k++ % LB_MSG.length]; }   // rien de neuf depuis 3,5 s : on montre ce qui se charge
       if (b.hidden){ clearInterval(LB.raf); LB.raf = 0; } };
     LB.raf = setInterval(tick, 40); tick(); }
@@ -8661,7 +8675,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; if (window.__spHide){ window.__spHide(); return; } const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {checks:() => siteChecks().map(r => r.lvl + ' ' + r.txt), pedDev:() => { const c = state.els.find(e => e.t === 'closure'); edit(() => { c.ped = 'devie'; pedDetour(c); }); return state.els.filter(e => e.t === 'pdetour').length; }, roadFix:(id, f) => { state.roadFix ||= {}; if (f) state.roadFix[id] = f; else delete state.roadFix[id]; refreshRoadFix(true); return state.els.filter(e => e.t === 'detour').map(d => d.ids?.join(',')); }, roads:() => NET.roads.map((r, i) => [r.id, r.name, r.drive]), runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {loadUI:(...a) => loadUI(...a), checks:() => siteChecks().map(r => r.lvl + ' ' + r.txt), pedDev:() => { const c = state.els.find(e => e.t === 'closure'); edit(() => { c.ped = 'devie'; pedDetour(c); }); return state.els.filter(e => e.t === 'pdetour').length; }, roadFix:(id, f) => { state.roadFix ||= {}; if (f) state.roadFix[id] = f; else delete state.roadFix[id]; refreshRoadFix(true); return state.els.filter(e => e.t === 'detour').map(d => d.ids?.join(',')); }, roads:() => NET.roads.map((r, i) => [r.id, r.name, r.drive]), runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;

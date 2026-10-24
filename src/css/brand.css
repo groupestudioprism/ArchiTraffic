@@ -297,3 +297,13 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
 #chkBtn{position:relative}#chkBtn em{font-style:normal;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:inline-grid;place-items:center;font:700 11px var(--f-body);color:#fff;background:#8C939B}
 #chkBtn.chk-err em{background:#C62828}#chkBtn.chk-warn em{background:#E08A00}#chkBtn.chk-ok svg{color:#18A058}
 .g-tip.to-t::after{left:50%;top:-4px;transform:translateX(-50%) rotate(45deg)}.g-tip.to-t{animation:none}
+
+/* chargement : la voiture de l'intro roule sur la barre */
+.lb-road{position:relative;display:block;padding-top:22px}
+.lb-car{position:absolute;top:0;left:0;width:58px;height:26px;transform:translateX(-50%);transition:left .12s linear;pointer-events:none}
+.lb-car svg{display:block;width:58px;height:26px;overflow:visible}
+.lb-car .sp-wh{animation:lbWheel .6s linear infinite}
+@keyframes lbWheel{to{transform:rotate(360deg)}}
+.loadbox .lb-road .lb-bar{margin-top:0}
+@media (prefers-reduced-motion:reduce){.lb-car .sp-wh{animation:none}}
+.loadveil .loadbox>.ap-spin{display:none}

@@ -38,6 +38,9 @@ let LOAD_STOP = null;   // action du bouton « Arrêter » pour le chargement en
   for (const t of ['keydown', 'keyup', 'keypress', 'wheel', 'pointerdown', 'mousedown', 'touchstart', 'contextmenu', 'dblclick', 'click']) window.addEventListener(t, block, {capture:true, passive:false});
   $('#loadStop')?.addEventListener('click', () => { const f = LOAD_STOP; LOAD_STOP = null; LB.real = 1; b.hidden = true; clearInterval(LB.raf); LB.raf = 0; $('#app')?.removeAttribute('inert'); f?.(); });
 })();
+/* voiture de l'intro, reprise en petit au-dessus de la barre de chargement (elle avance avec la progression) */
+function lbCar(el){ const html = window.__spCarSVG || document.querySelector('#splash .sp-bob svg')?.outerHTML; if (!html) return; const box = document.createElement('div'); box.innerHTML = html.replace(/\b(id="|url\(#)sp/g, '$1lb'); const c = box.firstElementChild; if (!c) return;
+  c.querySelectorAll('.sp-beam,.sp-speed,.sp-puffs,.sp-brake').forEach(n => n.remove()); c.removeAttribute('width'); c.removeAttribute('height'); c.removeAttribute('style'); c.querySelectorAll('[style]').forEach(n => n.removeAttribute('style')); el.appendChild(c); }
 function loadUI(on, title = '', step = '', pct = 0){
   const b = $('#loadBox'), app = $('#app');
   if (!on){ if (b.hidden) return; LB.real = 1; setTimeout(() => { if (LB.real >= 1){ b.hidden = true; clearInterval(LB.raf); LB.raf = 0; app?.removeAttribute('inert'); LOAD_STOP = null; } }, 260); return; }
@@ -48,7 +51,7 @@ function loadUI(on, title = '', step = '', pct = 0){
       const cap = LB.real >= 1 ? 1 : Math.min(0.95, LB.real + Math.min(0.3, 0.1 + (now - LB.rt) / 1000 * 0.008));   // l'avance d'attente grandit doucement avec le temps, plafonnée
       if (LB.shown < LB.real - 0.004) LB.shown += (LB.real - LB.shown) * Math.min(1, dt * 6);   // rattrapage rapide
       else if (LB.shown < cap) LB.shown += (cap - LB.shown) * dt * 0.6;                 // progression d'attente, de plus en plus lente
-      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
+      $('#loadBar').style.width = (LB.shown * 100).toFixed(1) + '%'; const lc = $('#loadCar'); if (lc){ lc.style.left = (LB.shown * 100).toFixed(1) + '%'; if (!lc.firstChild) lbCar(lc); } $('#loadPct').textContent = Math.floor(LB.shown * 100) + ' %';
       if (now - LB.st > 3500 && LB.real < 0.8){ LB.st = now; $('#loadStep').textContent = LB_MSG[LB.k++ % LB_MSG.length]; }   // rien de neuf depuis 3,5 s : on montre ce qui se charge
       if (b.hidden){ clearInterval(LB.raf); LB.raf = 0; } };
     LB.raf = setInterval(tick, 40); tick(); }
