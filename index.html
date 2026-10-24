@@ -3794,6 +3794,60 @@ function routeTurns(ids, startDir = null){
   return out;
 }
 
+/* ==== 13-roadfix.js ==== */
+/* ============ Corrections de rues ============
+   Les données OpenStreetMap sont parfois fausses ou incomplètes (sens unique, vitesse, interdiction aux poids lourds, largeur).
+   L'utilisateur corrige la rue dans son chantier : la correction est enregistrée dans le projet (state.roadFix, par identifiant
+   de voie OSM), appliquée au réseau avant chaque calcul, et les déviations peuvent être recalculées. */
+function applyRoadFix(W){
+  const F = (typeof state !== 'undefined' && state?.roadFix) || {};
+  for (const r of W.roads){
+    if (!r._o) r._o = {oneway:r.oneway, speed:r.speed, w:r.w, drive:r.drive, hgv:r.tags?.hgv};
+    Object.assign(r, {oneway:r._o.oneway, speed:r._o.speed, w:r._o.w, drive:r._o.drive}); if (r.tags){ if (r._o.hgv === undefined) delete r.tags.hgv; else r.tags.hgv = r._o.hgv; }
+    const f = F[r.id]; if (!f) continue;
+    if (f.oneway != null) r.oneway = f.oneway;
+    if (f.speed) r.speed = f.speed;
+    if (f.w) r.w = f.w;
+    if (f.hgv) (r.tags ||= {}).hgv = f.hgv === 'no' ? 'no' : 'yes';
+    if (f.closed) r.drive = false;
+  }
+}
+function roadFixCount(){ return Object.keys(state?.roadFix || {}).length; }
+/* réseau reconstruit après une correction : graphe, flèches de sens unique, routes barrées recalées */
+function refreshRoadFix(recalc){
+  if (!WORLD) return; applyRoadFix(WORLD.W); buildNet(WORLD.W); buildWorld(); rematchClosures(); rebuildProj();
+  if (recalc){ let n = 0; edit(() => { for (const c of state.els.filter(e => e.t === 'closure' && !['alternat', 'voie'].includes(e.mode))){ const r = addDetoursFor(c); n += r?.ok || 0; } }); toast(`Rue corrigée : ${n} déviation${n > 1 ? 's' : ''} recalculée${n > 1 ? 's' : ''}.`, 3500); }
+  else toast('Rue corrigée.', 2500);
+  dirty = true; save?.();
+}
+function roadFixDialog(nr){
+  const r = nr.r, o = r._o || r, f = {...((state.roadFix || {})[r.id] || {})}, name = r.name || 'Voie sans nom';
+  const ow = f.oneway ?? o.oneway, sp = f.speed || o.speed, w = f.w || o.w, hgv = f.hgv || (plOk({...r, tags:{...(r.tags || {}), hgv:o.hgv}}) ? 'yes' : 'no');
+  const opt = (v, cur, txt) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${txt}</option>`;
+  dlgEngine(`<div class="ed-h"><div><p class="eyebrow">Corriger les données de la rue</p><h3 class="ed-name" style="margin:0">${esc(name)}</h3></div></div>
+    <div class="ed-body" style="display:block"><p class="hint" style="margin-top:0">Les rues viennent d'OpenStreetMap et peuvent être fausses. La correction ne vaut que pour ce chantier ; les déviations en tiennent compte.</p>
+    <div class="fields">
+      <label class="f"><span>Sens de circulation</span><span class="in"><select id="rfOw">${opt(0, ow, 'Double sens')}${opt(1, ow, 'Sens unique (sens du tracé →)')}${opt(-1, ow, 'Sens unique (sens inverse ←)')}</select></span></label>
+      <label class="f"><span>Vitesse autorisée</span><span class="in"><select id="rfSp">${[20, 30, 50, 70, 80, 90, 110, 130].map(v => opt(v, sp, v + ' km/h')).join('')}</select></span></label>
+      <label class="f"><span>Poids lourds</span><span class="in"><select id="rfHgv">${opt('yes', hgv, 'Autorisés')}${opt('no', hgv, 'Interdits ou inadaptés')}</select></span></label>
+      <label class="f"><span>Largeur de chaussée (m)</span><span class="in"><input id="rfW" type="number" min="2" max="30" step="0.5" value="${Math.round(w * 2) / 2}"></span></label>
+      <label class="f rchk wide"><input type="checkbox" id="rfClosed"${f.closed ? ' checked' : ''}> Rue fermée à la circulation (piétonne, privée, déjà en travaux…)</label>
+      ${r.name ? `<label class="f rchk wide"><input type="checkbox" id="rfAll" checked> Toute la ${esc(name)} (${WORLD.W.roads.filter(x => x.name === r.name && (x._o?.drive ?? x.drive)).length} tronçons)</label>` : ''}
+      <label class="f rchk wide"><input type="checkbox" id="rfRe" checked> Recalculer les déviations du chantier</label>
+    </div>${(state.roadFix && Object.keys(state.roadFix).length) ? `<p class="hint">${roadFixCount()} rue${roadFixCount() > 1 ? 's' : ''} corrigée${roadFixCount() > 1 ? 's' : ''} dans ce chantier.</p>` : ''}</div>
+    <div class="ed-f">${(state.roadFix || {})[r.id] ? '<button class="btn" id="rfReset" style="color:var(--closed)">Revenir aux données d\'origine</button>' : ''}<span style="flex:1"></span><button class="btn" id="rfNo">Annuler</button><button class="btn primary" id="rfOk">Appliquer</button></div>`, 'small');
+  $('#rfNo').onclick = closeEngine;
+  const done = () => { closeEngine(); refreshRoadFix($('#rfRe')?.checked ?? true); };
+  $('#rfOk').onclick = () => { const re = $('#rfRe').checked, nf = {};
+    const vOw = +$('#rfOw').value, vSp = +$('#rfSp').value, vW = +$('#rfW').value, vH = $('#rfHgv').value, closed = $('#rfClosed').checked;
+    if (vOw !== o.oneway) nf.oneway = vOw; if (vSp !== o.speed) nf.speed = vSp; if (vW && Math.abs(vW - o.w) > 0.25) nf.w = vW;
+    if ((vH === 'no') !== !plOk({...r, oneway:o.oneway, w:o.w, tags:{...(r.tags || {}), hgv:o.hgv}})) nf.hgv = vH; if (closed) nf.closed = true;
+    const ids = $('#rfAll')?.checked ? WORLD.W.roads.filter(x => x.name === r.name && (x._o?.drive ?? x.drive)).map(x => x.id) : [r.id];
+    edit(() => { state.roadFix ||= {}; for (const id of ids){ if (Object.keys(nf).length) state.roadFix[id] = {...nf}; else delete state.roadFix[id]; } });
+    closeEngine(); refreshRoadFix(re); };
+  if ($('#rfReset')) $('#rfReset').onclick = () => { const ids = $('#rfAll')?.checked ? WORLD.W.roads.filter(x => x.name === r.name).map(x => x.id) : [r.id]; edit(() => { for (const id of ids) delete state.roadFix[id]; }); done(); };
+}
+
 /* ==== 20-scene.js ==== */
 /* ============ Scène 3D, caméras, lumière, styles d'affichage ============ */
 const canvas = $('#c'), vpEl = $('#vp');
@@ -5796,7 +5850,7 @@ async function loadSite(force = false){
     const z = Float32Array.from(raw.elev.z), N = raw.elev.N, mid = Math.floor(N / 2), z0 = z[mid * N + mid];
     const elev2 = raw.elev2 ? {N:raw.elev2.N, S:raw.elev2.S, z:Float32Array.from(raw.elev2.z)} : null;
     WORLD = {size, P, z0:elev2 ? elev2.z[Math.floor(elev2.N / 2) * elev2.N + Math.floor(elev2.N / 2)] : z0, elev:{N, z}, elev2, W, src:{...raw.src, bld:W.src.bld, at:raw.at}};
-    camRange(size); buildNet(W); orthoTex = null; orthoState = '';
+    camRange(size); applyRoadFix(W); buildNet(W); orthoTex = null; orthoState = '';
     buildWorld(); rematchClosures(); rebuildProj(); fit(); refreshPanel();
     loadUI(false); toast(`Zone chargée : ${W.roads.filter(r => r.drive).length} voies, ${W.bld.length} bâtiments, altitude NGF ${nf(z0, 2)} m au point d'origine.`, 5200);
   } catch(e){
@@ -6999,7 +7053,7 @@ function renderElProps(e){
       ${(() => { if (['alternat', 'voie'].includes(e.mode)) return ''; const st = busStopsOn(e), pd = state.els.find(x => x.t === 'pdetour' && x.cl === e.id);
         return `<div class="fields">${selF('ePed', 'Piétons et cycles', [['', 'Cheminement maintenu le long du chantier'], ['devie', 'Trottoirs fermés : piétons et cycles déviés']], e.ped || '')}</div>${e.ped === 'devie' ? (pd ? `<p class="hint" style="margin:2px 0 8px">Cheminement piéton : ${fmtM(pd.len)} (+${fmtM(pd.extra || 0)})${pd.via ? ' par ' + esc(pd.via) : ''}.</p>` : '<p class="hint" style="margin:2px 0 8px;color:#C62828">Aucun cheminement piéton possible : prévoir un passage protégé provisoire.</p>') : ''}${st.length ? `<div class="chk err" style="margin:4px 0 8px"><b>🚌</b><span>${st.length > 1 ? st.length + ' arrêts de bus' : 'Arrêt de bus'} sur la section barrée (${st.map(s => esc(s.name)).join(', ')}) : arrêt provisoire à créer (Bibliothèque → Chantier et piétons) et transporteur à prévenir.</span></div>` : ''}`; })()}
       <dl class="kv" style="margin-top:10px"><dt>Longueur barrée</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd></dl>
-      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `${e.plWarn ? '<p class="hint" style="margin:10px 0 0"><b>⚠ Aucun itinéraire poids lourds dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></p>' : ''}<details class="rules"><summary>Pourquoi cette déviation ?</summary><ul class="hint" style="margin:6px 0 0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}${closureVariants(e)}`;
+      <div class="btns">${['alternat', 'voie'].includes(e.mode) ? '' : '<button class="btn primary" id="eDet">Recalculer les déviations</button>'}<button class="btn" id="eSig">Reposer les panneaux</button></div>${e.rules?.length && !['alternat', 'voie'].includes(e.mode) ? `${e.plWarn ? '<p class="hint" style="margin:10px 0 0"><b>⚠ Aucun itinéraire poids lourds dans la zone : déviation VL, PL à dévier en amont (B8 posé)</b></p>' : ''}<details class="rules"><summary>Pourquoi cette déviation ?</summary><ul class="hint" style="margin:6px 0 0;padding-left:18px">${e.rules.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="hint" style="margin:6px 0 0">Une rue mal renseignée (sens, poids lourds, vitesse) ? Clic droit ou appui long sur la rue → <b>Corriger cette rue…</b></p></details>` : ''}${closureVariants(e)}`;
   } else if (e.t === 'detour'){
     h += `<div class="fields">${fld('eName', 'Nom', e.name)}<label class="f"><span>Couleur</span><span class="in"><input id="eCol2" type="color" value="${esc(e.col || '#F28A1A')}" style="height:30px;padding:0"></span></label>${selF('eCls', 'Véhicules concernés', [['tous', 'Tous véhicules'], ['VL', 'Véhicules légers'], ['PL', 'Poids lourds'], ['bus', 'Bus'], ['velo', 'Cycles']], e.cls, false)}</div>
       <dl class="kv" style="margin-top:10px"><dt>Longueur</dt><dd>${fmtM(e.len || plLen(e.pts))}</dd>${e.extra != null ? `<dt>Allongement</dt><dd>+${fmtM(e.extra)}</dd>` : ''}${e.extraT != null ? `<dt>Temps perdu (fluide)</dt><dd>+${fmtDur(e.extraT)}</dd>` : ''}${e.via ? `<dt>Par</dt><dd style="font-family:var(--f-body);text-align:right">${esc(e.via)}</dd>` : ''}</dl>`;
@@ -8094,6 +8148,8 @@ function ctxGroundItems(q){
   const items = [], lifted = state.els.filter(e => e.t === 'closure' && e.off), hid = state.els.filter(e => e.hidden);
   const nr = q && WORLD ? nearestRoad(q, 10) : null;
   if (nr) items.push({label:'Barrer cette rue ici', onClick:() => makeClosure(nr)});
+  const nrA = q && WORLD ? nearestRoad(q, 10, false) : null;
+  if (nrA && (nrA.r._o?.drive ?? nrA.r.drive)) items.push({label:'Corriger cette rue…', hint:(state.roadFix || {})[nrA.r.id] ? 'corrigée' : '', onClick:() => roadFixDialog(nrA)});
   if (lifted.length) items.push({label:lifted.length > 1 ? 'Rétablir un barrage levé' : `Rétablir ${ctxName(lifted[0])}`,
     ...(lifted.length > 1 ? {sub:[...lifted.map(c => ({label:ctxName(c) + (c.ph ? ' · ' + phName(c.ph) : ''), onClick:() => ctxLift(c, false)})), {sep:true}, {label:'Tout rétablir', onClick:() => { edit(() => { for (const c of lifted) delete c.off; }); toast('Tous les barrages sont rétablis.'); }}]}
                                   : {onClick:() => ctxLift(lifted[0], false)})});
@@ -8490,7 +8546,7 @@ window.__apReady = true;
 (() => { const sp = document.getElementById('splash'); if (!sp) return; if (window.__spHide){ window.__spHide(); return; } const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); }, Math.max(reduce ? 300 : 0, (reduce ? 600 : 3000) - performance.now())); })();
 /* accès de diagnostic (console, tests automatiques) */
-window.ATDebug = {runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
+window.ATDebug = {roadFix:(id, f) => { state.roadFix ||= {}; if (f) state.roadFix[id] = f; else delete state.roadFix[id]; refreshRoadFix(true); return state.els.filter(e => e.t === 'detour').map(d => d.ids?.join(',')); }, roads:() => NET.roads.map((r, i) => [r.id, r.name, r.drive]), runSample:() => { state.sampleSetup = true; runSampleSetup(); return state.els.map(e => e.t + ':' + (e.ph ? state.phases.findIndex(p => p.id === e.ph) + 1 : 0)); }, signPng:(c, p) => signCanvas(c, p || {}, 128).toDataURL(), signCodes:() => Object.keys(SIGNS), objInst:() => objInstGroup.children.map(m => { const M = new THREE.Matrix4(); m.getMatrixAt(0, M); const p = new THREE.Vector3().setFromMatrixPosition(M); return [m.count, Math.round(p.x), Math.round(-p.z), Math.round(p.y), m.visible, m.parent?.visible]; }), azimuth(deg){ const t = c3.target, v = persp.position.clone().sub(t), r = Math.hypot(v.x, v.z), a = deg * Math.PI / 180; persp.position.set(t.x + Math.sin(a) * r, persp.position.y, t.z + Math.cos(a) * r); c3.update(); dirty = true; }, kdPins:() => annos.filter(a => a.go).map(a => ({go:a.go, v:a.kdv, show:a.show})), underGround(n = 300){ // contrôle : chaussées sous le sol affiché (lancer de rayons vertical sur le maillage du terrain)
     const terr = worldGroup.children.find(o => o.userData?.terrain); if (!terr) return null; const roads = worldGroup.children.filter(o => /^Chaussées/.test(o.name) && o.isMesh);
     const ray = new THREE.Raycaster(), dn = new THREE.Vector3(0, -1, 0); let under = 0, tot = 0, worst = 0; const rnd = (k => () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296)(7);
     for (const m of roads){ const P = m.geometry.attributes.position, T = P.count / 3; for (let q = 0; q < n / roads.length; q++){ const t = Math.floor(rnd() * T) * 3, a = rnd(), b = rnd() * (1 - a), c = 1 - a - b;

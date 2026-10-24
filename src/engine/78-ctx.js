@@ -148,6 +148,8 @@ function ctxGroundItems(q){
   const items = [], lifted = state.els.filter(e => e.t === 'closure' && e.off), hid = state.els.filter(e => e.hidden);
   const nr = q && WORLD ? nearestRoad(q, 10) : null;
   if (nr) items.push({label:'Barrer cette rue ici', onClick:() => makeClosure(nr)});
+  const nrA = q && WORLD ? nearestRoad(q, 10, false) : null;
+  if (nrA && (nrA.r._o?.drive ?? nrA.r.drive)) items.push({label:'Corriger cette rue…', hint:(state.roadFix || {})[nrA.r.id] ? 'corrigée' : '', onClick:() => roadFixDialog(nrA)});
   if (lifted.length) items.push({label:lifted.length > 1 ? 'Rétablir un barrage levé' : `Rétablir ${ctxName(lifted[0])}`,
     ...(lifted.length > 1 ? {sub:[...lifted.map(c => ({label:ctxName(c) + (c.ph ? ' · ' + phName(c.ph) : ''), onClick:() => ctxLift(c, false)})), {sep:true}, {label:'Tout rétablir', onClick:() => { edit(() => { for (const c of lifted) delete c.off; }); toast('Tous les barrages sont rétablis.'); }}]}
                                   : {onClick:() => ctxLift(lifted[0], false)})});
