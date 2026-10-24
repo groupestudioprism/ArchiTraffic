@@ -169,14 +169,23 @@ function paintGround(){
   if (!groundTex){ groundTex = new THREE.CanvasTexture(groundCanvas); groundTex.colorSpace = THREE.SRGBColorSpace; groundTex.anisotropy = 8; }
   groundTex.needsUpdate = true;
 }
-function loadOrtho(){ // photo aérienne IGN (BD ORTHO®), drapée sur le relief
+function loadOrtho(){ // photo aérienne IGN haute résolution (BD ORTHO® HR, 20 cm), assemblée en mosaïque de 4096 px puis drapée sur le relief
   if (!WORLD || orthoState) return; orthoState = 'loading';
-  const B = areaBounds(WORLD.P, WORLD.size), px = WORLD.size <= 500 ? 2048 : 4096;
-  const tryLayer = (layers) => { const L = layers[0]; if (!L){ orthoState = 'err'; toast('Photo aérienne indisponible pour le moment.'); return; }
-    const p = new URLSearchParams({SERVICE:'WMS', VERSION:'1.3.0', REQUEST:'GetMap', LAYERS:L, STYLES:'', CRS:'EPSG:4326', BBOX:`${B.s},${B.w},${B.n},${B.e}`, WIDTH:String(px), HEIGHT:String(px), FORMAT:'image/jpeg'});
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload = () => { orthoTex = new THREE.Texture(img); orthoTex.colorSpace = THREE.SRGBColorSpace; orthoTex.anisotropy = 8; orthoTex.needsUpdate = true; orthoState = 'ok'; WORLD.src.ortho = 'IGN BD ORTHO®'; if (DISPLAY.style === 'aerial') buildWorld(); };
-    img.onerror = () => tryLayer(layers.slice(1)); img.src = `${WMS_R}?${p}`; };
+  const B = areaBounds(WORLD.P, WORLD.size), eco = GFX() === GFX_PRESETS.eco, maxT = renderer.capabilities.maxTextureSize;
+  // résolution visée ≈ 15 cm/px, plafonnée par la carte graphique (8192 px sur ordinateur, 4096 sur téléphone)
+  const want = Math.pow(2, Math.ceil(Math.log2(Math.max(2048, WORLD.size / 0.15)))), px = Math.min(want, maxT, eco ? 4096 : 8192), T = 4096, n = Math.max(1, px / T);
+  const sub = (i, j) => { const dx = (B.e - B.w) / n, dy = (B.n - B.s) / n; return {w:B.w + i * dx, e:B.w + (i + 1) * dx, s:B.n - (j + 1) * dy, n:B.n - j * dy}; };
+  const one = (L, b, size) => new Promise((res, rej) => { const q = new URLSearchParams({SERVICE:'WMS', VERSION:'1.3.0', REQUEST:'GetMap', LAYERS:L, STYLES:'', CRS:'EPSG:4326', BBOX:`${b.s},${b.w},${b.n},${b.e}`, WIDTH:String(size), HEIGHT:String(size), FORMAT:'image/jpeg'});
+    const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => res(img); img.onerror = rej; img.src = `${WMS_R}?${q}`; });
+  const tryLayer = async layers => { const L = layers[0]; if (!L){ orthoState = 'err'; toast('Photo aérienne indisponible pour le moment.'); return; }
+    try {
+      const size = Math.min(T, px), tiles = [];
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) tiles.push(one(L, sub(i, j), size).then(img => ({i, j, img})));
+      const got = await Promise.all(tiles), cv = document.createElement('canvas'); cv.width = cv.height = size * n; const g = cv.getContext('2d');
+      for (const t of got) g.drawImage(t.img, t.i * size, t.j * size, size, size);
+      orthoTex = new THREE.CanvasTexture(cv); orthoTex.colorSpace = THREE.SRGBColorSpace; orthoTex.anisotropy = renderer.capabilities.getMaxAnisotropy(); orthoTex.generateMipmaps = true; orthoTex.minFilter = THREE.LinearMipmapLinearFilter; orthoTex.needsUpdate = true;
+      orthoState = 'ok'; WORLD.src.ortho = 'IGN BD ORTHO® HR'; WORLD.orthoRes = WORLD.size / (size * n); if (DISPLAY.style === 'aerial') buildWorld();
+    } catch(e){ tryLayer(layers.slice(1)); } };
   tryLayer(['HR.ORTHOIMAGERY.ORTHOPHOTOS', 'ORTHOIMAGERY.ORTHOPHOTOS']);
 }
 function buildTerrain(grp){
@@ -359,6 +368,11 @@ function buildBuildings(grp){
   const reg = frRegion(WORLD.P.lat0, WORLD.P.lon0), urbI = urbanIndex(W), roofDefault = reg === 'bzh' ? 'ardoises' : 'tuiles';
   const ECO_B = GFX() === GFX_PRESETS.eco;   // téléphone, tablette : façades sans socles, corniches ni vitrines (2 à 3 fois moins de triangles)
   W.bld.forEach((b, bi) => {
+    if (b.lite){   // au-delà du cœur détaillé : volume simple (murs + toit plat), un seul matériau
+      const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h > 0 ? b.h : 7, zs = p.map(q => H(q[0], q[1])), z0 = Math.min(...zs) - 0.3, z1 = zs.reduce((a, v) => a + v, 0) / p.length + h, G = gb(plan ? 'plan' : 'liteWall'), T = gb(plan ? 'planTop' : 'liteTop');
+      for (let i = 0; i < p.length; i++){ const a = p[i], c = p[(i + 1) % p.length]; G.quad(P3(a[0], a[1], z0), P3(c[0], c[1], z0), P3(c[0], c[1], z1), P3(a[0], a[1], z1), [0, 0], [1, 0], [1, 1], [0, 1]); }
+      const tr = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []); for (const [i, j, k] of tr){ const a = p[i], bb = p[j], c = p[k]; T.tri(P3(a[0], a[1], z1), P3(bb[0], bb[1], z1), P3(c[0], c[1], z1), a, bb, c); }
+      return; }
     const p = ringArea(b.p) < 0 ? b.p.slice().reverse() : b.p, n = p.length, c0 = centroid(p), st = bldStyle(b, bi, Math.abs(ringArea(p)), urbI(c0[0], c0[1]), reg);
     const zs = p.map(q => H(q[0], q[1])), zMin = Math.min(...zs) - 0.4, zAvg = zs.reduce((a, v) => a + v, 0) / n;
     const A = Math.abs(ringArea(p)), O = obb(p), fill = A / ((O.u1 - O.u0) * (O.v1 - O.v0)), minorW = O.v1 - O.v0;
@@ -415,7 +429,7 @@ function buildBuildings(grp){
       for (const [i, j, k] of tris){ const a = all[i], bb = all[j], c = all[k]; R.tri(P3(a[0], a[1], zTop), P3(bb[0], bb[1], zTop), P3(c[0], c[1], zTop), a, bb, c); }
     }
   });
-  const mats = {plan:matCol(PLAN_COL.bld, {rough:1, side:THREE.DoubleSide}), planTop:matCol(PLAN_COL.bldTop, {rough:1, side:THREE.DoubleSide}), roofTiles:matTex('roofTiles', {rough:0.85, side:THREE.DoubleSide}), roofSlate:matTex('roofSlate', {rough:0.7, side:THREE.DoubleSide}), roofZinc:matTex('roofZinc', {rough:0.5, side:THREE.DoubleSide}), roofFlat:matTex('roofFlat', {side:THREE.DoubleSide})};
+  const mats = {liteWall:matCol(0xD9D4CB, {rough:1, side:THREE.DoubleSide}), liteTop:matCol(0xB9B2A7, {rough:1, side:THREE.DoubleSide}), plan:matCol(PLAN_COL.bld, {rough:1, side:THREE.DoubleSide}), planTop:matCol(PLAN_COL.bldTop, {rough:1, side:THREE.DoubleSide}), roofTiles:matTex('roofTiles', {rough:0.85, side:THREE.DoubleSide}), roofSlate:matTex('roofSlate', {rough:0.7, side:THREE.DoubleSide}), roofZinc:matTex('roofZinc', {rough:0.5, side:THREE.DoubleSide}), roofFlat:matTex('roofFlat', {side:THREE.DoubleSide})};
   for (const [key, g] of groups){
     let m = mats[key];
     if (!m){ const [k, kind, seed] = key.split('|'); const rg = key.split('|')[3]; m = k === 'plinth' ? matTex('granite', {rough:0.8}) : k === 'cornice' ? matCol(0xE4DDD0, {rough:0.85}) : k === 'glassD' ? VM.glass : facadeMat(kind, +seed, k === 'shop', rg); }

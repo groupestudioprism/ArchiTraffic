@@ -22,7 +22,8 @@ function syncUndo(){ $('#undo').disabled = !hist.length; $('#redo').disabled = !
 
 /* ---------- chargement de la zone du chantier ---------- */
 const AREA_SIZES = [500, 1000, 1600, 2400, 5000, 10000, 20000];
-const CORE = 2400;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier), puis réseau routier seul jusqu'à la taille demandée
+const CORE = 2400, BLD_MAX = 5000;   // bâtiments simplifiés (volumes) jusqu'à 5 km au-delà du cœur détaillé
+const CORE_ = CORE;   // au-delà : cœur détaillé de 2,4 km (bâtiments, mobilier), puis réseau routier seul jusqu'à la taille demandée
 /* barre de chargement fluide : elle avance toujours un peu (progression « d'attente ») sans jamais dépasser
    l'étape réelle suivante, et rattrape en douceur quand l'étape réelle arrive. Affichée dès le clic. */
 const LB = {shown:0, real:0, raf:0, t:0, st:0, k:0};
@@ -66,7 +67,7 @@ async function loadSite(force = false){
       loadUI(true, 'Chargement de la zone', 'Rues, sens uniques et carrefours (OpenStreetMap)…', 0.08);
       const big = size > CORE, core = Math.min(size, CORE);
       const osmP = loadOSM(big ? areaBounds(P, core + 120) : B, true, big ? B : null, size).then(j => { raw.osm = j; raw.src.osm = 'OpenStreetMap'; });
-      const bdtP = loadBDTopo(areaBounds(P, core + 40)).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
+      const bdtP = loadBDTopo(areaBounds(P, (big ? Math.min(size, BLD_MAX) : core) + 40), big ? 20 : 6).then(f => { raw.bdt = f; }).catch(() => { raw.bdt = []; });
       loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18);
       const el = await loadElevation(P, size, p => { if (tok === loadToken) loadUI(true, 'Chargement de la zone', 'Relief et altitudes NGF (IGN RGE ALTI®)…', 0.18 + p * 0.3); });
       raw.elev = {N:el.N, z:Array.from(el.z, v => Math.round(v * 100) / 100)}; raw.src.elev = el.src;

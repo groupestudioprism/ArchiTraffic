@@ -121,11 +121,11 @@ way["waterway"~"^(river|canal|stream)$"]${bb};way["barrier"~"^(wall|fence|hedge|
 
 /* ---------- BD TOPO® : bâtiments (hauteur, altitude des toits, matériaux) ---------- */
 const BDT_PROPS = 'geometrie,hauteur,nombre_d_etages,altitude_minimale_toit,altitude_maximale_toit,altitude_minimale_sol,materiaux_des_murs,materiaux_de_la_toiture,usage_1,nature,construction_legere';
-async function loadBDTopo(B){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
+async function loadBDTopo(B, pages = 6){ // pages de 5 000 bâtiments, demandées en parallèle ; seulement les attributs utiles (réponse ≈ 3 fois plus légère)
   const page = start => fetchJSON(`${WFS_URL}?${new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', STARTINDEX:String(start), PROPERTYNAME:BDT_PROPS, BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`})}`, 45000).then(j => j.features || []);
   const first = await page(0).catch(async () => { const p = new URLSearchParams({SERVICE:'WFS', VERSION:'2.0.0', REQUEST:'GetFeature', TYPENAMES:'BDTOPO_V3:batiment', OUTPUTFORMAT:'application/json', COUNT:'5000', BBOX:`${B.s},${B.w},${B.n},${B.e},urn:ogc:def:crs:EPSG::4326`}); return (await fetchJSON(`${WFS_URL}?${p}`, 45000)).features || []; });
   if (first.length < 5000) return first;
-  const rest = await Promise.all([5000, 10000, 15000, 20000, 25000].map(s => page(s).catch(() => [])));
+  const rest = await Promise.all(Array.from({length:pages - 1}, (_, i) => (i + 1) * 5000).map(s => page(s).catch(() => [])));
   return [...first, ...rest.flat()];
 }
 
@@ -229,7 +229,7 @@ function parseWorld(raw, P, size){
         for (const b of cand) if (inPoly(c[0], c[1], b.p)) { mate = b; break; }
         out.push({p, holes, h:h > 0 ? Math.min(h, 250) : 0, lv:+Pp.nombre_d_etages || mate?.lv || 0, ridge, minH:0, roof:mate?.roof || '', roofC:mate?.roofC || '', wallC:mate?.wallC || '',
           mat:BDT_WALL[String(Pp.materiaux_des_murs || '').padStart(2, '0')] || mate?.mat || '', roofM:BDT_ROOF[String(Pp.materiaux_de_la_toiture || '').padStart(2, '0')] || mate?.roofM || '',
-          kind:String(Pp.usage_1 || Pp.nature || mate?.kind || ''), light:!!Pp.construction_legere, name:mate?.name || ''});
+          kind:String(Pp.usage_1 || Pp.nature || mate?.kind || ''), light:!!Pp.construction_legere, name:mate?.name || '', lite:!!(core && (Math.abs(c[0]) > core || Math.abs(c[1]) > core))});
       }
     }
     if (out.length) W.bld = [...out, ...W.bld.filter(b => b.part)].filter(b => !b.part || true);
