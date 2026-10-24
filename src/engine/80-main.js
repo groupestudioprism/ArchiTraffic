@@ -1,3 +1,4 @@
+await Promise.race([wmReady, sleep(4000)]);   // faces officielles des panneaux chargées avant les premiers rendus
 /* ============ Démarrage, vues, boucle de rendu, pont avec le compte et le cloud ============ */
 function setView(v){
   const prev = view; view = v === 'render' ? 'render' : v === '2d' ? '2d' : '3d';

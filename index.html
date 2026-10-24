@@ -1137,6 +1137,7 @@ details.rules{margin-top:12px}details.rules summary{cursor:pointer;font-size:12.
 .tour .t-bub{position:fixed;width:300px;background:#fff;color:#111827;border-radius:14px;padding:14px 16px;box-shadow:0 20px 50px -12px rgba(0,0,0,.5);transition:left .25s,top .25s}
 .tour .t-bub small{color:#6b7280;font-size:11.5px}.tour .t-bub b{display:block;font:700 15px var(--f-display);margin:2px 0 6px}.tour .t-bub p{margin:0 0 12px;font-size:13px;line-height:1.5;color:#374151}
 .tour .t-bub div{display:flex;justify-content:flex-end;gap:8px}
+body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:calc(37px * var(--pin-sz, 1))}
 /* Menu contextuel Studio Prism (clic droit / appui long) — même rendu dans toutes les apps ; couleurs reprises des variables du thème */
 .pctx{position:fixed;z-index:90;min-width:220px;max-width:min(340px,calc(100vw - 12px));max-height:calc(100vh - 12px);overflow:auto;padding:5px;border-radius:12px;
   background:var(--panel,#fff);color:var(--ink,#111827);border:1px solid var(--line,#DCE7EF);box-shadow:0 14px 38px rgb(7 27 85 / .22),0 2px 6px rgb(7 27 85 / .10);
@@ -1370,6 +1371,7 @@ details.rules{margin-top:12px}details.rules summary{cursor:pointer;font-size:12.
   <button data-act="apin"><b>Importer l'emprise d'un projet ARCHIPLAN…</b><span>Fichier .archiplan : contour et hauteur du bâtiment, posés comme emprise de chantier</span></button>
   <button data-act="check"><b>Contrôler le chantier</b><span>Signalisation, distances, déviations : ce qui manque ou ne va pas</span></button>
   <button data-act="sample"><b>Charger l'exemple</b><span>Rue barrée avec déviation, en centre-ville</span></button>
+  <button data-act="credits"><b>Crédits des panneaux</b><span>Faces officielles issues de Wikimedia Commons (licences libres)</span></button>
 </div>
 <div class="menu" id="exportMenu" hidden><div class="lbl">Exporter <span class="lock" hidden>· licence requise</span></div>
   <button data-act="a3"><b>Plan de signalisation A3 (PDF)</b><span>Vue en plan, cartouche, légende et nomenclature des panneaux</span></button>
@@ -4822,7 +4824,20 @@ const SIGNS = {
   KR_ROUTE:{n:'Route barrée sauf riverains', s:'rect', ak:1, ar:1.6, p:{t:'RUE BARRÉE|SAUF RIVERAINS'}, base:'KC1'},
 };
 /* dessin d'une face (canvas, fond transparent hors du panneau) */
+/* Faces officielles (SVG Wikimedia Commons, licences libres : voir assets/signs/wm/credits.json et « Crédits » dans l'app).
+   Utilisées pour les panneaux sans texte variable ; les panneaux à texte (KC1 personnalisé, KD8, M1…) restent dessinés ici. */
+const WM_CODES = 'A13b A14 A18 A19 A1a A1c A21 A2b A4 AB1 AB2 AB25 AB3a AB4 AB6 AB7 AK14 AK17 AK2 AK22 AK3 AK30 AK31 AK32 AK3a AK3b AK4 AK5 B0 B1 B10a B11 B12 B13 B14 B15 B16 B18c B19 B21a1 B21c1 B21c2 B21d1 B21e B22a B22b B27a B2a B2b B3 B31 B34 B4 B45a B52 B54 B6a1 B6d B7b B8 B9a B9b B9g C107 C113 C12 C13a C18 C1a C20a C27 CE15a KC1'.split(' ');
+const WM_IMG = {}, wmKey = c => c.replace(/_(\d)$/, '-$1');
+const wmReady = Promise.all(WM_CODES.map(c => new Promise(res => { const im = new Image(); im.onload = () => { WM_IMG[c] = im; res(); }; im.onerror = () => res(); im.src = `assets/signs/wm/${c}.svg`; })));
+function wmFace(code, p){
+  const S = SIGNS[code]; if (!S || S.base) return null; const im = WM_IMG[wmKey(code)]; if (!im) return null;
+  const def = S.p || {}, pp = {...def, ...(p || {})};
+  if (code === 'KC1') return String(pp.t || '').trim().toUpperCase() === 'ROUTE BARRÉE' ? im : null;
+  return Object.keys(pp).every(k => String(pp[k]) === String(def[k])) && !Object.keys(def).length ? im : null;
+}
 function signCanvas(code, p = {}, px = 256){
+  const im = wmFace(code, p); if (im){ const S = SIGNS[code], ar = S.s === 'rect' ? (S.ar || im.naturalWidth / im.naturalHeight || 1) : 1, w = Math.round(px * ar), cv = sCanvas(w, px), g = cv.getContext('2d');
+    const r = Math.min(w / (im.naturalWidth || w), px / (im.naturalHeight || px)), iw = (im.naturalWidth || w) * r, ih = (im.naturalHeight || px) * r; g.drawImage(im, (w - iw) / 2, (px - ih) / 2, iw, ih); return cv; }
   const S = SIGNS[code] || SIGNS.AK14, base = S.base ? SIGNS[S.base] : S, shape = base.s, ar = base.ar || 1, w = shape === 'rect' ? Math.round(px * ar) : px, h = px, cv = sCanvas(w, h), g = cv.getContext('2d');
   const pp = {...(S.p || {}), ...p}; g.save(); if (shape !== 'rect') g.scale(px / 256, px / 256);
   const bg = base.ak ? SC.yel : SC.wht;
@@ -7185,7 +7200,7 @@ async function exportPNG(k = 2, asCanvas = false){
   const S = cv.width / w;
   // étiquettes
   // repères de panneaux (images) : bulle blanche + panneau
-  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), x = (r.left - vr.left) * S, y = (r.top - vr.top) * S, ww = r.width * S, hh = r.height * S;
+  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), PK = 1, ww = r.width * S * PK, hh = r.height * S * PK, x = (r.left - vr.left + r.width / 2) * S - ww / 2, y = (r.bottom - vr.top) * S - hh;   // plan : repères plus discrets, ancrés au même point
     g.save(); g.fillStyle = a.sig ? '#1E2226' : '#fff'; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, ww, hh, 9 * S) : g.rect(x, y, ww, hh); g.fill();
     g.beginPath(); g.moveTo(x + ww / 2 - 5 * S, y + hh); g.lineTo(x + ww / 2, y + hh + 6 * S); g.lineTo(x + ww / 2 + 5 * S, y + hh); g.fill(); g.shadowBlur = 0;
     const im = a.d.querySelector('img'); if (im?.complete) g.drawImage(im, x + 3 * S, y + 3 * S, ww - 6 * S, hh - 6 * S);
@@ -7318,7 +7333,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.t
 $('#fileBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#fileMenu'), e.currentTarget); });
 $('#exportBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#exportMenu'), e.currentTarget); });
 $('#fileMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#fileMenu').hidden = true;
-  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
+  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample()), credits:signCredits})[b.dataset.act]?.(); });
 $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#exportMenu').hidden = true; if (!canExport()) return;
   ({a3:exportA3, dossier:exportDossier, arrete:() => exportArrete(), avis:exportAvis, terrain:exportTerrain, devis:exportDevis, waze:exportWaze, dxf:exportDXF, png:() => exportWorkPNG(2), png4:() => exportWorkPNG(4), pngd:() => exportDetailPNG(2), pngv:() => exportPNG(2), glb:exportGLB, csv:exportCSV, geojson:exportGeoJSON, json:exportJSON})[b.dataset.act]?.(); });
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
@@ -7337,6 +7352,16 @@ function renderViewMenu(){
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-gfx]').forEach(b => b.onclick = () => { setGfx(b.dataset.gfx); renderViewMenu(); });
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); window.PrismSettings?.themeChanged(); renderViewMenu(); });
+}
+
+async function signCredits(){
+  let c = {}; try { c = await fetch('assets/signs/wm/credits.json').then(r => r.json()); } catch(e){}
+  const rows = Object.entries(c).sort().map(([k, v]) => `<tr><td><img src="assets/signs/wm/${esc(k)}.svg" alt="" style="width:28px;height:24px;object-fit:contain"></td><td><b>${esc(k)}</b></td><td>${esc(v.author || '')}</td><td>${esc(v.lic || '')}</td><td><a href="${esc(v.url)}" target="_blank" rel="noopener">source</a></td></tr>`).join('');
+  dlgEngine(`<div class="ed-h"><div><p class="eyebrow">Signalisation</p><h3 class="ed-name" style="margin:0">Crédits des panneaux</h3></div></div>
+    <div class="ed-body" style="display:block;max-height:60vh;overflow:auto"><p class="hint">Les faces des panneaux réglementaires proviennent de Wikimedia Commons et sont réutilisées sans modification sous leur licence d'origine (CC BY-SA, CC0 ou domaine public). Les panneaux à texte personnalisable (KC1, KD, M…) sont dessinés par ARCHITRAFIC.</p>
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse">${rows || '<tr><td>Crédits indisponibles hors ligne.</td></tr>'}</table></div>
+    <div class="ed-f"><span style="flex:1"></span><button class="btn primary" id="crOk">Fermer</button></div>`);
+  $('#crOk').onclick = closeEngine;
 }
 
 /* ==== 74b-archiplan.js ==== */
@@ -8127,6 +8152,7 @@ function startTour(){
 })();
 
 /* ==== 80-main.js ==== */
+await Promise.race([wmReady, sleep(4000)]);   // faces officielles des panneaux chargées avant les premiers rendus
 /* ============ Démarrage, vues, boucle de rendu, pont avec le compte et le cloud ============ */
 function setView(v){
   const prev = view; view = v === 'render' ? 'render' : v === '2d' ? '2d' : '3d';

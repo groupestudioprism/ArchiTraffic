@@ -47,7 +47,7 @@ async function exportPNG(k = 2, asCanvas = false){
   const S = cv.width / w;
   // étiquettes
   // repères de panneaux (images) : bulle blanche + panneau
-  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), x = (r.left - vr.left) * S, y = (r.top - vr.top) * S, ww = r.width * S, hh = r.height * S;
+  for (const a of annos){ if (!a.pin || a.d.hidden) continue; const r = a.d.getBoundingClientRect(), vr = vpEl.getBoundingClientRect(), PK = 1, ww = r.width * S * PK, hh = r.height * S * PK, x = (r.left - vr.left + r.width / 2) * S - ww / 2, y = (r.bottom - vr.top) * S - hh;   // plan : repères plus discrets, ancrés au même point
     g.save(); g.fillStyle = a.sig ? '#1E2226' : '#fff'; g.shadowColor = 'rgba(0,0,0,.3)'; g.shadowBlur = 5 * S; g.beginPath(); g.roundRect ? g.roundRect(x, y, ww, hh, 9 * S) : g.rect(x, y, ww, hh); g.fill();
     g.beginPath(); g.moveTo(x + ww / 2 - 5 * S, y + hh); g.lineTo(x + ww / 2, y + hh + 6 * S); g.lineTo(x + ww / 2 + 5 * S, y + hh); g.fill(); g.shadowBlur = 0;
     const im = a.d.querySelector('img'); if (im?.complete) g.drawImage(im, x + 3 * S, y + 3 * S, ww - 6 * S, hh - 6 * S);

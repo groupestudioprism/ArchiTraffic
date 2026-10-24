@@ -52,7 +52,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu') && !e.t
 $('#fileBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#fileMenu'), e.currentTarget); });
 $('#exportBtn').addEventListener('click', e => { e.stopPropagation(); popMenu($('#exportMenu'), e.currentTarget); });
 $('#fileMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#fileMenu').hidden = true;
-  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample())})[b.dataset.act]?.(); });
+  ({home:() => $('#homeBtn').click(), new:() => window.APHome ? window.APHome.newProject() : window.APModel.load(blankState()), open:() => $('#fileIn').click(), glbin:() => $('#glbIn').click(), apin:() => $('#apIn').click(), check:checkDialog, sample:() => window.APModel.load(window.APModel.sample()), credits:signCredits})[b.dataset.act]?.(); });
 $('#exportMenu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; $('#exportMenu').hidden = true; if (!canExport()) return;
   ({a3:exportA3, dossier:exportDossier, arrete:() => exportArrete(), avis:exportAvis, terrain:exportTerrain, devis:exportDevis, waze:exportWaze, dxf:exportDXF, png:() => exportWorkPNG(2), png4:() => exportWorkPNG(4), pngd:() => exportDetailPNG(2), pngv:() => exportPNG(2), glb:exportGLB, csv:exportCSV, geojson:exportGeoJSON, json:exportJSON})[b.dataset.act]?.(); });
 $('#viewSet').addEventListener('click', e => { e.stopPropagation(); renderViewMenu(); popMenu($('#viewMenu'), e.currentTarget); });
@@ -71,4 +71,14 @@ function renderViewMenu(){
   m.querySelector('[data-sun]').oninput = e => { DISPLAY.sunAz = +e.target.value; saveDisplay(); positionSun(); dirty = true; };
   m.querySelectorAll('[data-gfx]').forEach(b => b.onclick = () => { setGfx(b.dataset.gfx); renderViewMenu(); });
   m.querySelectorAll('[data-thm]').forEach(b => b.onclick = () => { setTheme(b.dataset.thm); window.PrismSettings?.themeChanged(); renderViewMenu(); });
+}
+
+async function signCredits(){
+  let c = {}; try { c = await fetch('assets/signs/wm/credits.json').then(r => r.json()); } catch(e){}
+  const rows = Object.entries(c).sort().map(([k, v]) => `<tr><td><img src="assets/signs/wm/${esc(k)}.svg" alt="" style="width:28px;height:24px;object-fit:contain"></td><td><b>${esc(k)}</b></td><td>${esc(v.author || '')}</td><td>${esc(v.lic || '')}</td><td><a href="${esc(v.url)}" target="_blank" rel="noopener">source</a></td></tr>`).join('');
+  dlgEngine(`<div class="ed-h"><div><p class="eyebrow">Signalisation</p><h3 class="ed-name" style="margin:0">Crédits des panneaux</h3></div></div>
+    <div class="ed-body" style="display:block;max-height:60vh;overflow:auto"><p class="hint">Les faces des panneaux réglementaires proviennent de Wikimedia Commons et sont réutilisées sans modification sous leur licence d'origine (CC BY-SA, CC0 ou domaine public). Les panneaux à texte personnalisable (KC1, KD, M…) sont dessinés par ARCHITRAFIC.</p>
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse">${rows || '<tr><td>Crédits indisponibles hors ligne.</td></tr>'}</table></div>
+    <div class="ed-f"><span style="flex:1"></span><button class="btn primary" id="crOk">Fermer</button></div>`);
+  $('#crOk').onclick = closeEngine;
 }

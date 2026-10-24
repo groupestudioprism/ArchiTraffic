@@ -83,7 +83,20 @@ const SIGNS = {
   KR_ROUTE:{n:'Route barrée sauf riverains', s:'rect', ak:1, ar:1.6, p:{t:'RUE BARRÉE|SAUF RIVERAINS'}, base:'KC1'},
 };
 /* dessin d'une face (canvas, fond transparent hors du panneau) */
+/* Faces officielles (SVG Wikimedia Commons, licences libres : voir assets/signs/wm/credits.json et « Crédits » dans l'app).
+   Utilisées pour les panneaux sans texte variable ; les panneaux à texte (KC1 personnalisé, KD8, M1…) restent dessinés ici. */
+const WM_CODES = 'A13b A14 A18 A19 A1a A1c A21 A2b A4 AB1 AB2 AB25 AB3a AB4 AB6 AB7 AK14 AK17 AK2 AK22 AK3 AK30 AK31 AK32 AK3a AK3b AK4 AK5 B0 B1 B10a B11 B12 B13 B14 B15 B16 B18c B19 B21a1 B21c1 B21c2 B21d1 B21e B22a B22b B27a B2a B2b B3 B31 B34 B4 B45a B52 B54 B6a1 B6d B7b B8 B9a B9b B9g C107 C113 C12 C13a C18 C1a C20a C27 CE15a KC1'.split(' ');
+const WM_IMG = {}, wmKey = c => c.replace(/_(\d)$/, '-$1');
+const wmReady = Promise.all(WM_CODES.map(c => new Promise(res => { const im = new Image(); im.onload = () => { WM_IMG[c] = im; res(); }; im.onerror = () => res(); im.src = `assets/signs/wm/${c}.svg`; })));
+function wmFace(code, p){
+  const S = SIGNS[code]; if (!S || S.base) return null; const im = WM_IMG[wmKey(code)]; if (!im) return null;
+  const def = S.p || {}, pp = {...def, ...(p || {})};
+  if (code === 'KC1') return String(pp.t || '').trim().toUpperCase() === 'ROUTE BARRÉE' ? im : null;
+  return Object.keys(pp).every(k => String(pp[k]) === String(def[k])) && !Object.keys(def).length ? im : null;
+}
 function signCanvas(code, p = {}, px = 256){
+  const im = wmFace(code, p); if (im){ const S = SIGNS[code], ar = S.s === 'rect' ? (S.ar || im.naturalWidth / im.naturalHeight || 1) : 1, w = Math.round(px * ar), cv = sCanvas(w, px), g = cv.getContext('2d');
+    const r = Math.min(w / (im.naturalWidth || w), px / (im.naturalHeight || px)), iw = (im.naturalWidth || w) * r, ih = (im.naturalHeight || px) * r; g.drawImage(im, (w - iw) / 2, (px - ih) / 2, iw, ih); return cv; }
   const S = SIGNS[code] || SIGNS.AK14, base = S.base ? SIGNS[S.base] : S, shape = base.s, ar = base.ar || 1, w = shape === 'rect' ? Math.round(px * ar) : px, h = px, cv = sCanvas(w, h), g = cv.getContext('2d');
   const pp = {...(S.p || {}), ...p}; g.save(); if (shape !== 'rect') g.scale(px / 256, px / 256);
   const bg = base.ak ? SC.yel : SC.wht;
