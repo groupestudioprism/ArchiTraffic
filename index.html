@@ -537,6 +537,7 @@ body[data-mode="sec"] .vtools,body[data-mode="sec"] .hud,body[data-mode="sec"] .
 .sp-bob{display:block;transform:scale(1.3);transform-origin:0 83%}
 .sp-bob svg{display:block;overflow:visible;transform-origin:50% 90%}
 .sp-wh{transform-box:view-box;transform-origin:0 0}
+.sp-puff{transform-box:fill-box;transform-origin:50% 50%}
 .sp-road{position:relative;width:min(220px,60vw);height:5px;border-radius:3px;background:#E6EBF1;overflow:hidden;flex:none}
 :root[data-theme="dark"] .sp-road{background:#26324A}
 .sp-road i{position:absolute;left:0;top:0;bottom:0;width:calc(100% + 120px);background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);animation:spDash 1s linear infinite}
@@ -1214,23 +1215,29 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
         <div class="sp-car"><div class="sp-bob"><svg viewBox="0 -70 190 84" width="190" height="84" focusable="false">
           <defs><linearGradient id="spCb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B7BD6"/><stop offset="1" stop-color="#0B4A8E"/></linearGradient>
           <linearGradient id="spBeam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFE9A8" stop-opacity=".75"/><stop offset="1" stop-color="#FFE9A8" stop-opacity="0"/></linearGradient></defs>
-          <path class="sp-beam" d="M186,-27 L270,-48 L270,-4 Z" fill="url(#spBeam)" opacity="0"/>
-          <ellipse cx="96" cy="3" rx="92" ry="4" fill="#000" opacity=".16"/>
-          <!-- citadine moderne vue de profil, avant à droite : porte-à-faux courts, pavillon arrondi, pare-brise incliné, capot plongeant -->
-          <path d="M14,-12 C9,-12 6,-15 6,-21 L6,-31 C6,-37 9,-40 15,-42 C29,-50 46,-57 68,-58 L98,-58 C111,-58 120,-52 133,-40 C151,-38 170,-35 180,-31 C185,-29 187,-25 187,-20 L187,-16 C187,-13 185,-12 182,-12 L168,-12 A18,18 0 0 0 132,-12 L56,-12 A18,18 0 0 0 20,-12 Z" fill="url(#spCb)"/>
-          <path d="M21,-40 C33,-48 48,-54 68,-54.5 L98,-54.5 C108,-54.5 115,-49.5 125,-40.5 Z" fill="#D5E9F8"/>
-          <path d="M66,-55 L60,-40 M94,-55 V-40" stroke="url(#spCb)" stroke-width="4.5"/>
-          <path d="M23,-40 L125,-40" stroke="#0A3F7A" stroke-width="1" opacity=".35"/>
-          <path d="M58,-39 C57,-30 57,-20 58,-13 M95,-39 V-13" stroke="#0A3F7A" stroke-width="1.1" opacity=".5"/>
-          <rect x="70" y="-35" width="8" height="2.2" rx="1.1" fill="#0A3F7A" opacity=".55"/><rect x="104" y="-35" width="8" height="2.2" rx="1.1" fill="#0A3F7A" opacity=".55"/>
-          <path d="M126,-42 C129,-45 133,-45 134,-42 L133,-39 L127,-39 Z" fill="#0B4A8E"/>
-          <path d="M10,-22 L183,-22" stroke="#F28A1A" stroke-width="2.6" stroke-linecap="round"/>
-          <path d="M175,-33 C180,-32 184,-30 186,-27 L185,-25 C181,-26 176,-27 172,-28 Z" fill="#FFE08A"/>
-          <path d="M6,-35 C7,-38 9,-39 12,-40 L12,-31 L6,-31 Z" fill="#E0242B"/>
-          <rect x="180" y="-17" width="7" height="3" rx="1.5" fill="#0A3F7A" opacity=".45"/><rect x="6" y="-17" width="7" height="3" rx="1.5" fill="#0A3F7A" opacity=".45"/>
-          <circle cx="38" cy="-12" r="18.2" fill="#0A2E5C"/><circle cx="150" cy="-12" r="18.2" fill="#0A2E5C"/>
-          <g transform="translate(38,-12)"><g class="sp-wh"><circle r="14" fill="#1B2233"/><circle r="8.6" fill="#C9D2DE"/><circle r="8.6" fill="none" stroke="#9AA6B6" stroke-width="1.2"/><path d="M0,-7.5 V7.5 M-7.1,-2.3 L7.1,2.3 M-7.1,2.3 L7.1,-2.3 M-4.4,-6 L4.4,6 M4.4,-6 L-4.4,6" stroke="#5B6779" stroke-width="1.5"/><circle r="2.6" fill="#3A4556"/><circle cy="-11" r="1.3" fill="#F28A1A"/></g></g>
-          <g transform="translate(150,-12)"><g class="sp-wh"><circle r="14" fill="#1B2233"/><circle r="8.6" fill="#C9D2DE"/><circle r="8.6" fill="none" stroke="#9AA6B6" stroke-width="1.2"/><path d="M0,-7.5 V7.5 M-7.1,-2.3 L7.1,2.3 M-7.1,2.3 L7.1,-2.3 M-4.4,-6 L4.4,6 M4.4,-6 L-4.4,6" stroke="#5B6779" stroke-width="1.5"/><circle r="2.6" fill="#3A4556"/><circle cy="-11" r="1.3" fill="#F28A1A"/></g></g>
+          <path class="sp-beam" d="M186,-29 L272,-50 L272,-6 Z" fill="url(#spBeam)" opacity="0"/>
+          <g class="sp-speed" opacity="0" stroke="#9AA8BE" stroke-width="2.2" stroke-linecap="round"><path d="M-46,-46 H-12"/><path d="M-60,-32 H-18"/><path d="M-40,-20 H-10"/></g>
+          <g class="sp-puffs"><circle class="sp-puff" cx="4" cy="-15" r="4" fill="#C9D1DC" opacity="0"/><circle class="sp-puff" cx="4" cy="-15" r="5" fill="#D7DDE6" opacity="0"/><circle class="sp-puff" cx="4" cy="-15" r="6" fill="#E3E8EE" opacity="0"/></g>
+          <ellipse cx="96" cy="3" rx="94" ry="4.5" fill="#000" opacity=".18"/>
+          <!-- berline vue de profil (avant à droite, dans le sens de la marche) : capot, habitacle à deux vitres, coffre -->
+          <path d="M11,-13 C8,-14 7,-18 7,-23 L7,-28 C7,-33 10,-35 16,-35.5 L44,-37 C50,-38 54,-42 60,-50 C64,-55 70,-58 78,-58 L108,-58 C116,-58 120,-56 126,-50 L136,-40 C154,-38.5 172,-36.5 180,-33.5 C185,-31.5 187,-27 187,-22 L187,-17 C187,-14.5 185,-13 182,-13 L166.5,-13 A18.5,18.5 0 0 0 129.5,-13 L58.5,-13 A18.5,18.5 0 0 0 21.5,-13 Z" fill="url(#spCb)"/>
+          <path d="M60,-50 C64,-55 70,-58 78,-58 L108,-58 C116,-58 120,-56 126,-50 L136,-40 L136,-39 L44,-37 C50,-38 54,-42 60,-50 Z" fill="#fff" opacity=".07"/>
+          <path d="M63,-48 C66,-53 71,-55.5 78,-55.5 L92,-55.5 L92,-41 L57.5,-41 C59,-43.5 61,-46 63,-48 Z" fill="#CFE6F7"/>
+          <path d="M96,-55.5 L107.5,-55.5 C113.5,-55.5 117,-53.5 121.5,-49 L130,-41 L96,-41 Z" fill="#CFE6F7"/>
+          <path d="M66,-52 L74,-44 M100,-54 L111,-43" stroke="#fff" stroke-width="2.2" opacity=".55" stroke-linecap="round"/>
+          <path d="M16,-35 L44,-37 L136,-40 C150,-39 166,-37.5 178,-35" stroke="#7FB2EA" stroke-width="1.2" fill="none" opacity=".7"/>
+          <path d="M58,-41 C57,-32 57,-22 59,-14 M94,-41 V-14 M131,-41 C130,-32 130,-22 130,-14" stroke="#0A3F7A" stroke-width="1.1" fill="none" opacity=".5"/>
+          <rect x="74" y="-36" width="9" height="2.2" rx="1.1" fill="#0A3F7A" opacity=".6"/><rect x="108" y="-36" width="9" height="2.2" rx="1.1" fill="#0A3F7A" opacity=".6"/>
+          <path d="M128,-44 C131,-47 135,-46.5 136,-43.5 L135.5,-40.5 L129,-40.5 Z" fill="#0B4A8E"/>
+          <path d="M59,-17 L130,-17 L130,-13 L59,-13 Z" fill="#0A2E5C" opacity=".75"/>
+          <path d="M10,-27 L183,-27" stroke="#F28A1A" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M176,-34.5 C180.5,-33.5 184.5,-31.5 186.3,-28.5 L176,-29 Z" fill="#FFE08A"/>
+          <path d="M7.3,-30 C7.8,-33 10,-34.8 14,-35.3 L14,-29.5 Z" fill="#E0242B"/>
+          <circle class="sp-brake" cx="10" cy="-32" r="9" fill="#FF3B30" opacity="0"/>
+          <path d="M180,-19 L187,-19 L187,-16 L181,-16 Z M7,-19 L13,-19 L13,-16 L8,-16 Z" fill="#0A2E5C" opacity=".55"/>
+          <circle cx="40" cy="-14" r="18.5" fill="#0A2E5C"/><circle cx="148" cy="-14" r="18.5" fill="#0A2E5C"/>
+          <g transform="translate(40,-14)"><g class="sp-wh"><circle r="15.5" fill="#151B26"/><circle r="15.5" fill="none" stroke="#2A3242" stroke-width="2"/><circle r="9.6" fill="#D7DEE7"/><circle r="9.6" fill="none" stroke="#8D99AB" stroke-width="1"/><path d="M0,-8.6 L1.6,-2.2 L8.2,-2.7 L2.6,0.9 L5.1,7 L0,2.8 L-5.1,7 L-2.6,0.9 L-8.2,-2.7 L-1.6,-2.2 Z" fill="#A9B4C3"/><circle r="2.4" fill="#4A5568"/><circle cy="-12.6" r="1.2" fill="#F28A1A"/></g></g>
+          <g transform="translate(148,-14)"><g class="sp-wh"><circle r="15.5" fill="#151B26"/><circle r="15.5" fill="none" stroke="#2A3242" stroke-width="2"/><circle r="9.6" fill="#D7DEE7"/><circle r="9.6" fill="none" stroke="#8D99AB" stroke-width="1"/><path d="M0,-8.6 L1.6,-2.2 L8.2,-2.7 L2.6,0.9 L5.1,7 L0,2.8 L-5.1,7 L-2.6,0.9 L-8.2,-2.7 L-1.6,-2.2 Z" fill="#A9B4C3"/><circle r="2.4" fill="#4A5568"/><circle cy="-12.6" r="1.2" fill="#F28A1A"/></g></g>
         </svg></div></div>
       </div>
     </div>
@@ -1306,6 +1313,11 @@ body[data-mode="2d"] .anno.pin img{width:calc(37px * var(--pin-sz, 1));height:ca
       /* la rotation d'arrivée est déjà acquise (fill both) ; le relais est exact car les deux phases se suivent sans chevauchement */ });
     A(bob, [{transform: 'rotate(0deg)'}, {transform: 'rotate(-1.8deg)', offset: .12}, {transform: 'rotate(0deg)', offset: .3}, {transform: 'rotate(0deg)'}], {delay: T1 + 50, duration: DUR, easing: EASE_IO, fill: 'forwards'});
     A(q('.sp-beam'), [{opacity: 0}, {opacity: .8}], {delay: T1 + 20, duration: 260});
+    // feux stop au freinage, petite fumée au démarrage, traits de vitesse pendant la traversée
+    A(q('.sp-brake'), [{opacity: 0}, {opacity: 0, offset: .55}, {opacity: .45}, {opacity: .45}], {delay: 100, duration: T1 - 100});
+    A(q('.sp-brake'), [{opacity: .45}, {opacity: 0}], {delay: T1, duration: 200, fill: 'forwards'});
+    qa('.sp-puff').forEach(function(c, i){ A(c, [{opacity: 0, transform: 'translate(0,0) scale(.6)'}, {opacity: .9, offset: .2}, {opacity: 0, transform: 'translate(' + (-22 - i * 10) + 'px,' + (-6 - i * 5) + 'px) scale(' + (1.6 + i * .4) + ')'}], {delay: T1 + i * 90, duration: 700, easing: 'ease-out'}); });
+    A(q('.sp-speed'), [{opacity: 0}, {opacity: 0, offset: .15}, {opacity: .9, offset: .35}, {opacity: .9, offset: .85}, {opacity: 0}], {delay: T1 + 50, duration: DUR, fill: 'forwards'});
     var f0 = 110 - 30;                                          // rideau : bord (milieu du dégradé) = avant de la voiture - 30
     var eb = Math.min(.95, (1320 - f0 + 0) / D);
     A(q('.sp-curtain'), [{transform: 'translateX(-70px)', offset: 0}, {transform: 'translateX(' + Math.round(D * .1 + f0) + 'px)', offset: .1}, {transform: 'translateX(1320px)', offset: Math.min(.95, (1320 - f0) / D)}, {transform: 'translateX(1320px)', offset: 1}], dep);

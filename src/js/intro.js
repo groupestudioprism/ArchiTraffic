@@ -64,6 +64,11 @@
       /* la rotation d'arrivée est déjà acquise (fill both) ; le relais est exact car les deux phases se suivent sans chevauchement */ });
     A(bob, [{transform: 'rotate(0deg)'}, {transform: 'rotate(-1.8deg)', offset: .12}, {transform: 'rotate(0deg)', offset: .3}, {transform: 'rotate(0deg)'}], {delay: T1 + 50, duration: DUR, easing: EASE_IO, fill: 'forwards'});
     A(q('.sp-beam'), [{opacity: 0}, {opacity: .8}], {delay: T1 + 20, duration: 260});
+    // feux stop au freinage, petite fumée au démarrage, traits de vitesse pendant la traversée
+    A(q('.sp-brake'), [{opacity: 0}, {opacity: 0, offset: .55}, {opacity: .45}, {opacity: .45}], {delay: 100, duration: T1 - 100});
+    A(q('.sp-brake'), [{opacity: .45}, {opacity: 0}], {delay: T1, duration: 200, fill: 'forwards'});
+    qa('.sp-puff').forEach(function(c, i){ A(c, [{opacity: 0, transform: 'translate(0,0) scale(.6)'}, {opacity: .9, offset: .2}, {opacity: 0, transform: 'translate(' + (-22 - i * 10) + 'px,' + (-6 - i * 5) + 'px) scale(' + (1.6 + i * .4) + ')'}], {delay: T1 + i * 90, duration: 700, easing: 'ease-out'}); });
+    A(q('.sp-speed'), [{opacity: 0}, {opacity: 0, offset: .15}, {opacity: .9, offset: .35}, {opacity: .9, offset: .85}, {opacity: 0}], {delay: T1 + 50, duration: DUR, fill: 'forwards'});
     var f0 = 110 - 30;                                          // rideau : bord (milieu du dégradé) = avant de la voiture - 30
     var eb = Math.min(.95, (1320 - f0 + 0) / D);
     A(q('.sp-curtain'), [{transform: 'translateX(-70px)', offset: 0}, {transform: 'translateX(' + Math.round(D * .1 + f0) + 'px)', offset: .1}, {transform: 'translateX(1320px)', offset: Math.min(.95, (1320 - f0) / D)}, {transform: 'translateX(1320px)', offset: 1}], dep);

@@ -25,6 +25,7 @@
 .sp-bob{display:block;transform:scale(1.3);transform-origin:0 83%}
 .sp-bob svg{display:block;overflow:visible;transform-origin:50% 90%}
 .sp-wh{transform-box:view-box;transform-origin:0 0}
+.sp-puff{transform-box:fill-box;transform-origin:50% 50%}
 .sp-road{position:relative;width:min(220px,60vw);height:5px;border-radius:3px;background:#E6EBF1;overflow:hidden;flex:none}
 :root[data-theme="dark"] .sp-road{background:#26324A}
 .sp-road i{position:absolute;left:0;top:0;bottom:0;width:calc(100% + 120px);background:repeating-linear-gradient(90deg,#1565C0 0 22px,#fff 22px 30px,#F28A1A 30px 52px,#fff 52px 60px);animation:spDash 1s linear infinite}
