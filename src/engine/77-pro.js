@@ -88,7 +88,7 @@ function exportTerrain(){
 
 /* ---------- 9. avis aux riverains (affiche A4 avec plan) ---------- */
 async function exportAvis(){
-  const was = view; if (view !== '2d') setView('2d'); await sleep(120); const cv = await exportPNG(2, true); if (was !== '2d') setView(was);
+  const cv = await withWorkView(async () => { const W = workEls(); return W.length ? shotOf(W, 2) : exportPNG(2, true); });
   const m = state.meta || {}, fmt = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '…';
   const cls = state.els.filter(e => e.t === 'closure'), dets = state.els.filter(e => e.t === 'detour');
   openDoc(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Avis aux riverains · ${esc(state.name)}</title><style>@page{size:A4;margin:12mm}body{font:13px/1.45 Inter,Arial;color:#111;max-width:186mm;margin:0 auto}h1{font:800 26px Montserrat,Arial;color:#C62828;text-transform:uppercase;margin:0}h2{font:700 15px Montserrat,Arial;color:#0B2A6B;margin:10px 0 4px}.bar{height:6px;background:linear-gradient(90deg,#1565C0,#0EA5C6 60%,#F5B700 80%,#E2541B);margin:8px 0 12px}img{width:100%;border:1px solid #C9D3DE;border-radius:4px}.box{background:#FFF8E1;border-left:5px solid #F5B700;padding:8px 12px;margin:10px 0}.print{position:fixed;right:10px;top:10px;padding:8px 14px;border-radius:99px;border:0;background:#1565C0;color:#fff;cursor:pointer}@media print{.print{display:none}}</style></head><body>

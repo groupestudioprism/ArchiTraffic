@@ -1,5 +1,44 @@
 /* ============ Exports : plan PNG avec cartouche et légende, maquette GLB, matériel CSV, itinéraires GeoJSON, projet ============ */
 function canExport(){ const a = window.SPAccess; if (a && a.level !== 'pending' && !a.canExport){ window.SPLicense?.prompt('export'); return false; } window.SPLicense?.usage?.(); return true; }   // rappel d'usage (non commercial) une fois par session
+/* Cadrage automatique des exports : la route barrée et ses déviations, vues du dessus, nord en haut,
+   au lieu de l'endroit où se trouve la caméra. La vue de l'utilisateur est rétablie ensuite. */
+function workEls(cl){ const els = state.els.filter(e => !phOff(e) && !e.hidden && e.pts?.length > 1);
+  if (!cl) return els.filter(e => e.t === 'closure' || e.t === 'detour' || e.t === 'pdetour');
+  return els.filter(e => e === cl || ((e.t === 'detour' || e.t === 'pdetour') && e.cl === cl.id)); }
+function frameEls(els){
+  const pts = els.flatMap(e => e.pts); if (!pts.length) return false;
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const w = vpEl.clientWidth || 800, h = vpEl.clientHeight || 600, side = Math.min(320, w * 0.3);   // place réservée à la légende (à droite) et au cartouche (en bas)
+  const dx = Math.max(80, x1 - x0) * 1.12 + 40, dy = Math.max(80, y1 - y0) * 1.12 + 40;
+  ortho.zoom = clamp(Math.min((w - side - 40) / dx, (h - 240) / dy), c2.minZoom, c2.maxZoom);   // 70 px en haut pour les panneaux, 170 px en bas pour le cartouche
+  const cx = (x0 + x1) / 2 + side / 2 / ortho.zoom, cy = (y0 + y1) / 2 - 50 / ortho.zoom;   // décalage : le chantier reste dans la partie libre de l'image
+  c2.target.set(cx, 0, -cy); ortho.position.set(cx, 1500, -cy); ortho.updateProjectionMatrix(); c2.update(); dirty = true; return true;
+}
+async function withWorkView(fn){
+  const was = view, cam0 = {op:ortho.position.clone(), oz:ortho.zoom, ot:c2.target.clone(), pp:persp.position.clone(), pt:c3.target.clone()};
+  if (view !== '2d') setView('2d'); await sleep(120);
+  try { return await fn(); }
+  finally { if (was !== '2d') setView(was); ortho.position.copy(cam0.op); ortho.zoom = cam0.oz; ortho.updateProjectionMatrix(); c2.target.copy(cam0.ot); c2.update();
+    persp.position.copy(cam0.pp); c3.target.copy(cam0.pt); c3.update(); dirty = true; }
+}
+async function shotOf(els, k){ frameEls(els); await sleep(500); return exportPNG(k, true); }
+const pngName = t => `${safeName(state.name)}-${t}-${new Date().toISOString().slice(0, 10)}.png`;
+async function saveCanvas(cv, name){ const blob = await new Promise(res => cv.toBlob(res, 'image/png')); downloadBlob(blob, name); }
+/* Plan d'ensemble : toutes les routes barrées et déviations (de la phase affichée) sur une seule image */
+async function exportWorkPNG(k = 2){
+  const els = workEls(); if (!els.length) return exportPNG(k);   // rien à cadrer : capture de la vue actuelle
+  await withWorkView(async () => saveCanvas(await shotOf(els, k), pngName('plan-ensemble'))); toast('Plan d\'ensemble enregistré');
+}
+/* Plans détaillés : le plan d'ensemble, puis un plan par route barrée avec ses déviations */
+async function exportDetailPNG(k = 2){
+  const cls = state.els.filter(e => e.t === 'closure' && !phOff(e) && !e.hidden && e.pts?.length > 1);
+  if (!cls.length){ toast('Aucune route barrée : export de la vue actuelle.', 3000); return exportPNG(k); }
+  await withWorkView(async () => {
+    if (cls.length > 1) await saveCanvas(await shotOf(workEls(), k), pngName('0-plan-ensemble'));
+    for (const [i, c] of cls.entries()){ await saveCanvas(await shotOf(workEls(c), k), pngName(`${i + 1}-${safeName(c.name || 'route-barree')}`)); await sleep(300); }
+  });
+  toast(`${cls.length + (cls.length > 1 ? 1 : 0)} plans enregistrés`, 3000);
+}
 async function exportPNG(k = 2, asCanvas = false){
   const w = vpEl.clientWidth, h = vpEl.clientHeight, pr = renderer.getPixelRatio(), s = Math.min(k, 4096 / Math.max(w, h));
   markGroup.visible = previewGroup.visible = false; renderer.setPixelRatio(s); renderer.setSize(w, h, false); renderer.render(scene, cam());

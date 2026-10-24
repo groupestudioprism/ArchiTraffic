@@ -54,8 +54,7 @@ function checkDialog(){
 }
 /* ---------- plan de signalisation A3 : vue en plan + cartouche + nomenclature, prêt à imprimer en PDF ---------- */
 async function exportA3(){
-  const was = view; if (view !== '2d') setView('2d'); await sleep(120);
-  const cv = await exportPNG(3, true); if (was !== '2d') setView(was);
+  const cv = await withWorkView(async () => { const W = workEls(); if (W.length) return shotOf(W, 3); return exportPNG(3, true); });
   const img = cv.toDataURL('image/jpeg', 0.92), counts = {};
   for (const e of state.els) if (e.t === 'obj' && !phOff(e) && !e.hidden){ const L = LIBK[e.k]; const k = L?.sign || e.k; (counts[k] ??= {n:0, name:L?.n || L?.name || e.k, thumb:L?.sign ? signThumb(L.sign, {...(L.p || {}), ...(e.p || {})}) : (L ? libThumb(L) : '')}).n++; }
   const rows = Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `<tr><td>${v.thumb ? `<img src="${v.thumb}">` : ''}</td><td><b>${esc(k)}</b></td><td>${esc(v.name)}</td><td class="n">${v.n}</td></tr>`).join('');

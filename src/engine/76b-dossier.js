@@ -18,7 +18,7 @@ async function exportDossier(){
       setPhase(p ? p.id : 'all'); await sleep(60);
       const els = state.els.filter(e => !phOff(e) && !e.hidden), cls = els.filter(e => e.t === 'closure' && e.pts?.length > 1), dets = els.filter(e => (e.t === 'detour' || e.t === 'pdetour') && e.pts?.length > 1);
       // cadrage : fermetures et déviations de la phase
-      const pts = [...cls, ...dets].flatMap(e => e.pts); if (pts.length){ const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]); frameAt((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, Math.max(60, (Math.max(...xs) - Math.min(...xs)) / 2 * 1.15 + 25, (Math.max(...ys) - Math.min(...ys)) / 2 * 1.15 + 25)); }
+      frameEls([...cls, ...dets]);
       await sleep(450);
       const cv = await exportPNG(2.5, true), img = cv.toDataURL('image/jpeg', 0.88);
       const counts = {}; for (const e of els) if (e.t === 'obj'){ const L = LIBK[e.k]; const k = L?.sign || e.k; (counts[k] ??= {n:0, name:L?.n || L?.name || e.k, ref:L?.ref || '', thumb:L?.sign ? signThumb(L.sign, {...(L.p || {}), ...(e.p || {})}) : (L ? libThumb(L) : '')}).n++; }
