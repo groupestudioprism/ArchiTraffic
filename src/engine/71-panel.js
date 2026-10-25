@@ -45,9 +45,13 @@ function renderProps(){
       ${W ? `<p class="src">Sources : relief ${esc(src.elev || 'IGN')} (NGF-IGN69) · bâtiments ${esc(src.bld || '')} · voirie, sens uniques et arbres © contributeurs OpenStreetMap (ODbL)${src.ortho ? ' · photo aérienne IGN BD ORTHO®' : ''} · textures Poly Haven (CC0). Données du ${new Date(src.at || Date.now()).toLocaleDateString('fr-FR')}.</p>` : ''}</div>`;
     const groups = [['closure', 'Routes barrées'], ['detour', 'Déviations'], ['pdetour', 'Cheminements piétons déviés'], ['zone', 'Emprises'], ['obj', 'Signalisation, balisage, véhicules'], ['line', 'Balisage en ligne'], ['swept', 'Épures de giration'], ['note', 'Annotations'], ['arrow', 'Flèches'], ['dim', 'Cotes'], ['model', 'Maquettes ARCHIPLAN']];
     const any = state.els.length;
+    const eq = elQ.trim(), eHas = sHasQuery(eq), EQ = eHas ? sParseQuery(eq) : null, eMatch = x => !eHas || String(x.id) === eq || !!sScore(EQ, elIndexAT(x));
     h += `<div class="grp"><h3>Éléments du chantier</h3>${any ? '' : '<p class="hint">Barrez une rue (outil <b>Route barrée</b>, touche <kbd>B</kbd>) : la déviation et les panneaux sont proposés automatiquement. Puis complétez avec la bibliothèque.</p>'}`;
-    for (const [t, n] of groups){ const L = state.els.filter(x => x.t === t); if (!L.length) continue;
+    if (any > 6 || eHas) h += `<div class="lsearch elq"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="elQ" type="search" autocomplete="off" enterkeyhint="search" placeholder="Filtrer : panneau, vitesse, rue, phase…" value="${esc(elQ)}" aria-label="Filtrer les éléments"></div>`;
+    let shown = 0;
+    for (const [t, n] of groups){ const L = state.els.filter(x => x.t === t && eMatch(x)); if (!L.length) continue; shown += L.length;
       h += `<p class="lsec">${n} · ${L.length}</p><div class="elist">${L.slice(0, 80).map(x => `<div class="erow${x.id === sel ? ' on' : ''}" data-el="${x.id}"><span class="ei">${elIcon(x)}</span><span><b>${esc(elLabel(x))}</b><small>${esc(elSub(x))}</small></span><button class="x" data-del="${x.id}" title="Supprimer" aria-label="Supprimer">×</button></div>`).join('')}${L.length > 80 ? `<p class="hint">… et ${L.length - 80} autres</p>` : ''}</div>`; }
+    if (eHas && !shown) h += `<p class="hint">Aucun élément ne correspond à « ${esc(eq)} ».</p>`;
     h += `</div><div class="grp"><h3>Informations du chantier</h3><div class="fields">
       <label class="f wide"><span>Nom du chantier</span><span class="in"><input id="mName" value="${esc(state.name)}" style="font-family:var(--f-body)"></span></label>
       <label class="f wide"><span>Maître d'ouvrage</span><span class="in"><input id="mMoa" value="${esc(state.meta.moa)}" style="font-family:var(--f-body)"></span></label>
@@ -63,6 +67,7 @@ function bindProps(){
   B.querySelectorAll('#pSite').forEach(b => b.onclick = openSiteDialog); const rl = $('#pReload'); if (rl) rl.onclick = () => loadSite(true);
   B.querySelectorAll('[data-el]').forEach(r => r.onclick = ev => { if (ev.target.closest('[data-del]')) return; sel = r.dataset.el; applySel(); const e = byId(sel); const c = elCenter(e); frameAt(c[0], c[1], e.pts ? Math.max(30, plLen(e.pts) / 2) : 25); renderProps(); });
   B.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { sel = b.dataset.del; deleteSel(); });
+  const eqi = $('#elQ'); if (eqi) eqi.oninput = () => { elQ = eqi.value; const pos = eqi.selectionStart; renderProps(); const n = $('#elQ'); if (n){ n.focus(); n.setSelectionRange(pos, pos); } };
   const meta = [['mMoa', 'moa'], ['mEnt', 'entreprise'], ['mFrom', 'from'], ['mTo', 'to'], ['mArr', 'arrete']];
   for (const [id, k] of meta){ const i = $('#' + id); if (i) i.onchange = () => { beginEdit(); state.meta[k] = i.value; endEdit(); renderLegend(); }; }
   const nm = $('#mName'); if (nm) nm.onchange = () => { beginEdit(); state.name = nm.value.trim() || 'Chantier'; endEdit(); $('#projName').textContent = state.name; };
@@ -152,13 +157,16 @@ function closureVariants(cl){
 }
 /* ---------- onglet Bibliothèque ---------- */
 function renderLib(){
-  const q = libQ.trim().toLowerCase(), items = LIB.filter(e => q ? (e.name + ' ' + (e.ref || '') + ' ' + LIB_CATS[e.cat]).toLowerCase().includes(q) : e.cat === libCat);
-  pb().innerHTML = `<div class="lsearch"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="libQ" placeholder="Rechercher : AK5, cône, pelle, déviation…" value="${esc(libQ)}"></div>
-    <div class="lcats">${Object.entries(LIB_CATS).map(([k, n]) => `<button type="button" data-cat="${k}" aria-pressed="${!q && k === libCat}">${n}</button>`).join('')}</div>
-    <div class="lgrid">${items.map(e => `<button type="button" class="lcard${PLACE.k === e.k && tool === 'place' ? ' on' : ''}" data-k="${e.k}" title="${esc(e.name)}"><img data-th="${e.k}" src="${THUMBS[e.k] || (e.sign ? libThumb(e) : BLANK)}" alt=""><b>${esc(e.name)}</b>${e.ref ? `<small>${esc(e.ref)}</small>` : ''}</button>`).join('') || '<p class="hint">Aucun élément ne correspond.</p>'}</div>
+  const q = libQ.trim(), hasQ = sHasQuery(q), items = hasQ ? libSearchItems(q) : LIB.filter(e => e.cat === libCat);
+  pb().innerHTML = `<div class="lsearch"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="libQ" type="search" autocomplete="off" enterkeyhint="search" placeholder="Rechercher : AK5, vitesse, déviation, piétons, pelle…" value="${esc(libQ)}"></div>
+    ${hasQ ? '' : `<div class="spk-chips lib">${LIB_CHIPS.map(([qq, n]) => `<button type="button" class="spk-chip" data-libchip="${esc(qq)}">${esc(n)}</button>`).join('')}</div>`}
+    <div class="lcats">${Object.entries(LIB_CATS).map(([k, n]) => `<button type="button" data-cat="${k}" aria-pressed="${!hasQ && k === libCat}">${n}</button>`).join('')}</div>
+    ${hasQ ? `<p class="hint lres">${items.length} résultat${items.length > 1 ? 's' : ''} pour « ${esc(q)} »</p>` : ''}
+    <div class="lgrid">${items.map(e => `<button type="button" class="lcard${PLACE.k === e.k && tool === 'place' ? ' on' : ''}" data-k="${e.k}" title="${esc(e.name)}${e._why?.length ? ' · ' + e._why.map(synLabel).join(', ') : ''}"><img data-th="${e.k}" src="${THUMBS[e.k] || (e.sign ? libThumb(e) : BLANK)}" alt=""><b>${hasQ ? sHighlight(e.name, q) : esc(e.name)}</b>${e.ref ? `<small>${esc(e.ref)}</small>` : ''}${e._why?.length ? `<em class="spk-why">${esc(synLabel(e._why[0]))}</em>` : ''}</button>`).join('') || `<p class="hint">Aucun élément ne correspond à « ${esc(q)} ».${spkSuggest(q, 'data-libchip')}</p>`}</div>
     <p class="src">Panneaux dessinés selon l'Instruction interministérielle sur la signalisation routière. Véhicules et engins génériques, sans marque.</p>`;
   const qi = $('#libQ'); qi.oninput = () => { libQ = qi.value; const pos = qi.selectionStart; renderLib(); const n = $('#libQ'); n.focus(); n.setSelectionRange(pos, pos); };
   pb().querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { libCat = b.dataset.cat; libQ = ''; renderLib(); });
+  pb().querySelectorAll('[data-libchip]').forEach(b => b.onclick = () => { libQ = b.dataset.libchip; renderLib(); const n = $('#libQ'); if (n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
   pb().querySelectorAll('[data-k]').forEach(b => b.onclick = () => { PLACE = {k:b.dataset.k, a:0, p:LIBK[b.dataset.k]?.p ? {...LIBK[b.dataset.k].p} : {}}; if (ghost){ previewGroup.remove(ghost); ghost = null; } tool = 'place'; $$('.tool').forEach(t => t.setAttribute('aria-pressed', t.dataset.tool === 'place')); syncHud(); setPrompt(); renderLib(); if (isNarrow.matches){ $('#panel').classList.remove('open'); $('#scrim').classList.remove('on'); } });
   // vignettes 3D générées au fil de l'eau
   const todo = [...pb().querySelectorAll('img[data-th]')].filter(i => !THUMBS[i.dataset.th]);
